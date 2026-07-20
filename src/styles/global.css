@@ -22,6 +22,29 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* 亮色主题 */
+:root[data-theme='light'] {
+  --bg: #fafaf7;
+  --bg-elevated: #f5f5f2;
+  --bg-subtle: #efefea;
+  --text: #3a3a3a;
+  --text-strong: #1f2328;
+  --text-muted: #6e6e6e;
+  --text-faint: #999999;
+  --accent: #c25a3d;
+  --accent-soft: #a34a32;
+  --border: #ddd;
+  --border-subtle: #e8e8e4;
+  --code-bg: #f0efeb;
+  --link: #3a3a3a;
+  --link-hover: var(--accent);
+}
+
+/* 亮色导航略透明背景覆盖 */
+:root[data-theme='light'] .site-header {
+  background: rgba(250, 250, 247, 0.8);
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -290,6 +313,25 @@ th { color: var(--text-strong); font-weight: 600; }
 }
 .back-top.is-visible { opacity: 1; pointer-events: auto; }
 .back-top:hover { color: var(--text-strong); border-color: var(--accent); }
+
+/* ===== 主题切换按钮 ===== */
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px;
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+  background: none; cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.25s var(--ease-out);
+}
+.theme-toggle:hover { color: var(--text-strong); border-color: var(--border); }
+.theme-toggle .moon-icon,
+.theme-toggle .sun-icon { position: absolute; transition: opacity 0.3s var(--ease-out), transform 0.3s var(--ease-out); }
+/* 默认(深色): 显示太阳(可切到亮色) */
+:root:not([data-theme='light']) .theme-toggle .sun-icon { opacity: 1; transform: rotate(0deg); }
+:root:not([data-theme='light']) .theme-toggle .moon-icon { opacity: 0; transform: rotate(-90deg); }
+/* 亮色: 显示月亮(可切到深色) */
+:root[data-theme='light'] .theme-toggle .sun-icon { opacity: 0; transform: rotate(90deg); }
+:root[data-theme='light'] .theme-toggle .moon-icon { opacity: 1; transform: rotate(0deg); }
 
 /* ===== 工具 ===== */
 .text-muted { color: var(--text-muted); }

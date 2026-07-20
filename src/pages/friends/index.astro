@@ -1,0 +1,117 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+
+const friends = await getCollection('friends');
+---
+
+<Base title="友链" description="友情链接 — 我常看的技术博客与站点">
+  <section class="page">
+    <h1 class="page-title">友链</h1>
+    <p class="page-subtitle">一些我常看的博客和站点 · 共 {friends.length} 个</p>
+
+    <div class="friend-grid">
+      {friends.map((friend) => (
+        <a href={friend.data.url} class="friend-card" target="_blank" rel="noreferrer">
+          <div class="friend-avatar">
+            {friend.data.avatar ? (
+              <img src={friend.data.avatar} alt={friend.data.name} />
+            ) : (
+              <div class="friend-avatar-placeholder">{friend.data.name.charAt(0)}</div>
+            )}
+          </div>
+          <div class="friend-info">
+            <h3 class="friend-name">{friend.data.name}</h3>
+            <p class="friend-desc">{friend.data.desc}</p>
+          </div>
+          <div class="friend-arrow">→</div>
+        </a>
+      ))}
+    </div>
+
+    <div style="margin-top: 4rem; padding: 1.5rem; background: var(--bg-elevated); border-radius: 12px; border: 1px solid var(--border-subtle);">
+      <h3 style="margin-top: 0;">交换友链</h3>
+      <p style="margin-bottom: 0; color: var(--text-muted);">
+        如果你也在写技术博客,欢迎<strong><a href="mailto:hongmingbo2011@gmail.com">发邮件给我</a></strong>交换友链。
+        请在邮件中附上你的站点名称、链接和一句话简介。
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .friend-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  @media (min-width: 640px) {
+    .friend-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  .friend-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    color: inherit;
+    transition: all 0.25s var(--ease-out);
+    text-decoration: none;
+  }
+  .friend-card:hover {
+    border-color: var(--border);
+    transform: translateY(-2px);
+    background: var(--bg-subtle);
+  }
+  .friend-avatar {
+    flex-shrink: 0;
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    overflow: hidden;
+  }
+  .friend-avatar img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  .friend-avatar-placeholder {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent);
+    color: #fff;
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    border-radius: 50%;
+  }
+  .friend-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .friend-name {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+    color: var(--text-strong);
+  }
+  .friend-desc {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .friend-arrow {
+    flex-shrink: 0;
+    font-size: 1.25rem;
+    color: var(--text-faint);
+    transition: transform 0.25s var(--ease-out);
+  }
+  .friend-card:hover .friend-arrow {
+    transform: translateX(4px);
+    color: var(--accent);
+  }
+</style>
