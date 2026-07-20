@@ -1,4 +1,6 @@
-# Hmingbo 个人博客
+# 衡堕
+
+学习笔记与项目记录
 
 > 深色文字流中文博客 · Astro 5 · 部署在 GitHub Pages
 

@@ -7,7 +7,7 @@ export async function GET(context: APIContext) {
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
   return rss({
-    title: 'Hmingbo',
+    title: '衡堕',
     description: '一名即将高一的学生,在课余探索 AI Agent、前端、自托管与知识管理。这里记录我的学习笔记、方法论和踩坑心得。',
     site: context.site ?? 'https://hongmingbo.github.io',
     items: sortedPosts.map((post) => ({

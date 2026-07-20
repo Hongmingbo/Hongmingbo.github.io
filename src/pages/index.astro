@@ -9,44 +9,41 @@ const sortedPosts = allPosts.sort((a, b) => b.data.pubDate.valueOf() - a.data.pu
 const recentPosts = sortedPosts.slice(0, 5);
 const featuredPosts = sortedPosts.filter((p) => p.data.featured).slice(0, 3);
 
-// 精选项目(从原 archive 迁移 + 新增)
 const projects = [
   {
     type: '知识管理',
     name: 'Obsidian Vault',
-    desc: '个人知识库与内容创作工作流,结合 Obsidian + Hermes Agent 实现全链路自动化。',
+    desc: '个人知识库工作流,结合 Obsidian + AI Agent 实现从采集到沉淀的自动化。',
     tags: ['Obsidian', 'Python', 'AI'],
     href: 'https://github.com/Hongmingbo/obsidian-vault',
   },
   {
     type: '方法论',
     name: 'Vibe Coding 研究',
-    desc: '精读 14 个 Vibe Coding 教程,提炼 38 条可迁移方法论,涵盖意图驱动、产品变现与 GEO。',
+    desc: '精读 Vibe Coding 教程,提炼可迁移方法论,涵盖意图驱动、产品变现与 GEO。',
     tags: ['AI', 'Prompt Engineering', 'GEO'],
-  },
-  {
-    type: '基础设施',
-    name: 'Cloudflare 邮件服务',
-    desc: '基于 Cloudflare Workers 的自托管邮箱系统,D1 + KV + R2 全 Serverless 架构。',
-    tags: ['Cloudflare', 'Workers', 'D1'],
-    href: 'https://github.com/Hongmingbo/cloud-mail',
   },
   {
     type: '设计研究',
     name: 'Lusion 风格研究',
-    desc: '研究高端品牌站如何通过光效、空间层次、动效节奏和中文排版建立高级感。',
-    tags: ['3D', '氛围', '排版'],
+    desc: '研究高端品牌站如何通过光效、空间层次和动效节奏建立高级感。',
+    tags: ['3D', '排版', '动效'],
+  },
+  {
+    type: '架构',
+    name: '记忆系统',
+    desc: '分层记忆、生命周期与长期沉淀的边界设计,降低重复解释成本。',
+    tags: ['Hermes', 'Memory', '架构'],
   },
 ];
 ---
 
 <Base title="首页">
   <section class="hero reveal">
-    <h1 class="hero-greeting">你好 <span class="wave">👋</span></h1>
+    <h1 class="hero-greeting">衡堕</h1>
     <p class="hero-intro">
-      我是 <strong>Hmingbo</strong>,一名<strong>即将升入高一的学生</strong>。
-      课余时间我在折腾 <strong>AI Agent、前端、自托管和知识管理</strong>。
-      这里是我的学习档案,记录读过的资料、做过的小项目、踩过的坑,以及一些不一定成熟但真实在用的方法。
+      学习笔记与项目记录。主题包括 <strong>AI Agent、前端、自托管</strong> 和 <strong>知识管理</strong>。
+      内容来自实际读过的资料和做过的东西,<strong>不一定成熟,但保证真实</strong>。
     </p>
     <div class="hero-socials">
       <a href="https://github.com/Hongmingbo" class="social-link" aria-label="GitHub" target="_blank" rel="noreferrer">
@@ -86,9 +83,9 @@ const projects = [
 
   <section class="page reveal" style="padding-top: 0;">
     <div class="section-head">
-      <h2 class="section-title">精选项目</h2>
+      <h2 class="section-title">项目</h2>
       <a href="/projects/" class="section-more">
-        全部项目 <span class="arrow">→</span>
+        全部 <span class="arrow">→</span>
       </a>
     </div>
     <div class="project-grid">

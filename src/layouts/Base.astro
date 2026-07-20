@@ -10,13 +10,13 @@ export interface Props {
 
 const {
   title,
-  description = '一名即将高一的学生,在课余探索 AI Agent、前端、自托管与知识管理。这里记录我的学习笔记、方法论和踩坑心得。',
+  description = '学习笔记与项目记录。AI Agent、前端、自托管、知识管理。'
   ogImage,
   wide = false,
 } = Astro.props;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
-const fullTitle = title === '首页' ? 'Hmingbo' : `${title} · Hmingbo`;
+const fullTitle = title === '首页' ? '衡堕' : `${title} · 衡堕`;
 ---
 
 <!doctype html>
@@ -29,7 +29,7 @@ const fullTitle = title === '首页' ? 'Hmingbo' : `${title} · Hmingbo`;
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonicalURL} />
-    <link rel="alternate" type="application/rss+xml" title="Hmingbo RSS" href="/rss.xml" />
+    <link rel="alternate" type="application/rss+xml" title="衡堕 RSS" href="/rss.xml" />
     <link rel="sitemap" href="/sitemap-index.xml" />
 
     <meta property="og:type" content="website" />
@@ -52,7 +52,7 @@ const fullTitle = title === '首页' ? 'Hmingbo' : `${title} · Hmingbo`;
   <body>
     <header class="site-header">
       <div class="container">
-        <a href="/" class="brand"><span class="bracket">[</span>hmingbo<span class="bracket">]</span></a>
+        <a href="/" class="brand"><span class="bracket">[</span>衡堕<span class="bracket">]</span></a>
         <nav class="nav">
           <a href="/" aria-current={Astro.url.pathname === '/' ? 'page' : undefined} class={Astro.url.pathname === '/' ? 'active' : ''}>首页</a>
           <a href="/blog/" aria-current={Astro.url.pathname.startsWith('/blog') ? 'page' : undefined} class={Astro.url.pathname.startsWith('/blog') ? 'active' : ''}>文章</a>
@@ -74,7 +74,7 @@ const fullTitle = title === '首页' ? 'Hmingbo' : `${title} · Hmingbo`;
     <footer class="site-footer">
       <div class="container">
         <div>
-          © {new Date().getFullYear()} Hmingbo
+          © {new Date().getFullYear()} 衡堕
           <span class="sep">·</span>
           <a href="/rss.xml">RSS</a>
           <span class="sep">·</span>
