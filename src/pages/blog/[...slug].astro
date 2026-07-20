@@ -1,0 +1,79 @@
+---
+import Base from '../../layouts/Base.astro';
+import TagList from '../../components/TagList.astro';
+import { getCollection, render } from 'astro:content';
+import type { CollectionEntry } from 'astro:content';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('blog', ({ data }) => !data.draft);
+  return posts.map((post) => ({
+    params: { slug: post.id.replace(/\.md$/, '') },
+    props: { post },
+  }));
+}
+
+interface Props {
+  post: CollectionEntry<'blog'>;
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const { title, description, pubDate, updatedDate, tags } = post.data;
+
+const formattedDate = pubDate.toLocaleDateString('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+const formattedUpdate = updatedDate?.toLocaleDateString('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<Base title={title} description={description}>
+  <div class="reading-progress" id="readingProgress"></div>
+
+  <article class="page">
+    <header class="post-header">
+      <div class="post-meta">
+        <time datetime={pubDate.toISOString()}>{formattedDate}</time>
+        {updatedDate && (
+          <>
+            <span class="sep">·</span>
+            <span>更新于 {formattedUpdate}</span>
+          </>
+        )}
+      </div>
+      <h1>{title}</h1>
+      <p class="post-description">{description}</p>
+    </header>
+
+    <div class="post-body">
+      <Content />
+    </div>
+
+    {tags.length > 0 && (
+      <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border-subtle);">
+        <TagList tags={tags} />
+      </footer>
+    )}
+  </article>
+
+  <script is:inline>
+    // 阅读进度
+    const progressBar = document.getElementById('readingProgress');
+    const updateProgress = () => {
+      const article = document.querySelector('.post-body');
+      if (!article) return;
+      const rect = article.getBoundingClientRect();
+      const total = rect.height - window.innerHeight;
+      const read = Math.min(Math.max(-rect.top, 0), total);
+      const percent = total > 0 ? (read / total) * 100 : 0;
+      progressBar.style.width = percent + '%';
+    };
+    window.addEventListener('scroll', updateProgress, { passive: true });
+    updateProgress();
+  </script>
+</Base>

@@ -1,0 +1,33 @@
+---
+import type { CollectionEntry } from 'astro:content';
+
+export interface Props {
+  post: CollectionEntry<'blog'>;
+}
+
+const { post } = Astro.props;
+const { title, description, pubDate, tags } = post.data;
+const formattedDate = pubDate.toLocaleDateString('zh-CN', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+---
+
+<li class="post-item reveal">
+  <div class="post-meta">
+    <time datetime={pubDate.toISOString()}>{formattedDate}</time>
+    {tags.length > 0 && (
+      <>
+        <span class="sep">/</span>
+        {tags.slice(0, 2).map((tag) => (
+          <span class="tag-mini">{tag}</span>
+        ))}
+      </>
+    )}
+  </div>
+  <h3 class="post-title">
+    <a href={`/blog/${post.id.replace(/\.md$/, '')}/`}>{title}</a>
+  </h3>
+  <p class="post-excerpt">{description}</p>
+</li>

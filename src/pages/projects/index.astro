@@ -1,0 +1,67 @@
+---
+import Base from '../../layouts/Base.astro';
+import ProjectCard from '../../components/ProjectCard.astro';
+
+const projects = [
+  {
+    type: '知识管理',
+    name: 'Obsidian Vault',
+    desc: '个人知识库与内容创作工作流,结合 Obsidian + Hermes Agent 实现从内容采集到知识沉淀的全链路自动化。',
+    tags: ['Obsidian', 'Python', 'AI', 'Markdown'],
+    href: 'https://github.com/Hongmingbo/obsidian-vault',
+  },
+  {
+    type: '基础设施',
+    name: 'Cloudflare 邮件服务',
+    desc: '基于 Cloudflare Workers 的自托管邮箱系统,D1 + KV + R2 全 Serverless 架构,内置 WebAuthn 认证。',
+    tags: ['Cloudflare', 'Workers', 'D1', 'Serverless'],
+    href: 'https://github.com/Hongmingbo/cloud-mail',
+  },
+  {
+    type: '方法论',
+    name: 'Vibe Coding 研究',
+    desc: '精读 14 个 Vibe Coding 教程,提炼 38 条可迁移方法论,涵盖意图驱动、产品变现与 GEO 优化。',
+    tags: ['AI', 'Prompt Engineering', 'GEO'],
+  },
+  {
+    type: '架构研究',
+    name: '记忆系统',
+    desc: '分层记忆、生命周期、会话结束和长期沉淀之间的边界设计,减少重复解释与返工。',
+    tags: ['Hermes', 'Memory', '架构'],
+  },
+  {
+    type: '设计研究',
+    name: 'Lusion 风格研究',
+    desc: '研究高端品牌站如何通过光效、空间层次、动效节奏和中文排版建立高级感。',
+    tags: ['3D', '氛围', '排版'],
+  },
+  {
+    type: '工作流',
+    name: '自动化工作流',
+    desc: '把采集、整理、输出和监控拆成稳定的模块,避免一次性脚本无法维护。',
+    tags: ['Playwright', 'RSS', '监控'],
+  },
+  {
+    type: '基础设施',
+    name: '监控系统',
+    desc: '围绕自托管服务建立 Uptime Kuma + Healthchecks 的监控、告警和备份机制。',
+    tags: ['Docker', '监控', '自托管'],
+  },
+  {
+    type: '网络部署',
+    name: 'Cloudflare Tunnel',
+    desc: '使用 Cloudflare Tunnel 将 Docker 服务安全暴露到公网,减少端口暴露与配置成本。',
+    tags: ['Cloudflare', 'Tunnel', 'WARP'],
+  },
+];
+---
+
+<Base title="项目" description="已完成的项目与研究归档">
+  <section class="page">
+    <h1 class="page-title">项目</h1>
+    <p class="page-subtitle">记录已经做过的东西,保持可追踪、可复用、可继续迭代。</p>
+    <div class="project-grid">
+      {projects.map((p) => <ProjectCard {...p} />)}
+    </div>
+  </section>
+</Base>

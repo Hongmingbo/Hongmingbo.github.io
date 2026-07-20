@@ -1,0 +1,21 @@
+---
+export interface Props {
+  type: string;
+  name: string;
+  desc: string;
+  tags: string[];
+  href?: string;
+}
+
+const { type, name, desc, tags, href } = Astro.props;
+const Tag = href ? 'a' : 'div';
+---
+
+<Tag href={href} class="project-card" target={href ? '_blank' : undefined} rel={href ? 'noreferrer' : undefined}>
+  <div class="project-type">{type}</div>
+  <h3 class="project-name">{name}</h3>
+  <p class="project-desc">{desc}</p>
+  <div class="project-tags">
+    {tags.map((tag) => <span>{tag}</span>)}
+  </div>
+</Tag>

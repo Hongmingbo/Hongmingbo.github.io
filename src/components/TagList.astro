@@ -1,0 +1,22 @@
+---
+export interface Props {
+  tags: string[];
+  activeTag?: string;
+}
+
+const { tags, activeTag } = Astro.props;
+---
+
+<ul class="tag-list">
+  {tags.map((tag) => (
+    <li>
+      <a
+        href={`/tags/${encodeURIComponent(tag)}/`}
+        class="tag"
+        aria-current={tag === activeTag ? 'page' : undefined}
+      >
+        {tag}
+      </a>
+    </li>
+  ))}
+</ul>
