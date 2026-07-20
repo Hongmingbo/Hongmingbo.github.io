@@ -8,7 +8,7 @@ export async function GET(context: APIContext) {
 
   return rss({
     title: 'Hmingbo',
-    description: '技术、设计与自动化。记录 AI Agent、前端工程、知识管理与自托管基础设施的实践与思考。',
+    description: '一名即将高一的学生,在课余探索 AI Agent、前端、自托管与知识管理。这里记录我的学习笔记、方法论和踩坑心得。',
     site: context.site ?? 'https://hongmingbo.github.io',
     items: sortedPosts.map((post) => ({
       title: post.data.title,
