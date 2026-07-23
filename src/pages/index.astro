@@ -6,8 +6,9 @@ import { getCollection } from 'astro:content';
 
 const allPosts = await getCollection('blog', ({ data }) => !data.draft);
 const sortedPosts = allPosts.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
-const recentPosts = sortedPosts.slice(0, 5);
 const featuredPosts = sortedPosts.filter((p) => p.data.featured).slice(0, 3);
+const featuredIds = new Set(featuredPosts.map((p) => p.id));
+const recentPosts = sortedPosts.filter((p) => !featuredIds.has(p.id)).slice(0, 5);
 
 const projects = [
   {
@@ -40,10 +41,10 @@ const projects = [
 
 <Base title="首页">
   <section class="hero reveal">
+    <p class="hero-kicker">NOTES / PROJECTS</p>
     <h1 class="hero-greeting">衡堕</h1>
     <p class="hero-intro">
-      学习笔记与项目记录。主题包括 <strong>AI Agent、前端、自托管</strong> 和 <strong>知识管理</strong>。
-      内容来自实际读过的资料和做过的东西,<strong>不一定成熟,但保证真实</strong>。
+      学习笔记与项目记录。主题包括 <strong>AI Agent</strong>、<strong>前端</strong>、<strong>自托管</strong> 与 <strong>知识管理</strong>。
     </p>
     <div class="hero-socials">
       <a href="https://github.com/Hongmingbo" class="social-link" aria-label="GitHub" target="_blank" rel="noreferrer">

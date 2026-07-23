@@ -131,14 +131,26 @@ th { color: var(--text-strong); font-weight: 600; }
 .site-header .container {
   display: flex; align-items: center; justify-content: space-between;
   height: 64px;
+  gap: 1rem;
 }
 .brand {
   font-family: var(--font-mono); font-size: 1rem; font-weight: 600;
   color: var(--text-strong); letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 .brand .bracket { color: var(--accent); }
-.nav { display: flex; gap: 1.75rem; align-items: center; }
-.nav a { font-size: 0.9375rem; color: var(--text-muted); position: relative; }
+.nav {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.nav a {
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  position: relative;
+  white-space: nowrap;
+}
 .nav a:hover { color: var(--text-strong); }
 .nav a.active { color: var(--text-strong); }
 .nav a.active::after {
@@ -146,25 +158,47 @@ th { color: var(--text-strong); font-weight: 600; }
   height: 2px; background: var(--accent); border-radius: 1px;
 }
 
+@media (max-width: 720px) {
+  .site-header .container {
+    height: auto;
+    min-height: 64px;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .nav {
+    width: 100%;
+    gap: 0.85rem 1rem;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .nav a { font-size: 0.875rem; }
+  .nav a.active::after { bottom: -4px; }
+  .theme-toggle { margin-left: auto; }
+}
+
 /* ===== Hero ===== */
-.hero { padding: 6rem 0 4rem; }
+.hero { padding: 5.5rem 0 3.5rem; }
+.hero-kicker {
+  margin: 0 0 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
 .hero-greeting {
-  font-size: clamp(2rem, 5vw, 2.75rem);
+  font-size: clamp(2.4rem, 6vw, 3.25rem);
   color: var(--text-strong); font-weight: 700;
-  letter-spacing: -0.03em; margin: 0 0 1.25rem; line-height: 1.15;
+  letter-spacing: -0.04em; margin: 0 0 1.1rem; line-height: 1.1;
 }
-.hero-greeting .wave {
-  display: inline-block;
-  animation: wave 2.5s ease-in-out infinite;
-  transform-origin: 70% 70%;
+.hero-intro {
+  font-size: 1.0625rem;
+  color: var(--text-muted);
+  max-width: 34em;
+  margin-bottom: 1.75rem;
+  line-height: 1.8;
 }
-@keyframes wave {
-  0%, 60%, 100% { transform: rotate(0deg); }
-  10%, 30% { transform: rotate(14deg); }
-  20%, 40% { transform: rotate(-8deg); }
-  50% { transform: rotate(10deg); }
-}
-.hero-intro { font-size: 1.0625rem; color: var(--text-muted); max-width: 36em; margin-bottom: 1.75rem; }
 .hero-intro strong { color: var(--text-strong); font-weight: 500; }
 .hero-socials { display: flex; gap: 0.5rem; align-items: center; }
 .social-link {
@@ -316,22 +350,42 @@ th { color: var(--text-strong); font-weight: 600; }
 
 /* ===== 主题切换按钮 ===== */
 .theme-toggle {
+  position: relative;
   display: inline-flex; align-items: center; justify-content: center;
   width: 36px; height: 36px;
   border: 1px solid var(--border-subtle); border-radius: 8px;
   background: none; cursor: pointer;
   color: var(--text-muted);
   transition: all 0.25s var(--ease-out);
+  flex-shrink: 0;
 }
-.theme-toggle:hover { color: var(--text-strong); border-color: var(--border); }
+.theme-toggle:hover { color: var(--text-strong); border-color: var(--border); background: var(--bg-elevated); }
+.theme-toggle:focus-visible,
+.nav a:focus-visible,
+.social-link:focus-visible,
+.back-top:focus-visible,
+.brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .theme-toggle .moon-icon,
-.theme-toggle .sun-icon { position: absolute; transition: opacity 0.3s var(--ease-out), transform 0.3s var(--ease-out); }
+.theme-toggle .sun-icon {
+  position: absolute;
+  transition: opacity 0.3s var(--ease-out), transform 0.3s var(--ease-out);
+}
 /* 默认(深色): 显示太阳(可切到亮色) */
 :root:not([data-theme='light']) .theme-toggle .sun-icon { opacity: 1; transform: rotate(0deg); }
 :root:not([data-theme='light']) .theme-toggle .moon-icon { opacity: 0; transform: rotate(-90deg); }
 /* 亮色: 显示月亮(可切到深色) */
 :root[data-theme='light'] .theme-toggle .sun-icon { opacity: 0; transform: rotate(90deg); }
 :root[data-theme='light'] .theme-toggle .moon-icon { opacity: 1; transform: rotate(0deg); }
+
+/* 首页精选/最新空态不塌 */
+.section-empty {
+  color: var(--text-faint);
+  font-size: 0.9375rem;
+  padding: 1rem 0 0.25rem;
+}
 
 /* ===== 工具 ===== */
 .text-muted { color: var(--text-muted); }
