@@ -53,7 +53,16 @@ const fullTitle = title === '首页' ? '衡堕' : `${title} · 衡堕`;
     <header class="site-header">
       <div class="container">
         <a href="/" class="brand"><span class="bracket">[</span>衡堕<span class="bracket">]</span></a>
-        <nav class="nav">
+        
+        <button class="menu-btn" id="menuBtn" aria-label="切换菜单" aria-expanded="false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+
+        <nav class="nav" id="navMenu">
           <a href="/" aria-current={Astro.url.pathname === '/' ? 'page' : undefined} class={Astro.url.pathname === '/' ? 'active' : ''}>首页</a>
           <a href="/blog/" aria-current={Astro.url.pathname.startsWith('/blog') ? 'page' : undefined} class={Astro.url.pathname.startsWith('/blog') ? 'active' : ''}>文章</a>
           <a href="/projects/" aria-current={Astro.url.pathname.startsWith('/projects') ? 'page' : undefined} class={Astro.url.pathname.startsWith('/projects') ? 'active' : ''}>项目</a>
@@ -81,9 +90,6 @@ const fullTitle = title === '首页' ? '衡堕' : `${title} · 衡堕`;
           <a href="https://github.com/Hongmingbo" target="_blank" rel="noreferrer">GitHub</a>
           <span class="sep">·</span>
           <a href="mailto:hongmingbo2011@gmail.com">邮件</a>
-        </div>
-        <div style="margin-top: 0.5rem; font-size: 0.75rem;">
-          Built with <a href="https://astro.build" target="_blank" rel="noreferrer">Astro</a> · Deployed on GitHub Pages
         </div>
       </div>
     </footer>
@@ -144,6 +150,36 @@ const fullTitle = title === '首页' ? '衡堕' : `${title} · 衡堕`;
         backTop.classList.toggle('is-visible', window.scrollY > 400);
       }, { passive: true });
       backTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+      // 移动端汉堡菜单逻辑
+      (function() {
+        var menuBtn = document.getElementById('menuBtn');
+        var navMenu = document.getElementById('navMenu');
+        if (menuBtn && navMenu) {
+          menuBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var isOpen = navMenu.classList.contains('is-open');
+            if (isOpen) {
+              navMenu.classList.remove('is-open');
+              menuBtn.setAttribute('aria-expanded', 'false');
+            } else {
+              navMenu.classList.add('is-open');
+              menuBtn.setAttribute('aria-expanded', 'true');
+            }
+          });
+          // 点击页面其他区域关闭菜单
+          document.addEventListener('click', function() {
+            if (navMenu.classList.contains('is-open')) {
+              navMenu.classList.remove('is-open');
+              menuBtn.setAttribute('aria-expanded', 'false');
+            }
+          });
+          // 阻止菜单内点击事件穿透到 document
+          navMenu.addEventListener('click', function(e) {
+            e.stopPropagation();
+          });
+        }
+      })();
     </script>
   </body>
 </html>
