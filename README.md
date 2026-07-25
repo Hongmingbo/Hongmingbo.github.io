@@ -1,65 +1,46 @@
 # 衡堕
 
-学习笔记与项目记录
+基于 [Fuwari](https://github.com/saicaca/fuwari) 的学习笔记站。
 
-> 深色文字流中文博客 · Astro 5 · 部署在 GitHub Pages
-
-**在线访问**: https://hongmingbo.github.io
-
-## 内容结构
-
-- `/` 首页 — Hero + 精选文章 + 最新文章 + 精选项目
-- `/blog/` 文章列表 — 按时间倒序,支持标签筛选
-- `/blog/<slug>/` 文章详情 — Markdown 渲染 + 阅读进度
-- `/tags/` 标签聚合
-- `/projects/` 项目展示
-- `/about/` 关于
-- `/rss.xml` RSS 订阅
-- `/sitemap-index.xml` 站点地图
+- 站点：https://hongmingbo.github.io
+- 主题：Fuwari（Astro 5 + Svelte + Tailwind）
+- 身份：衡堕 · 暖橙主题 · 无 Banner
 
 ## 本地开发
 
 ```bash
-npm install
-npm run dev       # http://localhost:4321
+pnpm install
+pnpm dev
 ```
 
-## 构建与部署
+## 构建
 
 ```bash
-npm run build     # 产物在 dist/
-npm run preview   # 本地预览构建产物
+pnpm build
+pnpm preview
 ```
-
-push 到 `main` 分支后,GitHub Actions (`.github/workflows/deploy.yml`) 会自动构建并部署到 GitHub Pages。
 
 ## 写作
 
-在 `src/content/blog/` 新增 `.md` 文件,带 frontmatter:
+在 `src/content/posts/` 新增 Markdown，frontmatter 示例：
 
-```markdown
+```yaml
 ---
-title: 文章标题
-description: 一句话描述,用于列表页摘要与 SEO
-pubDate: 2026-07-20
+title: 标题
+published: 2026-07-26
+description: 摘要
 tags:
-  - AI Agent
-  - 方法论
-featured: false   # true 则显示在首页"精选"
-draft: false      # true 则不出现在构建产物
+  - 标签
+category: 分类
+draft: false
 ---
-
-正文...
 ```
 
-## 旧版归档
+## 归档
 
-`archive-v1/` 保留了 2026-07-20 之前的纯 HTML/CSS/JS 项目档案站,仅作历史保留。
+- `archive-v1/`：最早项目档案单页
+- `archive-custom-v2/`：自研 Astro 深色文字流版本（Fuwari 迁移前）
 
-## 技术栈
+## 配置
 
-- [Astro 5](https://astro.build) — 静态站点生成
-- Content Collections — Markdown 内容管理
-- @astrojs/rss — RSS 订阅
-- @astrojs/sitemap — 站点地图
-- GitHub Actions — 自动部署
+主配置：`src/config.ts`（站名、Profile、导航、主题色 hue、Banner）。

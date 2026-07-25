@@ -1,22 +1,42 @@
-import rss from '@astrojs/rss';
-import { getCollection } from 'astro:content';
-import type { APIContext } from 'astro';
+import rss from "@astrojs/rss";
+import { getSortedPosts } from "@utils/content-utils";
+import { url } from "@utils/url-utils";
+import type { APIContext } from "astro";
+import MarkdownIt from "markdown-it";
+import sanitizeHtml from "sanitize-html";
+import { siteConfig } from "@/config";
+
+const parser = new MarkdownIt();
+
+function stripInvalidXmlChars(str: string): string {
+	return str.replace(
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: https://www.w3.org/TR/xml/#charsets
+		/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\uFDD0-\uFDEF\uFFFE\uFFFF]/g,
+		"",
+	);
+}
 
 export async function GET(context: APIContext) {
-  const posts = await getCollection('blog', ({ data }) => !data.draft);
-  const sortedPosts = posts.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+	const blog = await getSortedPosts();
 
-  return rss({
-    title: '衡堕',
-    description: '一名即将高一的学生,在课余探索 AI Agent、前端、自托管与知识管理。这里记录我的学习笔记、方法论和踩坑心得。',
-    site: context.site ?? 'https://hongmingbo.github.io',
-    items: sortedPosts.map((post) => ({
-      title: post.data.title,
-      pubDate: post.data.pubDate,
-      description: post.data.description,
-      link: `/blog/${post.id.replace(/\.md$/, '')}/`,
-      categories: post.data.tags,
-    })),
-    customData: '<language>zh-CN</language>',
-  });
+	return rss({
+		title: siteConfig.title,
+		description: siteConfig.subtitle || "No description",
+		site: context.site ?? "https://fuwari.vercel.app",
+		items: blog.map((post) => {
+			const content =
+				typeof post.body === "string" ? post.body : String(post.body || "");
+			const cleanedContent = stripInvalidXmlChars(content);
+			return {
+				title: post.data.title,
+				pubDate: post.data.published,
+				description: post.data.description || "",
+				link: url(`/posts/${post.slug}/`),
+				content: sanitizeHtml(parser.render(cleanedContent), {
+					allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img"]),
+				}),
+			};
+		}),
+		customData: `<language>${siteConfig.lang}</language>`,
+	});
 }
