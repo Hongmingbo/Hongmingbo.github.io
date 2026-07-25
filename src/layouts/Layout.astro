@@ -128,8 +128,8 @@ const bannerOffset =
 					}
 			}
 
-			// Load the hue from config first, then fallback to localStorage
-			const hue = configHue ?? localStorage.getItem('hue');
+			// 强制使用 config 的 hue，完全忽略 localStorage（解决“刷新后又变回 18”的问题）
+			const hue = configHue;
 			document.documentElement.style.setProperty('--hue', hue);
 
 			// calculate the --banner-height-extend, which needs to be a multiple of 4 to avoid blurry text
