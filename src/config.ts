@@ -12,11 +12,11 @@ export const siteConfig: SiteConfig = {
 	subtitle: "学习笔记与项目记录",
 	lang: "zh_CN",
 	themeColor: {
-		// 贴近原站暖橙 #d97757
-		hue: 18,
-		fixed: true, // 访客不可改主题色，保持品牌一致
-	},
-	banner: {
+			// 冷青 teal；与原先暖橙 hue 18 区分
+			hue: 200,
+			fixed: true, // 访客不可改主题色，保持品牌一致
+		},
+		banner: {
 		enable: false,
 		src: "assets/images/demo-banner.png",
 		position: "center",
@@ -47,8 +47,8 @@ export const navBarConfig: NavBarConfig = {
 };
 
 export const profileConfig: ProfileConfig = {
-	// 使用 public 下的简单头像；无真人照片
-	avatar: "/favicon.svg",
+	// Profile 头像：GitHub avatar 本地缓存
+	avatar: "/avatar.jpg",
 	name: "衡堕",
 	bio: "学习笔记与项目记录。AI Agent、前端、自托管、知识管理。",
 	links: [
