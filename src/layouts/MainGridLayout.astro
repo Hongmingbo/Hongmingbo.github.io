@@ -1,5 +1,6 @@
 ---
 import BackToTop from "@components/control/BackToTop.astro";
+import CyberField from "@components/CyberField.astro";
 import Footer from "@components/Footer.astro";
 import Navbar from "@components/Navbar.astro";
 import SideBar from "@components/widget/SideBar.astro";
@@ -14,6 +15,7 @@ import {
 	MAIN_PANEL_OVERLAPS_BANNER_HEIGHT,
 } from "../constants/constants";
 import Layout from "./Layout.astro";
+import { pathsEqual, url } from "../utils/url-utils";
 
 interface Props {
 	title?: string;
@@ -39,9 +41,13 @@ const hasBannerLink = !!siteConfig.banner.credit.url;
 const mainPanelTop = siteConfig.banner.enable
 	? `calc(${BANNER_HEIGHT}vh - ${MAIN_PANEL_OVERLAPS_BANNER_HEIGHT}rem)`
 	: "5.5rem";
+
+const isHomePage = pathsEqual(Astro.url.pathname, url("/"));
 ---
 
 <Layout title={title} banner={banner} description={description} lang={lang} setOGTypeArticle={setOGTypeArticle}>
+
+{isHomePage && <CyberField />}
 
 <!-- Navbar -->
 <slot slot="head" name="head"></slot>

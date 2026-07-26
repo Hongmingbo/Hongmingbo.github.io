@@ -1,0 +1,169 @@
+---
+/**
+ * 首页轻量力场背景：节点 + 连线 + 缓慢漂移。
+ * 无 Three.js；仅首页挂载；尊重 prefers-reduced-motion / 标签页隐藏。
+ */
+---
+<canvas
+	id="cyber-field"
+	class="cyber-field"
+	aria-hidden="true"
+></canvas>
+
+<script>
+	(() => {
+		const canvas = document.getElementById("cyber-field") as HTMLCanvasElement | null;
+		if (!canvas) return;
+
+		const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		const ctx = canvas.getContext("2d", { alpha: true });
+		if (!ctx) return;
+
+		type NodeP = {
+			x: number;
+			y: number;
+			vx: number;
+			vy: number;
+			r: number;
+		};
+
+		let w = 0;
+		let h = 0;
+		let dpr = 1;
+		let nodes: NodeP[] = [];
+		let raf = 0;
+		let running = false;
+		let linkDist = 140;
+
+		const readHue = () => {
+			const raw =
+				getComputedStyle(document.documentElement).getPropertyValue("--hue").trim() ||
+				document.getElementById("config-carrier")?.getAttribute("data-hue") ||
+				"200";
+			const n = Number.parseFloat(raw);
+			return Number.isFinite(n) ? n : 200;
+		};
+
+		const resize = () => {
+			dpr = Math.min(window.devicePixelRatio || 1, 2);
+			w = window.innerWidth;
+			h = window.innerHeight;
+			canvas.width = Math.floor(w * dpr);
+			canvas.height = Math.floor(h * dpr);
+			canvas.style.width = `${w}px`;
+			canvas.style.height = `${h}px`;
+			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+			linkDist = Math.min(160, Math.max(110, Math.hypot(w, h) * 0.09));
+			seed();
+		};
+
+		const seed = () => {
+			const area = w * h;
+			const count = Math.max(28, Math.min(56, Math.floor(area / 28000)));
+			nodes = Array.from({ length: count }, () => ({
+				x: Math.random() * w,
+				y: Math.random() * h,
+				vx: (Math.random() - 0.5) * 0.28,
+				vy: (Math.random() - 0.5) * 0.28,
+				r: 1.1 + Math.random() * 1.4,
+			}));
+		};
+
+		const step = () => {
+			if (!running) return;
+			const hue = readHue();
+			const dark = document.documentElement.classList.contains("dark");
+			ctx.clearRect(0, 0, w, h);
+
+			// soft vignette wash (very low)
+			const g = ctx.createRadialGradient(w * 0.5, h * 0.15, 0, w * 0.5, h * 0.2, Math.max(w, h) * 0.7);
+			g.addColorStop(0, `oklch(0.7 0.08 ${hue} / ${dark ? 0.06 : 0.04})`);
+			g.addColorStop(1, "transparent");
+			ctx.fillStyle = g;
+			ctx.fillRect(0, 0, w, h);
+
+			for (const n of nodes) {
+				n.x += n.vx;
+				n.y += n.vy;
+				if (n.x < 0 || n.x > w) n.vx *= -1;
+				if (n.y < 0 || n.y > h) n.vy *= -1;
+				n.x = Math.max(0, Math.min(w, n.x));
+				n.y = Math.max(0, Math.min(h, n.y));
+			}
+
+			// links
+			for (let i = 0; i < nodes.length; i++) {
+				for (let j = i + 1; j < nodes.length; j++) {
+					const a = nodes[i];
+					const b = nodes[j];
+					const dx = a.x - b.x;
+					const dy = a.y - b.y;
+					const dist = Math.hypot(dx, dy);
+					if (dist > linkDist) continue;
+					const t = 1 - dist / linkDist;
+					const alpha = (dark ? 0.22 : 0.14) * t * t;
+					ctx.beginPath();
+					ctx.moveTo(a.x, a.y);
+					ctx.lineTo(b.x, b.y);
+					ctx.strokeStyle = `oklch(0.72 0.1 ${hue} / ${alpha})`;
+					ctx.lineWidth = 1;
+					ctx.stroke();
+				}
+			}
+
+			// nodes
+			for (const n of nodes) {
+				ctx.beginPath();
+				ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+				ctx.fillStyle = `oklch(0.78 0.12 ${hue} / ${dark ? 0.55 : 0.4})`;
+				ctx.fill();
+			}
+
+			raf = requestAnimationFrame(step);
+		};
+
+		const start = () => {
+			if (running || reduce) return;
+			running = true;
+			raf = requestAnimationFrame(step);
+		};
+
+		const stop = () => {
+			running = false;
+			cancelAnimationFrame(raf);
+		};
+
+		const paintStatic = () => {
+			resize();
+			const hue = readHue();
+			const dark = document.documentElement.classList.contains("dark");
+			ctx.clearRect(0, 0, w, h);
+			for (const n of nodes) {
+				ctx.beginPath();
+				ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+				ctx.fillStyle = `oklch(0.78 0.12 ${hue} / ${dark ? 0.35 : 0.25})`;
+				ctx.fill();
+			}
+		};
+
+		resize();
+		if (reduce) {
+			paintStatic();
+		} else {
+			start();
+		}
+
+		window.addEventListener("resize", () => {
+			const was = running;
+			stop();
+			resize();
+			if (reduce) paintStatic();
+			else if (was || !document.hidden) start();
+		});
+
+		document.addEventListener("visibilitychange", () => {
+			if (document.hidden) stop();
+			else if (!reduce) start();
+		});
+	})();
+</script>

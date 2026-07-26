@@ -1,0 +1,29 @@
+/* P4: 首页力场 Canvas 层 — 不挡交互 */
+.cyber-field {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+:root:not(.dark) .cyber-field {
+  opacity: 0.4;
+}
+
+/* 有力场时略压低 body 静态网格，避免双层过噪 */
+body:has(.cyber-field) {
+  background-size: 28px 28px, 56px 56px, 56px 56px;
+}
+
+body:has(.cyber-field)::before {
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cyber-field {
+    opacity: 0.28;
+  }
+}
