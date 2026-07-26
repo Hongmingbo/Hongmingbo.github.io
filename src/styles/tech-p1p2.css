@@ -1,0 +1,194 @@
+/* ============================================================
+   tech-p1p2.css — TOC 系统风 + 代码块 + 标签分布条
+   无 Chart/React；纯 CSS + 现有 getTagList
+   ============================================================ */
+
+/* ---------- P1: TOC 终端/系统感 ---------- */
+table-of-contents {
+  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: -0.01em;
+}
+
+table-of-contents a {
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  position: relative;
+}
+
+table-of-contents a:hover {
+  border-color: color-mix(in oklch, var(--accent-neon, var(--primary)) 22%, transparent);
+  box-shadow: inset 3px 0 0 0 color-mix(in oklch, var(--primary) 70%, transparent);
+}
+
+/* 活动项：左侧实线 + 虚线框（系统高亮） */
+table-of-contents #active-indicator {
+  border-style: solid !important;
+  border-color: color-mix(in oklch, var(--accent-neon, var(--primary)) 45%, transparent) !important;
+  background: color-mix(in oklch, var(--primary) 12%, transparent) !important;
+  box-shadow: inset 3px 0 0 0 var(--primary);
+}
+
+table-of-contents a .transition.text-sm {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 深度徽章更方、更「终端」 */
+table-of-contents a > div.shrink-0 {
+  border-radius: 0.25rem !important;
+  font-family: inherit;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- P1: 代码块强化 ---------- */
+.expressive-code .frame {
+  border: 1px solid color-mix(in oklch, white 8%, transparent) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--primary) 8%, transparent),
+    0 12px 40px -20px color-mix(in oklch, black 55%, transparent) !important;
+  overflow: hidden;
+}
+
+:root:not(.dark) .expressive-code .frame {
+  border-color: color-mix(in oklch, black 8%, transparent) !important;
+}
+
+.expressive-code .title {
+  font-size: 0.75rem !important;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  opacity: 0.85;
+}
+
+.expressive-code .frame:hover {
+  border-color: color-mix(in oklch, var(--accent-neon, var(--primary)) 35%, transparent) !important;
+}
+
+/* 行内 code 更「芯片」 */
+.custom-md code:not(.expressive-code code) {
+  border: 1px solid color-mix(in oklch, var(--primary) 18%, transparent);
+  font-size: 0.875em;
+}
+
+/* ---------- P2: 标签分布条（数据感） ---------- */
+.tag-dist {
+  --bar-track: color-mix(in oklch, white 6%, transparent);
+  --bar-fill: color-mix(in oklch, var(--primary) 75%, var(--accent-neon, var(--primary)));
+}
+
+:root:not(.dark) .tag-dist {
+  --bar-track: color-mix(in oklch, black 6%, transparent);
+}
+
+.tag-dist__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.tag-dist__title {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in oklch, var(--primary) 85%, white);
+  opacity: 0.9;
+}
+
+.tag-dist__meta {
+  font-size: 0.7rem;
+  color: color-mix(in oklch, currentColor 45%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-dist__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.tag-dist__row {
+  display: grid;
+  grid-template-columns: minmax(0, 7.5rem) 1fr auto;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  min-height: 1.25rem;
+}
+
+.tag-dist__name {
+  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  color: color-mix(in oklch, currentColor 78%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  transition: color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+a.tag-dist__name:hover {
+  color: var(--primary);
+  text-shadow: 0 0 12px color-mix(in oklch, var(--primary) 40%, transparent);
+}
+
+.tag-dist__track {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--bar-track);
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, white 5%, transparent);
+}
+
+:root:not(.dark) .tag-dist__track {
+  border-color: color-mix(in oklch, black 5%, transparent);
+}
+
+.tag-dist__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--primary) 55%, transparent),
+    var(--bar-fill)
+  );
+  box-shadow: 0 0 12px -2px color-mix(in oklch, var(--accent-neon, var(--primary)) 50%, transparent);
+  transform-origin: left center;
+  animation: tag-bar-grow 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.tag-dist__count {
+  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklch, currentColor 50%, transparent);
+  min-width: 1.25rem;
+  text-align: right;
+}
+
+@keyframes tag-bar-grow {
+  from {
+    transform: scaleX(0);
+    opacity: 0.4;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tag-dist__fill {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .tag-dist__row {
+    grid-template-columns: minmax(0, 5.5rem) 1fr auto;
+  }
+}

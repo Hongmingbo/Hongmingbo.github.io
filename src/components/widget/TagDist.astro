@@ -1,0 +1,61 @@
+---
+import WidgetLayout from "./WidgetLayout.astro";
+import { getTagList } from "../../utils/content-utils";
+import { getTagUrl } from "../../utils/url-utils";
+
+interface Props {
+	class?: string;
+	style?: string;
+	/** 最多展示条数，默认 8 */
+	limit?: number;
+}
+
+const className = Astro.props.class;
+const style = Astro.props.style;
+const limit = Astro.props.limit ?? 8;
+
+const tags = await getTagList();
+const sorted = [...tags].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+const top = sorted.slice(0, limit);
+const max = top.reduce((m, t) => Math.max(m, t.count), 1);
+const totalPostsTagged = tags.reduce((s, t) => s + t.count, 0);
+---
+
+{
+	top.length > 0 && (
+		<WidgetLayout
+			name="标签分布"
+			id="tag-dist"
+			class={className}
+			style={style}
+		>
+			<div class="tag-dist">
+				<div class="tag-dist__head">
+					<span class="tag-dist__title">TAG · FREQ</span>
+					<span class="tag-dist__meta">
+						top {top.length} / {tags.length} · Σ{totalPostsTagged}
+					</span>
+				</div>
+				<ul class="tag-dist__list">
+					{top.map((t, i) => {
+						const pct = Math.max(8, Math.round((t.count / max) * 100));
+						return (
+							<li class="tag-dist__row" style={`--i: ${i}`}>
+								<a class="tag-dist__name" href={getTagUrl(t.name)} title={t.name}>
+									{t.name}
+								</a>
+								<div class="tag-dist__track" aria-hidden="true">
+									<div
+										class="tag-dist__fill"
+										style={`width: ${pct}%; animation-delay: ${80 + i * 40}ms`}
+									/>
+								</div>
+								<span class="tag-dist__count">{t.count}</span>
+							</li>
+						);
+					})}
+				</ul>
+			</div>
+		</WidgetLayout>
+	)
+}

@@ -3,6 +3,7 @@ import type { MarkdownHeading } from "astro";
 import Categories from "./Categories.astro";
 import Profile from "./Profile.astro";
 import Tag from "./Tags.astro";
+import TagDist from "./TagDist.astro";
 
 interface Props {
 	class?: string;
@@ -10,12 +11,18 @@ interface Props {
 }
 
 const className = Astro.props.class;
+// 首页侧栏展示标签分布；文章页仍以分类/标签云为主
+const path = Astro.url.pathname.replace(/\/+$/, "") || "/";
+const showTagDist = path === "/" || /^\/\d+$/.test(path);
 ---
 <div id="sidebar" class:list={[className, "w-full"]}>
     <div class="flex flex-col w-full gap-4 mb-4">
         <Profile></Profile>
     </div>
     <div id="sidebar-sticky" class="transition-all duration-700 flex flex-col w-full gap-4 top-4 sticky top-4">
+        {showTagDist && (
+            <TagDist class="onload-animation" style="animation-delay: 120ms" limit={8} />
+        )}
         <Categories class="onload-animation" style="animation-delay: 150ms"></Categories>
         <Tag class="onload-animation" style="animation-delay: 200ms"></Tag>
     </div>
