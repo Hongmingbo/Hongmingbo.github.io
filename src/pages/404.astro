@@ -1,0 +1,35 @@
+---
+import { i18n } from "@i18n/translation";
+import I18nKey from "@i18n/i18nKey";
+import MainGridLayout from "@layouts/MainGridLayout.astro";
+import { url } from "@utils/url-utils";
+---
+
+<MainGridLayout title="404" description="Page not found">
+    <div class="flex w-full rounded-[var(--radius-large)] overflow-hidden relative min-h-32">
+        <div class="card-base z-10 px-9 py-10 relative w-full text-center">
+            <div
+                class="mx-auto mb-4 w-fit font-mono text-[0.7rem] tracking-[0.18em] uppercase text-[var(--primary)] opacity-90"
+            >
+                ❯ route --resolve
+            </div>
+            <h1
+                class="font-mono font-bold text-[4.5rem] leading-none text-[var(--text-strong,inherit)] text-90"
+            >
+                404
+            </h1>
+            <p class="mt-3 font-mono text-sm text-50">
+                ERR · route not found — the page may have been moved or removed.
+            </p>
+            <p class="mt-1 font-mono text-xs text-30">
+                exit code 4 · 0 · 4
+            </p>
+            <a
+                href={url("/")}
+                class="btn-regular mt-6 inline-flex h-11 items-center gap-2 rounded-lg px-6 font-bold active:scale-95"
+            >
+                {i18n(I18nKey.home)}
+            </a>
+        </div>
+    </div>
+</MainGridLayout>

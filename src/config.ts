@@ -17,9 +17,9 @@ export const siteConfig: SiteConfig = {
 		fixed: true, // 访客不可改主题色，保持品牌一致
 	},
 	banner: {
-		enable: false,
-		src: "assets/images/demo-banner.png",
-		position: "center",
+			enable: false,
+			src: "", // banner 关闭；demo 资产已删除
+			position: "center",
 		credit: {
 			enable: false,
 			text: "",

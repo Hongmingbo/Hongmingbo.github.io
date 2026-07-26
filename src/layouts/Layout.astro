@@ -1,8 +1,5 @@
 ---
-import "@fontsource/roboto/400.css";
-import "@fontsource/roboto/500.css";
-import "@fontsource/roboto/700.css";
-
+// 中文站：移除 Roboto（仅覆盖拉丁，748KB 开销），正文走系统栈
 import ConfigCarrier from "@components/ConfigCarrier.astro";
 import GlobalStyles from "@components/GlobalStyles.astro";
 import { profileConfig, siteConfig } from "@/config";
@@ -86,9 +83,12 @@ const bannerOffset =
 		<meta name="author" content={profileConfig.name}>
 
 		<meta property="og:site_name" content={siteConfig.title}>
-		<meta property="og:url" content={Astro.url}>
-		<meta property="og:title" content={pageTitle}>
-		<meta property="og:description" content={description || pageTitle}>
+				<meta property="og:url" content={Astro.url}>
+				<meta property="og:title" content={pageTitle}>
+				<meta property="og:description" content={description || pageTitle}>
+				<meta property="og:image" content={new URL(url("/og-cover.png"), Astro.site)}>
+				<meta property="og:image:width" content="1200">
+				<meta property="og:image:height" content="630">
 		{setOGTypeArticle ? (
         <meta property="og:type" content="article" />
         ) : (
