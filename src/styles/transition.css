@@ -6,23 +6,13 @@ html.is-animating .transition-swup-fade {
     @apply opacity-0 translate-y-4
 }
 
-/* Fade-in animations for components */
-@keyframes fade-in-up {
-    0% {
-        transform: translateY(2rem);
-        opacity: 0;
-    }
-    100% {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
+/* Fade-in：具体 keyframes 由 tech-polish.css 覆盖（更小位移 + ease-tech）
+   此处仅保留类名与 delay，避免与 polish 冲突时丢 delay 规则 */
 
 /* Main components */
 .onload-animation {
     opacity: 0;
-    animation: 300ms fade-in-up;
-    animation-fill-mode: forwards;
+    animation: 480ms fade-in-up cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 #navbar {
     animation-delay: 0ms

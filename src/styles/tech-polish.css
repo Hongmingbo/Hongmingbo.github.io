@@ -1,0 +1,183 @@
+/* ============================================================
+   tech-polish.css — 衡堕 × Fuwari
+   极客工作室 + 轻赛博 + 数据感；克制动画；不依赖跨文件 @apply
+   ============================================================ */
+
+:root {
+  /* 主色仍由 --hue (config 200 冷青) 驱动 Fuwari 原有变量 */
+  --accent-neon: oklch(0.78 0.14 200);
+  --accent-neon-dim: oklch(0.55 0.10 200);
+  --accent-warm: oklch(0.72 0.12 45); /* 极少量点缀，保留个人暖感 */
+  --grid-line: color-mix(in oklch, white 4.5%, transparent);
+  --grid-dot: color-mix(in oklch, white 7%, transparent);
+  --card-border: color-mix(in oklch, white 8%, transparent);
+  --card-border-hover: color-mix(in oklch, var(--accent-neon) 55%, transparent);
+  --glow-neon: 0 0 0 1px color-mix(in oklch, var(--accent-neon) 35%, transparent),
+    0 0 18px -6px color-mix(in oklch, var(--accent-neon) 45%, transparent);
+  --ease-tech: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root:not(.dark) {
+  --grid-line: color-mix(in oklch, black 4%, transparent);
+  --grid-dot: color-mix(in oklch, black 6%, transparent);
+  --card-border: color-mix(in oklch, black 8%, transparent);
+  --card-border-hover: color-mix(in oklch, var(--accent-neon-dim) 50%, transparent);
+  --glow-neon: 0 0 0 1px color-mix(in oklch, var(--accent-neon-dim) 30%, transparent),
+    0 8px 24px -12px color-mix(in oklch, black 12%, transparent);
+}
+
+/* ---------- 背景：微网格 + 点阵（科技感，不抢内容） ---------- */
+html {
+  background-color: var(--page-bg);
+}
+
+body {
+  background-color: transparent;
+  background-image:
+    radial-gradient(var(--grid-dot) 1px, transparent 1px),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size:
+    24px 24px,
+    48px 48px,
+    48px 48px;
+  background-attachment: fixed;
+  background-position: 0 0, 0 0, 0 0;
+}
+
+/* 顶部极轻扫描高光（赛博但不花） */
+body::before {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(
+    1200px 480px at 50% -10%,
+    color-mix(in oklch, var(--accent-neon) 8%, transparent),
+    transparent 60%
+  );
+  opacity: 0.9;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- 卡片：细边 + hover 霓虹细线 + 微抬升 ---------- */
+.card-base {
+  border: 1px solid var(--card-border);
+  box-shadow: 0 1px 0 color-mix(in oklch, white 3%, transparent);
+  transition:
+    border-color 0.35s var(--ease-tech),
+    box-shadow 0.35s var(--ease-tech),
+    transform 0.35s var(--ease-tech),
+    background-color 0.35s var(--ease-tech);
+}
+
+/* 文章列表卡、侧栏卡：hover 时科技反馈 */
+.card-base:is(a, button, [role="button"]):hover,
+a:hover > .card-base,
+.card-base.group:hover,
+/* PostCard 根是 div.card-base，用 :has 覆盖可点区域 */
+.card-base:has(a:hover) {
+  border-color: var(--card-border-hover);
+  box-shadow: var(--glow-neon);
+  transform: translateY(-2px);
+}
+
+/* 左侧主色细条：文章标题 already has before bar — 强化 glow */
+.card-base a.group::before {
+  box-shadow: 0 0 10px color-mix(in oklch, var(--primary) 50%, transparent);
+  transition: box-shadow 0.35s var(--ease-tech), height 0.35s var(--ease-tech);
+}
+
+.card-base a.group:hover::before {
+  box-shadow: 0 0 14px color-mix(in oklch, var(--accent-neon) 65%, transparent);
+}
+
+/* ---------- 导航 / 按钮：克制霓虹反馈 ---------- */
+.btn-plain:hover,
+.btn-plain:focus-visible {
+  text-shadow: 0 0 12px color-mix(in oklch, var(--primary) 35%, transparent);
+}
+
+.btn-regular:hover {
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 40%, transparent),
+    0 0 16px -4px color-mix(in oklch, var(--primary) 40%, transparent);
+}
+
+/* 标签 chip 轻微霓虹边 */
+.btn-regular.rounded-lg:hover,
+a.btn-regular:hover {
+  border-color: color-mix(in oklch, var(--accent-neon) 40%, transparent);
+}
+
+/* ---------- 选区 / 焦点：科技可读 ---------- */
+::selection {
+  background-color: color-mix(in oklch, var(--accent-neon) 28%, transparent);
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--accent-neon) 55%, transparent);
+  outline-offset: 2px;
+}
+
+/* ---------- 入场动画：更丝滑、位移更小 ---------- */
+@keyframes fade-in-up {
+  0% {
+    transform: translateY(0.75rem);
+    opacity: 0;
+    filter: blur(2px);
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.onload-animation {
+  opacity: 0;
+  animation: 480ms fade-in-up var(--ease-tech) both;
+}
+
+/* 数据感：侧栏分类/标签按钮 hover 微亮 */
+#sidebar .btn-regular:hover,
+#sidebar a:hover {
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent-neon) 25%, transparent);
+}
+
+/* 搜索面板 / float panel 边框 */
+.float-panel {
+  border: 1px solid var(--card-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* 页脚细线 */
+.footer {
+  border-top-color: var(--card-border);
+}
+
+/* ---------- 减少动效 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .onload-animation {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+  }
+  .card-base,
+  .card-base:has(a:hover),
+  .btn-plain,
+  .btn-regular {
+    transition: none !important;
+    transform: none !important;
+  }
+  body::before {
+    display: none;
+  }
+}
