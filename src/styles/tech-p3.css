@@ -1,0 +1,225 @@
+/* ============================================================
+   tech-p3.css — 搜索终端感 + 克制动效
+   不改 Pagefind 逻辑；样式 + 少量结构钩子
+   ============================================================ */
+
+:root {
+  --term-prompt: color-mix(in oklch, var(--primary) 80%, white);
+  --term-muted: color-mix(in oklch, currentColor 42%, transparent);
+  --term-border: color-mix(in oklch, white 10%, transparent);
+  --term-bg: color-mix(in oklch, black 22%, transparent);
+}
+
+:root:not(.dark) {
+  --term-border: color-mix(in oklch, black 10%, transparent);
+  --term-bg: color-mix(in oklch, black 3%, transparent);
+  --term-prompt: color-mix(in oklch, var(--primary) 75%, black);
+}
+
+/* ---------- 桌面搜索条：终端输入框 ---------- */
+#search-bar {
+  position: relative;
+  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  border: 1px solid var(--term-border);
+  border-radius: 0.5rem !important;
+  background: var(--term-bg) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 6%, transparent);
+  transition:
+    border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#search-bar:hover {
+  border-color: color-mix(in oklch, var(--primary) 35%, transparent);
+}
+
+#search-bar:focus-within {
+  border-color: color-mix(in oklch, var(--accent-neon, var(--primary)) 50%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--accent-neon, var(--primary)) 25%, transparent),
+    0 0 20px -8px color-mix(in oklch, var(--accent-neon, var(--primary)) 40%, transparent),
+    inset 0 0 0 1px color-mix(in oklch, var(--primary) 10%, transparent);
+}
+
+/* 前缀 $ 提示符 */
+#search-bar::before {
+  content: "❯";
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  color: var(--term-prompt);
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 1;
+  text-shadow: 0 0 10px color-mix(in oklch, var(--primary) 40%, transparent);
+}
+
+#search-bar .iconify,
+#search-bar [data-icon],
+#search-bar > :first-child {
+  /* 图标让位给 prompt；仍可保留微弱存在 */
+  opacity: 0.35;
+  margin-left: 1.35rem !important;
+}
+
+#search-bar input {
+  font-family: inherit !important;
+  font-size: 0.8125rem !important;
+  letter-spacing: 0.02em;
+  padding-left: 2.5rem !important;
+  color: color-mix(in oklch, currentColor 70%, transparent) !important;
+}
+
+#search-bar input::placeholder {
+  font-family: inherit;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  opacity: 0.45;
+}
+
+#search-bar:focus-within input {
+  width: 16rem !important;
+}
+
+/* ---------- 移动端面板内搜索条 ---------- */
+#search-bar-inside {
+  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  border: 1px solid var(--term-border);
+  border-radius: 0.5rem !important;
+  background: var(--term-bg) !important;
+}
+
+#search-bar-inside:focus-within {
+  border-color: color-mix(in oklch, var(--accent-neon, var(--primary)) 45%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 20%, transparent);
+}
+
+#search-bar-inside input {
+  font-family: inherit !important;
+  font-size: 0.8125rem !important;
+}
+
+/* ---------- 搜索结果面板 ---------- */
+#search-panel.search-panel,
+.search-panel {
+  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  border: 1px solid var(--term-border) !important;
+  border-radius: 0.75rem !important;
+  background: color-mix(in oklch, var(--float-panel-bg) 92%, transparent) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--primary) 8%, transparent),
+    0 24px 48px -24px color-mix(in oklch, black 50%, transparent) !important;
+}
+
+/* 面板顶栏状态 */
+.search-panel__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.65rem 0.5rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--term-muted);
+  border-bottom: 1px dashed var(--term-border);
+  margin-bottom: 0.35rem;
+}
+
+.search-panel__status-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--primary) 60%, transparent);
+  flex-shrink: 0;
+}
+
+.search-panel__status-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* 结果行 */
+#search-panel a.group,
+.search-panel a.group {
+  border: 1px solid transparent;
+  border-radius: 0.5rem !important;
+  margin-top: 0.15rem;
+  animation: search-row-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+#search-panel a.group:nth-child(1) { animation-delay: 30ms; }
+#search-panel a.group:nth-child(2) { animation-delay: 60ms; }
+#search-panel a.group:nth-child(3) { animation-delay: 90ms; }
+#search-panel a.group:nth-child(4) { animation-delay: 120ms; }
+#search-panel a.group:nth-child(5) { animation-delay: 150ms; }
+#search-panel a.group:nth-child(6) { animation-delay: 180ms; }
+#search-panel a.group:nth-child(7) { animation-delay: 210ms; }
+#search-panel a.group:nth-child(8) { animation-delay: 240ms; }
+
+#search-panel a.group:hover,
+.search-panel a.group:hover {
+  border-color: color-mix(in oklch, var(--accent-neon, var(--primary)) 28%, transparent);
+  box-shadow: inset 3px 0 0 0 var(--primary);
+  background: color-mix(in oklch, var(--btn-plain-bg-hover) 80%, transparent) !important;
+}
+
+#search-panel a.group .text-90,
+.search-panel a.group .text-90 {
+  font-size: 0.9rem;
+  letter-spacing: -0.01em;
+}
+
+#search-panel mark,
+.search-panel mark {
+  background: color-mix(in oklch, var(--primary) 22%, transparent) !important;
+  color: var(--primary) !important;
+  border-radius: 0.15rem;
+  padding: 0 0.15em;
+  box-shadow: 0 0 8px -2px color-mix(in oklch, var(--primary) 40%, transparent);
+}
+
+@keyframes search-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 面板打开时的容器过渡（配合 float-panel） */
+#search-panel:not(.float-panel-closed) {
+  animation: search-panel-open 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes search-panel-open {
+  from {
+    opacity: 0;
+    transform: translateY(-0.4rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #search-panel a.group,
+  #search-panel:not(.float-panel-closed),
+  #search-bar,
+  #search-bar input {
+    animation: none !important;
+    transition: none !important;
+  }
+}
