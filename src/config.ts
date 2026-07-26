@@ -12,11 +12,11 @@ export const siteConfig: SiteConfig = {
 	subtitle: "学习笔记与项目记录",
 	lang: "zh_CN",
 	themeColor: {
-			// 冷青 teal；与原先暖橙 hue 18 区分
-			hue: 200,
-			fixed: true, // 访客不可改主题色，保持品牌一致
-		},
-		banner: {
+		// 冷青 teal；与原先暖橙 hue 18 区分
+		hue: 200,
+		fixed: true, // 访客不可改主题色，保持品牌一致
+	},
+	banner: {
 		enable: false,
 		src: "assets/images/demo-banner.png",
 		position: "center",
@@ -74,4 +74,3 @@ export const licenseConfig: LicenseConfig = {
 export const expressiveCodeConfig: ExpressiveCodeConfig = {
 	theme: "github-dark",
 };
-

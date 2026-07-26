@@ -4,6 +4,7 @@ import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
 
 import ConfigCarrier from "@components/ConfigCarrier.astro";
+import GlobalStyles from "@components/GlobalStyles.astro";
 import { profileConfig, siteConfig } from "@/config";
 import {
 	AUTO_MODE,
@@ -128,9 +129,10 @@ const bannerOffset =
 					}
 			}
 
-			// 强制使用 config 的 hue，完全忽略 localStorage（解决“刷新后又变回 18”的问题）
-			const hue = configHue;
-			document.documentElement.style.setProperty('--hue', hue);
+			// 强制使用 config 的 hue；清掉旧 localStorage，避免交互后被 DisplaySettings 写回 18
+						try { localStorage.removeItem('hue'); } catch (e) {}
+						const hue = configHue;
+						document.documentElement.style.setProperty('--hue', hue);
 
 			// calculate the --banner-height-extend, which needs to be a multiple of 4 to avoid blurry text
 			let offset = Math.floor(window.innerHeight * (BANNER_HEIGHT_EXTEND / 100));
@@ -149,10 +151,11 @@ const bannerOffset =
 
 	</head>
 	<body class=" min-h-screen transition " class:list={[{"lg:is-home": isHomePage, "enable-banner": enableBanner}]}
-		  data-overlayscrollbars-initialize
-	>
-		<ConfigCarrier></ConfigCarrier>
-		<slot />
+			  data-overlayscrollbars-initialize
+		>
+			<GlobalStyles />
+			<ConfigCarrier></ConfigCarrier>
+			<slot />
 
 		<!-- increase the page height during page transition to prevent the scrolling animation from jumping -->
 		<div id="page-height-extend" class="hidden h-[300vh]"></div>

@@ -4,27 +4,40 @@ import {
 	DEFAULT_THEME,
 	LIGHT_MODE,
 } from "@constants/constants.ts";
-import { expressiveCodeConfig } from "@/config";
+import { expressiveCodeConfig, siteConfig } from "@/config";
 import type { LIGHT_DARK_MODE } from "@/types/config";
 
 export function getDefaultHue(): number {
 	const fallback = "250";
 	const configCarrier = document.getElementById("config-carrier");
-	return Number.parseInt(configCarrier?.dataset.hue || fallback, 10);
+	const fromDom = configCarrier?.dataset.hue;
+	if (fromDom != null && fromDom !== "") {
+		return Number.parseInt(fromDom, 10);
+	}
+	// SSR/hydration 兜底：与 src/config.ts 一致
+	return siteConfig.themeColor.hue ?? Number.parseInt(fallback, 10);
 }
 
+/**
+ * 主题色：始终以 config 为准（fixed 品牌色）。
+ * 忽略 localStorage 中的旧 hue，避免「闪一下冷青又变回 18」。
+ */
 export function getHue(): number {
-	const stored = localStorage.getItem("hue");
-	return stored ? Number.parseInt(stored, 10) : getDefaultHue();
+	return getDefaultHue();
 }
 
-export function setHue(hue: number): void {
-	localStorage.setItem("hue", String(hue));
+export function setHue(_hue: number): void {
+	const h = getDefaultHue();
+	try {
+		localStorage.removeItem("hue");
+	} catch {
+		/* ignore */
+	}
 	const r = document.querySelector(":root") as HTMLElement;
 	if (!r) {
 		return;
 	}
-	r.style.setProperty("--hue", String(hue));
+	r.style.setProperty("--hue", String(h));
 }
 
 export function applyThemeToDocument(theme: LIGHT_DARK_MODE) {

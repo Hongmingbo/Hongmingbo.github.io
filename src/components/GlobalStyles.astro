@@ -1,3 +1,17 @@
 ---
-
 ---
+
+{/* 统一样式入口：保证 main 中的组件类与 markdown 同属一条 PostCSS/Tailwind 管线 */}
+<style is:global>
+	@import '../styles/main.css';
+	@import '../styles/markdown.css';
+	@import '../styles/scrollbar.css';
+	@import '../styles/transition.css';
+	@import '../styles/photoswipe.css';
+	@import '../styles/expressive-code.css';
+</style>
+
+<style is:global lang="stylus">
+@import '../styles/variables.styl'
+@import '../styles/markdown-extend.styl'
+</style>
