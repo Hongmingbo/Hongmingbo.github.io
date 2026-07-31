@@ -130,7 +130,7 @@ const bannerOffset =
 					}
 			}
 
-			// 强制使用 config 的 hue；清掉旧 localStorage，避免交互后被 DisplaySettings 写回 18
+			// 强制使用 config 的 hue；清掉旧 localStorage 残留，避免旧版本写回的 hue 干扰
 						try { localStorage.removeItem('hue'); } catch (e) {}
 						const hue = configHue;
 						document.documentElement.style.setProperty('--hue', hue);
@@ -276,7 +276,6 @@ function setClickOutsideToClose(panel: string, ignores: string[]) {
 		panelDom!.classList.add("float-panel-closed");
 	});
 }
-setClickOutsideToClose("display-setting", ["display-setting", "display-settings-switch"])
 setClickOutsideToClose("nav-menu-panel", ["nav-menu-panel", "nav-menu-switch"])
 setClickOutsideToClose("search-panel", ["search-panel", "search-bar", "search-switch"])
 

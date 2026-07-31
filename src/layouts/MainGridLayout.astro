@@ -109,6 +109,29 @@ const isHomePage = pathsEqual(Astro.url.pathname, url("/"));
 </div>
 
 <!-- The things that should be under the banner, only the TOC for now -->
+{headings.length > 0 && (
+<!-- 阅读进度条：仅文章页（有 headings 时）显示 -->
+<div id="reading-progress" aria-hidden="true"
+     class="fixed top-0 left-0 h-[2px] w-0 bg-[var(--primary)] z-[70] pointer-events-none transition-[width] duration-100 ease-out"
+></div>
+<script is:inline>
+	(() => {
+		const bar = document.getElementById("reading-progress");
+		if (!bar) return;
+		const update = () => {
+			const doc = document.documentElement;
+			const max = doc.scrollHeight - window.innerHeight;
+			const pct = max > 0 ? (window.scrollY / max) * 100 : 0;
+			bar.style.width = pct + "%";
+		};
+		update();
+		window.addEventListener("scroll", update, { passive: true });
+		window.addEventListener("resize", update);
+		// swup 页面切换后重置（旧页面进度可能已失配）
+		document.addEventListener("swup:contentReplaced", update);
+	})();
+</script>
+)}
 {headings.length > 0 && siteConfig.toc.enable && (
 <div class="fixed right-4 top-14 w-[var(--toc-width)] z-0 hidden xl:block">
     <!-- TOC component -->

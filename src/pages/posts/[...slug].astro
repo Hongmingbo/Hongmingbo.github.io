@@ -27,6 +27,10 @@ const { Content, headings } = await entry.render();
 
 const { remarkPluginFrontmatter } = await entry.render();
 
+// pagefind filter 值预计算（避免属性内模板字符串嵌套 ?? 触发解析错误）
+const categoryFilter = `category: ${entry.data.category ?? "未分类"}`;
+const tagFilters = (entry.data.tags ?? []).map((tag: string) => `tag: ${tag}`);
+
 const jsonLd = {
 	"@context": "https://schema.org",
 	"@type": "BlogPosting",
@@ -73,6 +77,7 @@ const jsonLd = {
             <div class="relative onload-animation">
                 <div
                     data-pagefind-body data-pagefind-weight="10" data-pagefind-meta="title"
+                    data-pagefind-filter={categoryFilter}
                     class="transition w-full block font-bold mb-3
                     text-3xl md:text-[2.25rem]/[2.75rem]
                     text-black/90 dark:text-white/90
@@ -80,6 +85,9 @@ const jsonLd = {
                     before:absolute before:top-[0.75rem] before:left-[-1.125rem]
                 ">
                     {entry.data.title}
+                    {tagFilters.map((filter) => (
+                        <div hidden data-pagefind-filter={filter}></div>
+                    ))}
                 </div>
             </div>
 

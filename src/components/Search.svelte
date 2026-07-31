@@ -13,6 +13,35 @@ let isSearching = false;
 let pagefindLoaded = false;
 let initialized = false;
 
+// 搜索过滤器：分类/标签，来自 pagefind.filters()
+type FilterField = "category" | "tag";
+let filterOptions: Record<FilterField, string[]> = { category: [], tag: [] };
+let activeFilters: Partial<Record<FilterField, Set<string>>> = {};
+
+const buildPagefindFilters = () => {
+	const filters: Record<string, string[]> = {};
+	(activeFilters.category?.size || 0) > 0 &&
+		(filters.category = [...activeFilters.category!]);
+	(activeFilters.tag?.size || 0) > 0 && (filters.tag = [...activeFilters.tag!]);
+	return filters;
+};
+
+const toggleFilter = (field: FilterField, value: string) => {
+	if (!activeFilters[field]) activeFilters[field] = new Set();
+	const set = activeFilters[field]!;
+	if (set.has(value)) {
+		set.delete(value);
+		if (set.size === 0) delete activeFilters[field];
+	} else {
+		set.add(value);
+	}
+	// 触发重新搜索
+	if (initialized) {
+		if (keywordDesktop) search(keywordDesktop, true);
+		if (keywordMobile) search(keywordMobile, false);
+	}
+};
+
 const fakeResult: SearchResult[] = [
 	{
 		url: url("/"),
@@ -64,7 +93,10 @@ const search = async (keyword: string, isDesktop: boolean): Promise<void> => {
 		let searchResults: SearchResult[] = [];
 
 		if (import.meta.env.PROD && pagefindLoaded && window.pagefind) {
-			const response = await window.pagefind.search(keyword);
+			const filters = buildPagefindFilters();
+			const response = await window.pagefind.search(keyword, {
+				filters: Object.keys(filters).length ? filters : undefined,
+			});
 			searchResults = await Promise.all(
 				response.results.map((item) => item.data()),
 			);
@@ -130,6 +162,18 @@ onMount(() => {
 			);
 			initializeSearch(); // Initialize with pagefindLoaded as false
 		});
+
+		// Load filter options once (category/tag chips)
+		const loadFilters = () => {
+			if (window.pagefind?.filters) {
+				window.pagefind.filters().then((all: Record<string, Record<string, number>>) => {
+					filterOptions.category = Object.keys(all.category ?? {});
+					filterOptions.tag = Object.keys(all.tag ?? {});
+				});
+			}
+		};
+		if (window.pagefind) loadFilters();
+		else document.addEventListener("pagefindready", loadFilters, { once: true });
 
 		// Fallback in case events are not caught or pagefind is already loaded by the time this script runs
 		setTimeout(() => {
@@ -203,6 +247,38 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
         </span>
     </div>
 
+    <!-- filter chips: category + tag (loaded from pagefind.filters) -->
+    {#if filterOptions.category.length || filterOptions.tag.length}
+        <div class="search-panel__filters">
+            {#if filterOptions.category.length}
+                <div class="search-panel__filters-row">
+                    <span class="search-panel__filters-label">分类</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        {#each filterOptions.category as cat}
+                            <button class:list={["search-panel__chip", { "search-panel__chip--active": activeFilters.category?.has(cat) }]}
+                                    on:click={() => toggleFilter("category", cat)}>
+                                {cat}
+                            </button>
+                        {/each}
+                    </div>
+                </div>
+            {/if}
+            {#if filterOptions.tag.length}
+                <div class="search-panel__filters-row">
+                    <span class="search-panel__filters-label">标签</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        {#each filterOptions.tag as tag}
+                            <button class:list={["search-panel__chip", { "search-panel__chip--active": activeFilters.tag?.has(tag) }]}
+                                    on:click={() => toggleFilter("tag", tag)}>
+                                {tag}
+                            </button>
+                        {/each}
+                    </div>
+                </div>
+            {/if}
+        </div>
+    {/if}
+
     <!-- search results -->
     {#each result as item}
         <a href={item.url}
@@ -225,5 +301,45 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
   .search-panel {
     max-height: calc(100vh - 100px);
     overflow-y: auto;
+  }
+  .search-panel__filters {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.25rem 0.25rem;
+    border-top: 1px dashed var(--line-divider);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .search-panel__filters-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .search-panel__filters-label {
+    font-size: 0.7rem;
+    line-height: 1.6rem;
+    flex-shrink: 0;
+    color: var(--text-50);
+    opacity: 0.7;
+  }
+  .search-panel__chip {
+    font-size: 0.7rem;
+    line-height: 1;
+    padding: 0.3rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--line-divider);
+    color: var(--text-75);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .search-panel__chip:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+  .search-panel__chip--active {
+    background: color-mix(in oklch, var(--primary) 14%, transparent);
+    border-color: var(--primary);
+    color: var(--primary);
   }
 </style>
