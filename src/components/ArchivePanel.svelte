@@ -86,8 +86,26 @@ onMount(async () => {
 </script>
 
 <div class="card-base px-8 py-6">
+    <!-- 统计信息 -->
+    <div class="flex items-center justify-between mb-6 pb-4 border-b border-dashed border-black/10 dark:border-white/10">
+        <div class="text-50 text-sm">
+            共 {sortedPosts.length} 篇文章
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            {#each groups as group}
+                <button class="archive-year-btn text-xs px-2.5 py-1 rounded-full border border-black/15 dark:border-white/20 text-50 hover:text-[var(--primary)] hover:border-[var(--primary)] transition"
+                        on:click={() => {
+                            const el = document.getElementById(`archive-year-${group.year}`);
+                            el?.scrollIntoView({ behavior: "smooth" });
+                        }}>
+                    {group.year}
+                </button>
+            {/each}
+        </div>
+    </div>
+
     {#each groups as group}
-        <div>
+        <div id="archive-year-{group.year}">
             <div class="flex flex-row w-full items-center h-[3.75rem]">
                 <div class="w-[15%] md:w-[10%] transition text-2xl font-bold text-right text-75">
                     {group.year}
