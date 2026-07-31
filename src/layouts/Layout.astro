@@ -83,6 +83,7 @@ const bannerOffset =
 		<meta name="author" content={profileConfig.name}>
 
 		<meta property="og:site_name" content={siteConfig.title}>
+				<link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
 				<meta property="og:url" content={Astro.url}>
 				<meta property="og:title" content={pageTitle}>
 				<meta property="og:description" content={description || pageTitle}>
