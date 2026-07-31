@@ -223,3 +223,12 @@
     transition: none !important;
   }
 }
+
+/* 搜索面板 filter chips 暗色模式颜色（Svelte scoped :global 不可靠，放全局层） */
+.dark .search-panel__chip {
+  color: rgba(255, 255, 255, 0.75) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+.dark .search-panel__filters-label {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
