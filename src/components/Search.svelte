@@ -313,20 +313,20 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
             }}>
             {#each result as item, i}
                 <a href={item.url}
-                   data-index={i}
-                   class:list={["search-result-item transition first-of-type:mt-2 lg:first-of-type:mt-0 group block rounded-xl text-lg px-3 py-2",
-                       { "!bg-[var(--toc-btn-hover)]": selectedIndex === i }]}
-                   on:mouseenter={() => { selectedIndex = i; }}
-                   class="hover:bg-[var(--btn-plain-bg-hover)] active:bg-[var(--btn-plain-bg-active)]"
-                   on:click={() => { setPanelVisibility(false, true); setTimeout(() => { keywordDesktop = ""; result = []; }, 300); }}
-                >
-                    <div class="transition text-90 inline-flex font-bold group-hover:text-[var(--primary)]">
-                        {@html highlightText(item.meta.title, keywordDesktop || keywordMobile)}<Icon icon="fa6-solid:chevron-right" class="transition text-[0.75rem] translate-x-1 my-auto text-[var(--primary)]"></Icon>
-                    </div>
-                    <div class="transition text-sm text-50">
-                        {@html item.excerpt}
-                    </div>
-                </a>
+                                   data-index={i}
+                                   class:list={["search-result-item transition first-of-type:mt-2 lg:first-of-type:mt-0 group block rounded-xl px-4 py-3",
+                                       { "!bg-[var(--toc-btn-hover)]": selectedIndex === i }]}
+                                   on:mouseenter={() => { selectedIndex = i; }}
+                                   class="hover:bg-[var(--btn-plain-bg-hover)] active:bg-[var(--btn-plain-bg-active)]"
+                                   on:click={() => { setPanelVisibility(false, true); setTimeout(() => { keywordDesktop = ""; result = []; }, 300); }}
+                                >
+                                    <div class="transition text-90 font-bold group-hover:text-[var(--primary)]">
+                                        {@html highlightText(item.meta.title, keywordDesktop || keywordMobile)}<Icon icon="fa6-solid:chevron-right" class="transition text-[0.75rem] translate-x-1 my-auto text-[var(--primary)]"></Icon>
+                                    </div>
+                                    <div class="transition text-sm text-50 mt-1 leading-relaxed">
+                                        {@html item.excerpt}
+                                    </div>
+                                </a>
             {/each}
             </div>
         {:else if keywordDesktop || keywordMobile}
@@ -345,45 +345,10 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
     max-height: calc(100vh - 100px);
     overflow-y: auto;
   }
-  .search-panel__filters {
-    margin-top: 0.5rem;
-    padding: 0.5rem 0.25rem 0.25rem;
-    border-top: 1px dashed var(--line-divider);
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .search-panel__filters-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-  .search-panel__filters-label {
-    font-size: 0.7rem;
-    line-height: 1.6rem;
-    flex-shrink: 0;
-    color: var(--text-50);
-    opacity: 0.7;
-  }
-  .search-panel__chip {
-    font-size: 0.7rem;
-    line-height: 1;
-    padding: 0.3rem 0.55rem;
-    border-radius: 999px;
-    border: 1px solid var(--line-divider);
-    color: var(--text-75);
-    background: transparent;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .search-panel__chip:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-  }
-  .search-panel__chip--active {
-      background: color-mix(in oklch, var(--primary) 14%, transparent);
-      border-color: var(--primary);
-      color: var(--primary);
+  .search-panel__results {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
     }
     .search-panel__results:focus {
       outline: none;
@@ -395,6 +360,59 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
       justify-content: center;
       padding: 2rem 0;
       text-align: center;
+    }
+    .search-panel__filters {
+      margin-top: 0.5rem;
+      padding: 0.5rem 0.25rem 0.25rem;
+      border-top: 1px dashed var(--line-divider);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .search-panel__filters-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+    .search-panel__filters-label {
+          font-size: 0.7rem;
+          line-height: 1.6rem;
+          flex-shrink: 0;
+          color: color-mix(in oklch, black 50%, transparent);
+          opacity: 0.7;
+        }
+        :global(.dark) .search-panel__filters-label {
+          color: color-mix(in oklch, white 50%, transparent);
+        }
+        .search-panel__chip {
+          font-size: 0.7rem;
+          line-height: 1;
+          padding: 0.3rem 0.55rem;
+          border-radius: 999px;
+          border: 1px solid var(--line-divider);
+          color: color-mix(in oklch, black 75%, transparent);
+          background: transparent;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        :global(.dark) .search-panel__chip {
+          color: color-mix(in oklch, white 75%, transparent);
+        }
+    .search-panel__chip:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .search-panel__chip--active {
+      background: color-mix(in oklch, var(--primary) 14%, transparent);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    /* 搜索面板 mark 标签统一 */
+    .search-panel mark {
+      background: color-mix(in oklch, var(--primary) 22%, transparent);
+      color: var(--primary);
+      border-radius: 0.15rem;
+      padding: 0 0.15em;
     }
     /* 面板打开/关闭动画 */
     .float-panel {
