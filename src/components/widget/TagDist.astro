@@ -12,7 +12,7 @@ interface Props {
 
 const className = Astro.props.class;
 const style = Astro.props.style;
-const limit = Astro.props.limit ?? 8;
+const limit = Astro.props.limit ?? 6;
 
 const tags = await getTagList();
 const sorted = [...tags].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));

@@ -370,34 +370,34 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
       gap: 0.5rem;
     }
     .search-panel__filters-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.5rem;
-    }
-    .search-panel__filters-label {
-          font-size: 0.7rem;
-          line-height: 1.6rem;
-          flex-shrink: 0;
-          color: color-mix(in oklch, black 50%, transparent);
-          opacity: 0.7;
+          display: flex;
+          align-items: flex-start;
+          gap: 0.75rem;
         }
-        :global(.dark) .search-panel__filters-label {
-          color: color-mix(in oklch, white 50%, transparent);
-        }
-        .search-panel__chip {
-                  font-size: 0.8rem;
-                  font-family: inherit;
-                  line-height: 1.4;
-                  padding: 0.35rem 0.75rem;
-                  border-radius: 999px;
-                  border: 1px solid var(--line-divider);
-                  color: color-mix(in oklch, black 75%, transparent);
-                  background: transparent;
-                  cursor: pointer;
-                  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        .search-panel__filters-label {
+                  font-size: 0.75rem;
+                  line-height: 1.8rem;
+                  flex-shrink: 0;
+                  color: rgba(0, 0, 0, 0.5);
+                  opacity: 0.7;
                 }
+                :global(.dark) .search-panel__filters-label {
+                  color: rgba(255, 255, 255, 0.5);
+                }
+        .search-panel__chip {
+          font-size: 0.8rem;
+          line-height: 1.5;
+          padding: 0.35rem 0.8rem;
+          border-radius: 999px;
+          border: 1px solid rgba(0, 0, 0, 0.12);
+          color: rgba(0, 0, 0, 0.75);
+          background: transparent;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
         :global(.dark) .search-panel__chip {
-          color: color-mix(in oklch, white 75%, transparent);
+          border-color: rgba(255, 255, 255, 0.15);
+          color: rgba(255, 255, 255, 0.75);
         }
     .search-panel__chip:hover {
       border-color: var(--primary);
