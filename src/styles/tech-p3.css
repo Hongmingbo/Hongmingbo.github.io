@@ -246,15 +246,15 @@
   color: var(--primary);
 }
 html.dark .search-panel__chip {
-  color: rgba(255, 255, 255, 0.75) !important;
-  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 html.dark .search-panel__chip:hover {
-  color: var(--primary) !important;
+  color: var(--primary);
 }
 html.dark .search-panel__chip--active {
-  color: var(--primary) !important;
+  color: var(--primary);
 }
 html.dark .search-panel__filters-label {
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: rgba(255, 255, 255, 0.5);
 }
