@@ -12,6 +12,14 @@ let result: SearchResult[] = [];
 let isSearching = false;
 let pagefindLoaded = false;
 let initialized = false;
+let selectedIndex = -1;
+
+// 搜索结果高亮：在标题中包住匹配词
+const highlightText = (text: string, kw: string): string => {
+	if (!kw || !text) return text;
+	const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return text.replace(new RegExp(`(${escaped})`, "gi"), "<mark>$1</mark>");
+};
 
 // 搜索过滤器：分类/标签，来自 pagefind.filters()
 type FilterField = "category" | "tag";
@@ -106,10 +114,11 @@ const search = async (keyword: string, isDesktop: boolean): Promise<void> => {
 			searchResults = [];
 			console.error("Pagefind is not available in production environment.");
 		}
-
-		result = searchResults;
-		setPanelVisibility(result.length > 0, isDesktop);
-	} catch (error) {
+		searchResults = searchResults;
+				result = searchResults;
+				setPanelVisibility(result.length > 0, isDesktop);
+				selectedIndex = -1;
+			} catch (error) {
 		console.error("Search error:", error);
 		result = [];
 		setPanelVisibility(false, isDesktop);
@@ -131,19 +140,27 @@ onMount(() => {
 	};
 
 	// Ctrl/Cmd+K 唤起搜索：桌面聚焦输入框，移动端切换面板
-	const onGlobalKey = (e: KeyboardEvent) => {
-		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-			e.preventDefault();
-			const bar = document.getElementById("search-bar");
-			const input = bar?.querySelector<HTMLInputElement>("input");
-			if (bar && input && getComputedStyle(bar).display !== "none") {
-				input.focus();
-				input.select();
-			} else {
-				togglePanel();
+		const onGlobalKey = (e: KeyboardEvent) => {
+			if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+				e.preventDefault();
+				const bar = document.getElementById("search-bar");
+				const input = bar?.querySelector<HTMLInputElement>("input");
+				if (bar && input && getComputedStyle(bar).display !== "none") {
+					input.focus();
+					input.select();
+				} else {
+					togglePanel();
+				}
+				return;
 			}
-		}
-	};
+			// Escape 关闭面板
+			if (e.key === "Escape") {
+				const panel = document.getElementById("search-panel");
+				if (panel && !panel.classList.contains("float-panel-closed")) {
+					panel.classList.add("float-panel-closed");
+				}
+			}
+		};
 	document.addEventListener("keydown", onGlobalKey);
 
 	if (import.meta.env.DEV) {
@@ -280,18 +297,44 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
     {/if}
 
     <!-- search results -->
-    {#each result as item}
-        <a href={item.url}
-           class="transition first-of-type:mt-2 lg:first-of-type:mt-0 group block
-       rounded-xl text-lg px-3 py-2 hover:bg-[var(--btn-plain-bg-hover)] active:bg-[var(--btn-plain-bg-active)]">
-            <div class="transition text-90 inline-flex font-bold group-hover:text-[var(--primary)]">
-                {item.meta.title}<Icon icon="fa6-solid:chevron-right" class="transition text-[0.75rem] translate-x-1 my-auto text-[var(--primary)]"></Icon>
+        {#if result.length > 0}
+            <div class="search-panel__results" on:keydown={(e) => {
+                if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    selectedIndex = Math.min(selectedIndex + 1, result.length - 1);
+                } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    selectedIndex = Math.max(selectedIndex - 1, -1);
+                } else if (e.key === "Enter" && selectedIndex >= 0) {
+                    e.preventDefault();
+                    const el = document.querySelector(`.search-result-item[data-index="${selectedIndex}"]`);
+                    (el as HTMLAnchorElement)?.click();
+                }
+            }}>
+            {#each result as item, i}
+                <a href={item.url}
+                   data-index={i}
+                   class:list={["search-result-item transition first-of-type:mt-2 lg:first-of-type:mt-0 group block rounded-xl text-lg px-3 py-2",
+                       { "!bg-[var(--toc-btn-hover)]": selectedIndex === i }]}
+                   on:mouseenter={() => { selectedIndex = i; }}
+                   class="hover:bg-[var(--btn-plain-bg-hover)] active:bg-[var(--btn-plain-bg-active)]"
+                   on:click={() => { setPanelVisibility(false, true); setTimeout(() => { keywordDesktop = ""; result = []; }, 300); }}
+                >
+                    <div class="transition text-90 inline-flex font-bold group-hover:text-[var(--primary)]">
+                        {@html highlightText(item.meta.title, keywordDesktop || keywordMobile)}<Icon icon="fa6-solid:chevron-right" class="transition text-[0.75rem] translate-x-1 my-auto text-[var(--primary)]"></Icon>
+                    </div>
+                    <div class="transition text-sm text-50">
+                        {@html item.excerpt}
+                    </div>
+                </a>
+            {/each}
             </div>
-            <div class="transition text-sm text-50">
-                {@html item.excerpt}
+        {:else if keywordDesktop || keywordMobile}
+            <div class="search-panel__empty">
+                <Icon icon="material-symbols:search-off" class="text-[2rem] text-black/20 dark:text-white/20"></Icon>
+                <div class="text-sm text-50 mt-1">无匹配结果</div>
             </div>
-        </a>
-    {/each}
+        {/if}
 </div>
 
 <style>
@@ -338,8 +381,30 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
     color: var(--primary);
   }
   .search-panel__chip--active {
-    background: color-mix(in oklch, var(--primary) 14%, transparent);
-    border-color: var(--primary);
-    color: var(--primary);
-  }
-</style>
+      background: color-mix(in oklch, var(--primary) 14%, transparent);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .search-panel__results:focus {
+      outline: none;
+    }
+    .search-panel__empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 0;
+      text-align: center;
+    }
+    /* 面板打开/关闭动画 */
+    .float-panel {
+      transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .float-panel-closed {
+      opacity: 0;
+      transform: translateY(-0.5rem);
+      pointer-events: none;
+    }
+  </style>
