@@ -103,7 +103,7 @@ table-of-contents a > div.shrink-0 {
   font-variant-numeric: tabular-nums;
 }
 
-:root.dark .tag-dist__meta {
+html.dark .tag-dist__meta {
   color: color-mix(in oklch, white 45%, transparent);
 }
 
@@ -137,7 +137,7 @@ table-of-contents a > div.shrink-0 {
   transition: color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-:root.dark .tag-dist__name {
+html.dark .tag-dist__name {
   color: color-mix(in oklch, white 78%, transparent);
 }
 
@@ -180,7 +180,7 @@ a.tag-dist__name:hover {
   text-align: right;
 }
 
-:root.dark .tag-dist__count {
+html.dark .tag-dist__count {
   color: color-mix(in oklch, white 50%, transparent);
 }
 
