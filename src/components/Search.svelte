@@ -381,27 +381,7 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
                   color: rgba(0, 0, 0, 0.5);
                   opacity: 0.7;
                 }
-        .search-panel__chip {
-                  font-size: 0.8rem;
-                  line-height: 1.5;
-                  padding: 0.35rem 0.8rem;
-                  border-radius: 999px;
-                  border: 1px solid rgba(0, 0, 0, 0.12);
-                  color: rgba(0, 0, 0, 0.75);
-                  background: transparent;
-                  cursor: pointer;
-                  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-                }
-    .search-panel__chip:hover {
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-    .search-panel__chip--active {
-      background: color-mix(in oklch, var(--primary) 14%, transparent);
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-    /* 搜索面板 mark 标签统一 */
+        /* 搜索面板 mark 标签统一 */
     .search-panel mark {
       background: color-mix(in oklch, var(--primary) 22%, transparent);
       color: var(--primary);

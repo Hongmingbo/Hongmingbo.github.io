@@ -224,10 +224,36 @@
   }
 }
 
-/* 搜索面板 filter chips 暗色模式颜色（Svelte scoped :global 不可靠，放全局层） */
+/* 搜索面板 filter chips 样式（Svelte scoped CSS 编译器丢弃了这些规则，全线放到全局层） */
+.search-panel__chip {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: rgba(0, 0, 0, 0.75);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.search-panel__chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.search-panel__chip--active {
+  background: color-mix(in oklch, var(--primary) 14%, transparent);
+  border-color: var(--primary);
+  color: var(--primary);
+}
 html.dark .search-panel__chip {
   color: rgba(255, 255, 255, 0.75) !important;
   border-color: rgba(255, 255, 255, 0.15) !important;
+}
+html.dark .search-panel__chip:hover {
+  color: var(--primary) !important;
+}
+html.dark .search-panel__chip--active {
+  color: var(--primary) !important;
 }
 html.dark .search-panel__filters-label {
   color: rgba(255, 255, 255, 0.5) !important;
