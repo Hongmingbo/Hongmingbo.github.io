@@ -385,16 +385,17 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
           color: color-mix(in oklch, white 50%, transparent);
         }
         .search-panel__chip {
-          font-size: 0.7rem;
-          line-height: 1;
-          padding: 0.3rem 0.55rem;
-          border-radius: 999px;
-          border: 1px solid var(--line-divider);
-          color: color-mix(in oklch, black 75%, transparent);
-          background: transparent;
-          cursor: pointer;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
+                  font-size: 0.8rem;
+                  font-family: inherit;
+                  line-height: 1.4;
+                  padding: 0.35rem 0.75rem;
+                  border-radius: 999px;
+                  border: 1px solid var(--line-divider);
+                  color: color-mix(in oklch, black 75%, transparent);
+                  background: transparent;
+                  cursor: pointer;
+                  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                }
         :global(.dark) .search-panel__chip {
           color: color-mix(in oklch, white 75%, transparent);
         }

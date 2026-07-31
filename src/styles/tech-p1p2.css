@@ -99,8 +99,12 @@ table-of-contents a > div.shrink-0 {
 
 .tag-dist__meta {
   font-size: 0.7rem;
-  color: color-mix(in oklch, currentColor 45%, transparent);
+  color: color-mix(in oklch, black 35%, transparent);
   font-variant-numeric: tabular-nums;
+}
+
+:root.dark .tag-dist__meta {
+  color: color-mix(in oklch, white 45%, transparent);
 }
 
 .tag-dist__list {
@@ -124,13 +128,17 @@ table-of-contents a > div.shrink-0 {
   font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.75rem;
   line-height: 1.35;
-  color: color-mix(in oklch, currentColor 78%, transparent);
+  color: color-mix(in oklch, black 68%, transparent);
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
   text-decoration: none;
   transition: color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root.dark .tag-dist__name {
+  color: color-mix(in oklch, white 78%, transparent);
 }
 
 a.tag-dist__name:hover {
@@ -167,9 +175,13 @@ a.tag-dist__name:hover {
   font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
-  color: color-mix(in oklch, currentColor 50%, transparent);
+  color: color-mix(in oklch, black 40%, transparent);
   min-width: 1.25rem;
   text-align: right;
+}
+
+:root.dark .tag-dist__count {
+  color: color-mix(in oklch, white 50%, transparent);
 }
 
 @keyframes tag-bar-grow {
