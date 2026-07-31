@@ -123,10 +123,12 @@ table-of-contents a > div.shrink-0 {
 .tag-dist__name {
   font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.75rem;
+  line-height: 1.35;
   color: color-mix(in oklch, currentColor 78%, transparent);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
   text-decoration: none;
   transition: color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }

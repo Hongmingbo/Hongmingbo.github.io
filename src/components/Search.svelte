@@ -98,6 +98,22 @@ onMount(() => {
 		if (keywordMobile) search(keywordMobile, false);
 	};
 
+	// Ctrl/Cmd+K 唤起搜索：桌面聚焦输入框，移动端切换面板
+	const onGlobalKey = (e: KeyboardEvent) => {
+		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+			e.preventDefault();
+			const bar = document.getElementById("search-bar");
+			const input = bar?.querySelector<HTMLInputElement>("input");
+			if (bar && input && getComputedStyle(bar).display !== "none") {
+				input.focus();
+				input.select();
+			} else {
+				togglePanel();
+			}
+		}
+	};
+	document.addEventListener("keydown", onGlobalKey);
+
 	if (import.meta.env.DEV) {
 		console.log(
 			"Pagefind is not available in development mode. Using mock data.",
@@ -123,6 +139,10 @@ onMount(() => {
 			}
 		}, 2000); // Adjust timeout as needed
 	}
+
+	return () => {
+		document.removeEventListener("keydown", onGlobalKey);
+	};
 });
 
 $: if (initialized && keywordDesktop) {
@@ -139,7 +159,7 @@ $: if (initialized && keywordMobile) {
 </script>
 
 <!-- search bar for desktop view -->
-<div id="search-bar" class="hidden lg:flex transition-all items-center h-11 mr-2 rounded-lg
+<div id="search-bar" class="group hidden lg:flex transition-all items-center h-11 mr-2 rounded-lg
       bg-black/[0.04] hover:bg-black/[0.06] focus-within:bg-black/[0.06]
       dark:bg-white/5 dark:hover:bg-white/10 dark:focus-within:bg-white/10
 ">
@@ -148,6 +168,7 @@ $: if (initialized && keywordMobile) {
                class="transition-all pl-10 text-sm bg-transparent outline-0
              h-full w-40 active:w-60 focus:w-60 text-black/50 dark:text-white/50"
         >
+    <kbd class="transition mr-2.5 pointer-events-none select-none text-[0.625rem] leading-none px-1.5 py-1 rounded-md border border-black/15 dark:border-white/20 text-black/35 dark:text-white/35 group-focus-within:opacity-0 group-focus-within:-translate-x-1">Ctrl K</kbd>
 </div>
 
 <!-- toggle btn for phone/tablet view -->

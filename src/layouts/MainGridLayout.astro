@@ -88,7 +88,7 @@ const isHomePage = pathsEqual(Astro.url.pathname, url("/"));
 
             <SideBar class="mb-4 row-start-2 row-end-3 col-span-2 lg:row-start-1 lg:row-end-2 lg:col-span-1 lg:max-w-[17.5rem] onload-animation" headings={headings}></SideBar>
 
-            <main id="swup-container" class="transition-swup-fade col-span-2 lg:col-span-1 overflow-hidden">
+            <main id="swup-container" class:list={["transition-swup-fade col-span-2 lg:col-span-1 overflow-hidden", {"xl:pr-[calc(var(--toc-width)+1rem)]": headings.length > 0 && siteConfig.toc.enable}]}>
                 <div id="content-wrapper" class="onload-animation">
                     <!-- the overflow-hidden here prevent long text break the layout-->
                     <!-- make id different from windows.swup global property -->
@@ -109,23 +109,21 @@ const isHomePage = pathsEqual(Astro.url.pathname, url("/"));
 </div>
 
 <!-- The things that should be under the banner, only the TOC for now -->
-<div class="absolute w-full z-0 hidden 2xl:block">
-    <div class="relative max-w-[var(--page-width)] mx-auto">
-        <!-- TOC component -->
-        {siteConfig.toc.enable && <div id="toc-wrapper" class:list={["hidden lg:block transition absolute top-0 -right-[var(--toc-width)] w-[var(--toc-width)] items-center",
-            {"toc-hide": siteConfig.banner.enable}]}
-        >
-            <div id="toc-inner-wrapper" class="fixed top-14 w-[var(--toc-width)] h-[calc(100vh_-_20rem)] overflow-y-scroll overflow-x-hidden hide-scrollbar">
-                <div id="toc" class="w-full h-full transition-swup-fade ">
-                    <div class="h-8 w-full"></div>
-                    <TOC headings={headings}></TOC>
-                    <div class="h-8 w-full"></div>
-                </div>
+{headings.length > 0 && siteConfig.toc.enable && (
+<div class="fixed right-4 top-14 w-[var(--toc-width)] z-0 hidden xl:block">
+    <!-- TOC component -->
+    <div id="toc-wrapper" class:list={["transition items-center", {"toc-hide": siteConfig.banner.enable}]}>
+        <div id="toc-inner-wrapper" class="w-full h-[calc(100vh_-_12rem)] overflow-y-scroll overflow-x-hidden hide-scrollbar">
+            <div id="toc" class="w-full h-full transition-swup-fade ">
+                <div class="h-8 w-full"></div>
+                <TOC headings={headings}></TOC>
+                <div class="h-8 w-full"></div>
             </div>
-        </div>}
+        </div>
+    </div>
+</div>
+)}
 
         <!-- #toc needs to exist for Swup to work normally -->
         {!siteConfig.toc.enable && <div id="toc"></div>}
-    </div>
-</div>
 </Layout>

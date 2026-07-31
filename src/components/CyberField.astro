@@ -25,6 +25,7 @@
 			vx: number;
 			vy: number;
 			r: number;
+			z: number;
 		};
 
 		let w = 0;
@@ -34,6 +35,11 @@
 		let raf = 0;
 		let running = false;
 		let linkDist = 140;
+		// 鼠标视差：目标偏移 (-1..1) 与当前平滑值
+		let mx = 0;
+		let my = 0;
+		let cx = 0;
+		let cy = 0;
 
 		const readHue = () => {
 			const raw =
@@ -66,6 +72,7 @@
 				vx: (Math.random() - 0.5) * 0.28,
 				vy: (Math.random() - 0.5) * 0.28,
 				r: 1.1 + Math.random() * 1.4,
+				z: 0.3 + Math.random() * 0.7,
 			}));
 		};
 
@@ -74,6 +81,10 @@
 			const hue = readHue();
 			const dark = document.documentElement.classList.contains("dark");
 			ctx.clearRect(0, 0, w, h);
+
+			// 鼠标视差平滑（克制幅度，reduced-motion 时不会进入本循环）
+			cx += (mx - cx) * 0.05;
+			cy += (my - cy) * 0.05;
 
 			// soft vignette wash (very low)
 			const g = ctx.createRadialGradient(w * 0.5, h * 0.15, 0, w * 0.5, h * 0.2, Math.max(w, h) * 0.7);
@@ -103,8 +114,8 @@
 					const t = 1 - dist / linkDist;
 					const alpha = (dark ? 0.22 : 0.14) * t * t;
 					ctx.beginPath();
-					ctx.moveTo(a.x, a.y);
-					ctx.lineTo(b.x, b.y);
+					ctx.moveTo(a.x + cx * 10 * a.z, a.y + cy * 10 * a.z);
+					ctx.lineTo(b.x + cx * 10 * b.z, b.y + cy * 10 * b.z);
 					ctx.strokeStyle = `oklch(0.72 0.1 ${hue} / ${alpha})`;
 					ctx.lineWidth = 1;
 					ctx.stroke();
@@ -114,7 +125,7 @@
 			// nodes
 			for (const n of nodes) {
 				ctx.beginPath();
-				ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+				ctx.arc(n.x + cx * 10 * n.z, n.y + cy * 10 * n.z, n.r, 0, Math.PI * 2);
 				ctx.fillStyle = `oklch(0.78 0.12 ${hue} / ${dark ? 0.55 : 0.4})`;
 				ctx.fill();
 			}
@@ -165,5 +176,16 @@
 			if (document.hidden) stop();
 			else if (!reduce) start();
 		});
+
+		// 鼠标视差：归一化到 (-1..1)，reduced-motion 时忽略
+		window.addEventListener(
+			"pointermove",
+			(e) => {
+				if (reduce) return;
+				mx = (e.clientX / w) * 2 - 1;
+				my = (e.clientY / h) * 2 - 1;
+			},
+			{ passive: true }
+		);
 	})();
 </script>
