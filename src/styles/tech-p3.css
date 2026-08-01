@@ -245,10 +245,29 @@
   border-color: var(--primary);
   color: var(--primary);
 }
-:root.dark #search-panel .search-panel__chip {
+:root.dark #search-panel button.search-panel__chip {
   --chip-color: rgba(255, 255, 255, 0.75);
   --chip-border: rgba(255, 255, 255, 0.15);
 }
 :root.dark #search-panel .search-panel__filters-label {
   color: rgba(255, 255, 255, 0.5);
+}
+.search-panel__more {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  padding: 0.35rem 0.7rem;
+  border: 1px dashed var(--line-divider);
+  border-radius: 999px;
+  color: var(--primary);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.search-panel__more:hover {
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+}
+.search-result-item--selected {
+  background: var(--btn-plain-bg-hover);
+  box-shadow: inset 3px 0 0 var(--primary);
 }

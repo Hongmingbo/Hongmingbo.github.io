@@ -24,7 +24,16 @@ const highlightText = (text: string, kw: string): string => {
 // 搜索过滤器：分类/标签，来自 pagefind.filters()
 type FilterField = "category" | "tag";
 let filterOptions: Record<FilterField, string[]> = { category: [], tag: [] };
+let filterCounts: Record<FilterField, Record<string, number>> = { category: {}, tag: {} };
 let activeFilters: Partial<Record<FilterField, Set<string>>> = {};
+let showAllTags = false;
+
+const getVisibleTags = () => {
+	if (showAllTags) return filterOptions.tag;
+	const top = filterOptions.tag.slice(0, 8);
+	const selected = activeFilters.tag ? [...activeFilters.tag] : [];
+	return [...new Set([...top, ...selected])];
+};
 
 const buildPagefindFilters = () => {
 	const filters: Record<string, string[]> = {};
@@ -35,14 +44,16 @@ const buildPagefindFilters = () => {
 };
 
 const toggleFilter = (field: FilterField, value: string) => {
-	if (!activeFilters[field]) activeFilters[field] = new Set();
-	const set = activeFilters[field]!;
-	if (set.has(value)) {
-		set.delete(value);
-		if (set.size === 0) delete activeFilters[field];
+	const next = new Set(activeFilters[field] ?? []);
+	if (next.has(value)) {
+		next.delete(value);
 	} else {
-		set.add(value);
+		next.add(value);
 	}
+	const nextFilters = { ...activeFilters };
+	if (next.size > 0) nextFilters[field] = next;
+	else delete nextFilters[field];
+	activeFilters = nextFilters;
 	// 触发重新搜索
 	if (initialized) {
 		if (keywordDesktop) search(keywordDesktop, true);
@@ -184,8 +195,10 @@ onMount(() => {
 		const loadFilters = () => {
 			if (window.pagefind?.filters) {
 				window.pagefind.filters().then((all: Record<string, Record<string, number>>) => {
-					filterOptions.category = Object.keys(all.category ?? {});
-					filterOptions.tag = Object.keys(all.tag ?? {});
+					filterCounts.category = all.category ?? {};
+					filterCounts.tag = all.tag ?? {};
+					filterOptions.category = Object.keys(filterCounts.category).sort((a, b) => filterCounts.category[b] - filterCounts.category[a] || a.localeCompare(b));
+					filterOptions.tag = Object.keys(filterCounts.tag).sort((a, b) => filterCounts.tag[b] - filterCounts.tag[a] || a.localeCompare(b));
 				});
 			}
 		};
@@ -272,7 +285,7 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
                     <span class="search-panel__filters-label">分类</span>
                     <div class="flex flex-wrap gap-1.5">
                         {#each filterOptions.category as cat}
-                            <button class:list={["search-panel__chip", { "search-panel__chip--active": activeFilters.category?.has(cat) }]}
+                            <button class={`search-panel__chip${activeFilters.category?.has(cat) ? " search-panel__chip--active" : ""}`}
                                     on:click={() => toggleFilter("category", cat)}>
                                 {cat}
                             </button>
@@ -284,12 +297,19 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
                 <div class="search-panel__filters-row">
                     <span class="search-panel__filters-label">标签</span>
                     <div class="flex flex-wrap gap-1.5">
-                        {#each filterOptions.tag as tag}
-                            <button class:list={["search-panel__chip", { "search-panel__chip--active": activeFilters.tag?.has(tag) }]}
+                        {#each getVisibleTags() as tag}
+                            <button class={`search-panel__chip${activeFilters.tag?.has(tag) ? " search-panel__chip--active" : ""}`}
                                     on:click={() => toggleFilter("tag", tag)}>
                                 {tag}
                             </button>
                         {/each}
+                        {#if filterOptions.tag.length > 8}
+                            <button class="search-panel__more"
+                                    aria-expanded={showAllTags}
+                                    on:click={() => { showAllTags = !showAllTags; }}>
+                                {showAllTags ? "收起" : `更多 ${filterOptions.tag.length - 8}`}
+                            </button>
+                        {/if}
                     </div>
                 </div>
             {/if}
@@ -314,10 +334,8 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
             {#each result as item, i}
                 <a href={item.url}
                                    data-index={i}
-                                   class:list={["search-result-item transition first-of-type:mt-2 lg:first-of-type:mt-0 group block rounded-xl px-4 py-3",
-                                       { "!bg-[var(--toc-btn-hover)]": selectedIndex === i }]}
+                                   class={`search-result-item transition first-of-type:mt-2 lg:first-of-type:mt-0 group block rounded-xl px-4 py-3 hover:bg-[var(--btn-plain-bg-hover)] active:bg-[var(--btn-plain-bg-active)]${selectedIndex === i ? " search-result-item--selected" : ""}`}
                                    on:mouseenter={() => { selectedIndex = i; }}
-                                   class="hover:bg-[var(--btn-plain-bg-hover)] active:bg-[var(--btn-plain-bg-active)]"
                                    on:click={() => { setPanelVisibility(false, true); setTimeout(() => { keywordDesktop = ""; result = []; }, 300); }}
                                 >
                                     <div class="transition text-90 font-bold group-hover:text-[var(--primary)]">
