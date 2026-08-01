@@ -9,7 +9,6 @@ tags:
   - 方法论
 category: 方法论
 draft: false
-image: "/covers/vibe-coding-needs-boundaries.png"
 lang: zh_CN
 ---
 Vibe Coding 常被描述成“用自然语言写程序”。这句话只说对了一半。

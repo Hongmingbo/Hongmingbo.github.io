@@ -8,7 +8,6 @@ tags:
   - 方法论
 category: 方法论
 draft: false
-image: "/covers/how-to-read-large-codebases.png"
 lang: zh_CN
 ---
 拿到一个大型开源项目时，很多人的第一反应是从目录第一个文件开始读。这个方法看似勤奋，实际效率很低：读了大量局部实现后，仍然不知道系统如何启动、状态如何流动、最关键的抽象在哪里。
