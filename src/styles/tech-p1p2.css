@@ -86,7 +86,7 @@ table-of-contents a > div.shrink-0 {
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.85rem;
-  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .tag-dist__title {
@@ -125,7 +125,7 @@ html.dark .tag-dist__meta {
 }
 
 .tag-dist__name {
-  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-body);
   font-size: 0.75rem;
   line-height: 1.35;
   color: color-mix(in oklch, black 68%, transparent);

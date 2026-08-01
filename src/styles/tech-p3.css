@@ -19,7 +19,7 @@
 /* ---------- 桌面搜索条：终端输入框 ---------- */
 #search-bar {
   position: relative;
-  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-body);
   border: 1px solid var(--term-border);
   border-radius: 0.5rem !important;
   background: var(--term-bg) !important;
@@ -49,6 +49,7 @@
   left: 0.65rem;
   top: 50%;
   transform: translateY(-50%);
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--term-prompt);
   opacity: 0.85;
@@ -79,7 +80,7 @@ html.dark #search-bar-inside input {
 }
 html.dark #search-bar input::placeholder,
 html.dark #search-bar-inside input::placeholder {
-  color: rgba(255, 255, 255, 0.42) !important;
+  color: rgba(255, 255, 255, 0.55) !important;
 }
 
 #search-bar input::placeholder {
@@ -94,9 +95,14 @@ html.dark #search-bar-inside input::placeholder {
   width: 16rem !important;
 }
 
+#search-bar kbd,
+#search-bar-inside kbd {
+  font-family: var(--font-mono);
+}
+
 /* ---------- 移动端面板内搜索条 ---------- */
 #search-bar-inside {
-  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-body);
   border: 1px solid var(--term-border);
   border-radius: 0.5rem !important;
   background: var(--term-bg) !important;
@@ -115,7 +121,7 @@ html.dark #search-bar-inside input::placeholder {
 /* ---------- 搜索结果面板 ---------- */
 #search-panel.search-panel,
 .search-panel {
-  font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-body);
   border: 1px solid var(--term-border) !important;
   border-radius: 0.75rem !important;
   background: color-mix(in oklch, var(--float-panel-bg) 92%, transparent) !important;
@@ -129,6 +135,7 @@ html.dark #search-bar-inside input::placeholder {
 /* 面板顶栏状态 */
 .search-panel__status {
   display: flex;
+  font-family: var(--font-mono);
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
@@ -243,6 +250,7 @@ html.dark #search-panel .search-panel__status {
 /* 搜索面板 filter chips 样式（Svelte scoped CSS 编译器丢弃了这些规则，全线放到全局层） */
 .search-panel__chip {
   font-size: 0.8rem;
+  font-weight: 500;
   line-height: 1.5;
   padding: 0.35rem 0.8rem;
   border-radius: 999px;
@@ -268,8 +276,13 @@ html.dark #search-panel .search-panel__status {
 :root.dark #search-panel .search-panel__filters-label {
   color: rgba(255, 255, 255, 0.5);
 }
+#search-panel .search-panel__filters-label {
+  font-family: var(--font-body) !important;
+}
 .search-panel__more {
+  font-family: var(--font-body);
   font-size: 0.75rem;
+  font-weight: 500;
   line-height: 1.5;
   padding: 0.35rem 0.7rem;
   border: 1px dashed var(--line-divider);

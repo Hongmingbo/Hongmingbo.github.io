@@ -8,6 +8,8 @@
   --accent-neon: oklch(0.78 0.14 200);
   --accent-neon-dim: oklch(0.55 0.10 200);
   --accent-warm: oklch(0.72 0.12 45); /* 极少量点缀，保留个人暖感 */
+  --font-body: "Noto Sans SC Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --grid-line: color-mix(in oklch, white 4.5%, transparent);
   --grid-dot: color-mix(in oklch, white 7%, transparent);
   --card-border: color-mix(in oklch, white 8%, transparent);
@@ -32,6 +34,8 @@ html {
 }
 
 body {
+  font-family: var(--font-body);
+  font-synthesis: none;
   background-color: transparent;
   background-image:
     radial-gradient(var(--grid-dot) 1px, transparent 1px),
@@ -95,6 +99,12 @@ a:hover > .card-base,
 
 .card-base a.group:hover::before {
   box-shadow: 0 0 14px color-mix(in oklch, var(--accent-neon) 65%, transparent);
+}
+
+/* 文章标题：保留层级，但用变量字重降低中文堆叠感 */
+.card-base > div > a.group {
+  font-weight: 650;
+  letter-spacing: -0.012em;
 }
 
 /* ---------- 导航 / 按钮：克制霓虹反馈 ---------- */

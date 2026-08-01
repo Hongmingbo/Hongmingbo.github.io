@@ -6,7 +6,7 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-              sans: ["system-ui", "-apple-system", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "sans-serif", ...defaultTheme.fontFamily.sans],
+              sans: ["Noto Sans SC Variable", "Noto Sans SC", "system-ui", "-apple-system", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ...defaultTheme.fontFamily.sans],
             },
     },
   },
