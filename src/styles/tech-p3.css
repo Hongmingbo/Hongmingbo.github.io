@@ -91,6 +91,13 @@ html.dark #search-bar-inside input::placeholder {
   opacity: 0.45;
 }
 
+/* 亮色模式：提高 FIND... 对比度（gray-500） */
+html:not(.dark) #search-bar input::placeholder,
+html:not(.dark) #search-bar-inside input::placeholder {
+  color: #6B7280 !important;
+  opacity: 1;
+}
+
 #search-bar:focus-within input {
   width: 16rem !important;
 }
