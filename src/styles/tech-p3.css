@@ -73,6 +73,15 @@
   color: color-mix(in oklch, currentColor 70%, transparent) !important;
 }
 
+html.dark #search-bar input,
+html.dark #search-bar-inside input {
+  color: rgba(255, 255, 255, 0.82) !important;
+}
+html.dark #search-bar input::placeholder,
+html.dark #search-bar-inside input::placeholder {
+  color: rgba(255, 255, 255, 0.42) !important;
+}
+
 #search-bar input::placeholder {
   font-family: inherit;
   letter-spacing: 0.06em;
@@ -130,6 +139,13 @@
   color: var(--term-muted);
   border-bottom: 1px dashed var(--term-border);
   margin-bottom: 0.35rem;
+}
+
+html.dark #search-panel {
+  color: rgba(255, 255, 255, 0.78);
+}
+html.dark #search-panel .search-panel__status {
+  color: rgba(255, 255, 255, 0.52);
 }
 
 .search-panel__status-dot {

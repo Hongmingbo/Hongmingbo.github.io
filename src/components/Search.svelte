@@ -27,12 +27,14 @@ let filterOptions: Record<FilterField, string[]> = { category: [], tag: [] };
 let filterCounts: Record<FilterField, Record<string, number>> = { category: {}, tag: {} };
 let activeFilters: Partial<Record<FilterField, Set<string>>> = {};
 let showAllTags = false;
+let visibleTags: string[] = [];
 
-const getVisibleTags = () => {
-	if (showAllTags) return filterOptions.tag;
+const refreshVisibleTags = () => {
 	const top = filterOptions.tag.slice(0, 8);
 	const selected = activeFilters.tag ? [...activeFilters.tag] : [];
-	return [...new Set([...top, ...selected])];
+	visibleTags = showAllTags
+		? [...filterOptions.tag]
+		: [...new Set([...top, ...selected])];
 };
 
 const buildPagefindFilters = () => {
@@ -54,6 +56,7 @@ const toggleFilter = (field: FilterField, value: string) => {
 	if (next.size > 0) nextFilters[field] = next;
 	else delete nextFilters[field];
 	activeFilters = nextFilters;
+	refreshVisibleTags();
 	// 触发重新搜索
 	if (initialized) {
 		if (keywordDesktop) search(keywordDesktop, true);
@@ -199,6 +202,7 @@ onMount(() => {
 					filterCounts.tag = all.tag ?? {};
 					filterOptions.category = Object.keys(filterCounts.category).sort((a, b) => filterCounts.category[b] - filterCounts.category[a] || a.localeCompare(b));
 					filterOptions.tag = Object.keys(filterCounts.tag).sort((a, b) => filterCounts.tag[b] - filterCounts.tag[a] || a.localeCompare(b));
+					refreshVisibleTags();
 				});
 			}
 		};
@@ -297,7 +301,7 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
                 <div class="search-panel__filters-row">
                     <span class="search-panel__filters-label">标签</span>
                     <div class="flex flex-wrap gap-1.5">
-                        {#each getVisibleTags() as tag}
+                        {#each visibleTags as tag}
                             <button class={`search-panel__chip${activeFilters.tag?.has(tag) ? " search-panel__chip--active" : ""}`}
                                     on:click={() => toggleFilter("tag", tag)}>
                                 {tag}
@@ -306,7 +310,7 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
                         {#if filterOptions.tag.length > 8}
                             <button class="search-panel__more"
                                     aria-expanded={showAllTags}
-                                    on:click={() => { showAllTags = !showAllTags; }}>
+                                    on:click={() => { showAllTags = !showAllTags; refreshVisibleTags(); }}>
                                 {showAllTags ? "收起" : `更多 ${filterOptions.tag.length - 8}`}
                             </button>
                         {/if}
