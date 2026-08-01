@@ -24,9 +24,14 @@ interface Post {
 	};
 }
 
+interface MonthGroup {
+	month: number; // 1-12
+	posts: Post[];
+}
+
 interface Group {
 	year: number;
-	posts: Post[];
+	months: MonthGroup[];
 }
 
 let groups: Group[] = [];
@@ -65,19 +70,29 @@ onMount(async () => {
 	const grouped = filteredPosts.reduce(
 		(acc, post) => {
 			const year = post.data.published.getFullYear();
+			const month = post.data.published.getMonth() + 1; // 1-12
 			if (!acc[year]) {
-				acc[year] = [];
+				acc[year] = {};
 			}
-			acc[year].push(post);
+			if (!acc[year][month]) {
+				acc[year][month] = [];
+			}
+			acc[year][month].push(post);
 			return acc;
 		},
-		{} as Record<number, Post[]>,
+		{} as Record<number, Record<number, Post[]>>,
 	);
 
-	const groupedPostsArray = Object.keys(grouped).map((yearStr) => ({
-		year: Number.parseInt(yearStr, 10),
-		posts: grouped[Number.parseInt(yearStr, 10)],
-	}));
+	const groupedPostsArray = Object.keys(grouped).map((yearStr) => {
+		const year = Number.parseInt(yearStr, 10);
+		const months = Object.keys(grouped[year])
+			.map((monthStr) => ({
+				month: Number.parseInt(monthStr, 10),
+				posts: grouped[year][Number.parseInt(monthStr, 10)],
+			}))
+			.sort((a, b) => b.month - a.month);
+		return { year, months };
+	});
 
 	groupedPostsArray.sort((a, b) => b.year - a.year);
 
@@ -117,11 +132,17 @@ onMount(async () => {
                     ></div>
                 </div>
                 <div class="w-[70%] md:w-[80%] transition text-left text-50">
-                    {group.posts.length} {i18n(group.posts.length === 1 ? I18nKey.postCount : I18nKey.postsCount)}
+                    {group.months.reduce((sum, m) => sum + m.posts.length, 0)} {i18n(group.months.reduce((sum, m) => sum + m.posts.length, 0) === 1 ? I18nKey.postCount : I18nKey.postsCount)}
                 </div>
             </div>
 
-            {#each group.posts as post}
+            {#each group.months as monthGroup}
+                <div class="flex flex-row w-full items-center h-8 pl-[15%] md:pl-[10%] gap-2">
+                    <span class="text-xs font-mono text-40 tracking-widest">{String(monthGroup.month).padStart(2, "0")}</span>
+                    <span class="h-px flex-1 bg-black/10 dark:bg-white/10"></span>
+                    <span class="text-xs text-40">{monthGroup.posts.length}</span>
+                </div>
+                {#each monthGroup.posts as post}
                 <a
                         href={getPostUrlBySlug(post.slug)}
                         aria-label={post.data.title}
@@ -163,6 +184,7 @@ onMount(async () => {
                         </div>
                     </div>
                 </a>
+                {/each}
             {/each}
         </div>
     {/each}

@@ -9,6 +9,7 @@ tags:
   - 方法论
 category: AI Agent
 draft: false
+image: "/covers/context-engineering-is-information-budget.png"
 lang: zh_CN
 ---
 上下文窗口越来越长，很多人自然会得出一个结论：既然能装下更多内容，那就把所有资料、日志和历史对话都塞进去。

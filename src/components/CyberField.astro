@@ -65,13 +65,16 @@
 
 		const seed = () => {
 			const area = w * h;
-			const count = Math.max(28, Math.min(56, Math.floor(area / 28000)));
+			const dark = document.documentElement.classList.contains("dark");
+			// 暗色模式：密度 +25%、亮度提升，平衡深靛蓝背景
+			const density = dark ? 22400 : 28000;
+			const count = Math.max(dark ? 34 : 28, Math.min(dark ? 72 : 56, Math.floor(area / density)));
 			nodes = Array.from({ length: count }, () => ({
 				x: Math.random() * w,
 				y: Math.random() * h,
 				vx: (Math.random() - 0.5) * 0.28,
 				vy: (Math.random() - 0.5) * 0.28,
-				r: 1.1 + Math.random() * 1.4,
+				r: (dark ? 1.3 : 1.1) + Math.random() * 1.4,
 				z: 0.3 + Math.random() * 0.7,
 			}));
 		};

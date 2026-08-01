@@ -107,6 +107,24 @@ a:hover > .card-base,
   letter-spacing: -0.012em;
 }
 
+/* 关于页：项目条目左色条装饰（内容不变，仅排版微调） */
+.about-markdown h3 {
+  position: relative;
+  padding-left: 0.75rem;
+  margin-top: 1.75rem;
+}
+.about-markdown h3::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35em;
+  bottom: 0.35em;
+  width: 0.25rem;
+  border-radius: 999px;
+  background: var(--primary);
+  opacity: 0.8;
+}
+
 /* ---------- 导航 / 按钮：克制霓虹反馈 ---------- */
 .btn-plain:hover,
 .btn-plain:focus-visible {

@@ -5,6 +5,7 @@ description: "AI 幻觉并非偶然错误，而是统计概率驱动下的合理
 tags: ["DeepSeek", "AI幻觉", "提示词工程", "RAG"]
 category: "AI Agent"
 draft: false
+image: "/covers/deepseek-and-ai-hallucination.png"
 lang: zh-CN
 ---
 

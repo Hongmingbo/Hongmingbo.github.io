@@ -6,6 +6,7 @@ import "@fontsource-variable/jetbrains-mono/wght-italic.css";
 import ConfigCarrier from "@components/ConfigCarrier.astro";
 import GlobalStyles from "@components/GlobalStyles.astro";
 import { profileConfig, siteConfig } from "@/config";
+import notoLatinUrl from "@fontsource-variable/noto-sans-sc/files/noto-sans-sc-latin-wght-normal.woff2?url";
 import {
 	AUTO_MODE,
 	BANNER_HEIGHT,
@@ -105,6 +106,8 @@ const bannerOffset =
 
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
+		{/* 预加载拉丁字形子集，降低英文/数字 FOUT 跳动 */}
+		<link rel="preload" href={notoLatinUrl} as="font" type="font/woff2" crossorigin />
 		{favicons.map(favicon => (
 			<link rel="icon"
 				  href={favicon.src.startsWith('/') ? url(favicon.src) : favicon.src}

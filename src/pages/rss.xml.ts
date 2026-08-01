@@ -37,6 +37,10 @@ export async function GET(context: APIContext) {
 				}),
 			};
 		}),
-		customData: `<language>${siteConfig.lang.replace("_", "-").toLowerCase()}</language>`,
+		customData: [
+			`<language>${siteConfig.lang.replace("_", "-").toLowerCase()}</language>`,
+			`<lastBuildDate>${new Date().toUTCString()}</lastBuildDate>`,
+			`<generator>Astro v5 + @astrojs/rss</generator>`,
+		].join(""),
 	});
 }

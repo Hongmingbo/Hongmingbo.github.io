@@ -13,6 +13,11 @@
   opacity: 0.4;
 }
 
+/* 深靛蓝暗色背景下粒子更亮，平衡观感 */
+:root.dark .cyber-field {
+  opacity: 0.62;
+}
+
 /* 有力场时略压低 body 静态网格，避免双层过噪 */
 body:has(.cyber-field) {
   background-size: 28px 28px, 56px 56px, 56px 56px;

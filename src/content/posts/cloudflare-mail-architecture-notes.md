@@ -9,6 +9,7 @@ tags:
   - Serverless
 category: 基础设施
 draft: false
+image: "/covers/cloudflare-mail-architecture-notes.png"
 lang: zh_CN
 ---
 域名邮箱是一个很适合练习 Serverless 架构边界的场景：它同时涉及 HTTP 服务、邮件接收、数据持久化、认证、静态前端和第三方发信。
