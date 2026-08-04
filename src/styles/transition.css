@@ -1,9 +1,18 @@
 /* Page transition animations with Swup */
 html.is-changing .transition-swup-fade {
-    @apply transition-all duration-200
+    transition:
+        opacity var(--ds-motion-page) var(--ds-ease-out),
+        transform var(--ds-motion-page) var(--ds-ease-out),
+        filter var(--ds-motion-page) var(--ds-ease-out);
+    will-change: opacity, transform, filter;
 }
 html.is-animating .transition-swup-fade {
-    @apply opacity-0 translate-y-4
+    opacity: 0;
+    transform: translateY(0.5rem);
+    filter: blur(2px);
+}
+html.is-leaving .transition-swup-fade {
+    transform: translateY(-0.25rem);
 }
 
 /* Fade-in：具体 keyframes 由 tech-polish.css 覆盖（更小位移 + ease-tech）
@@ -40,4 +49,15 @@ html.is-animating .transition-swup-fade {
 #post-container :nth-child(4) { animation-delay: calc(var(--content-delay) + 175ms) }
 #post-container :nth-child(5) { animation-delay: calc(var(--content-delay) + 250ms) }
 #post-container :nth-child(6) { animation-delay: calc(var(--content-delay) + 325ms) }
+
+@media (prefers-reduced-motion: reduce) {
+    html.is-changing .transition-swup-fade,
+    html.is-animating .transition-swup-fade,
+    html.is-leaving .transition-swup-fade {
+        transition: none !important;
+        transform: none !important;
+        filter: none !important;
+        opacity: 1 !important;
+    }
+}
 

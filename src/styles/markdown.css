@@ -124,3 +124,77 @@
     }
     
 }
+
+/* 复制按钮：真实成功/失败状态 + 可访问标签 */
+.custom-md .frame:focus-within .copy-btn,
+.custom-md .copy-btn:focus-visible,
+.custom-md .copy-btn.success,
+.custom-md .copy-btn.error {
+    opacity: 1;
+}
+
+.custom-md .copy-btn {
+    transition:
+        opacity var(--ds-motion-fast) var(--ds-ease-out),
+        transform var(--ds-motion-fast) var(--ds-ease-out),
+        background-color var(--ds-motion-fast) var(--ds-ease-out),
+        box-shadow var(--ds-motion-base) var(--ds-ease-out);
+}
+
+.custom-md .copy-btn::after {
+    content: attr(aria-label);
+    position: absolute;
+    right: calc(100% + 0.5rem);
+    top: 50%;
+    transform: translate(0.25rem, -50%);
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--ds-radius-control);
+    background: #111827;
+    color: #f8fafc;
+    font: 500 0.6875rem/1.25 var(--font-body);
+    box-shadow: 0 8px 22px -14px rgba(0, 0, 0, 0.72);
+    transition:
+        opacity var(--ds-motion-fast) var(--ds-ease-out),
+        transform var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.custom-md .copy-btn:hover::after,
+.custom-md .copy-btn:focus-visible::after,
+.custom-md .copy-btn.success::after,
+.custom-md .copy-btn.error::after {
+    opacity: 1;
+    transform: translate(0, -50%);
+}
+
+.custom-md .copy-btn:focus-visible {
+    outline: 2px solid #72d8d2;
+    outline-offset: 2px;
+}
+
+.custom-md .copy-btn.success {
+    background: #0f766e !important;
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.16), 0 8px 18px -12px rgba(45, 212, 191, 0.72);
+    animation: copy-confirm 360ms var(--ds-ease-out);
+}
+
+.custom-md .copy-btn.error {
+    background: #b45309 !important;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+@keyframes copy-confirm {
+    0% { transform: scale(0.9); }
+    65% { transform: scale(1.06); }
+    100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .custom-md .copy-btn,
+    .custom-md .copy-btn::after {
+        animation: none !important;
+        transition: none !important;
+    }
+}

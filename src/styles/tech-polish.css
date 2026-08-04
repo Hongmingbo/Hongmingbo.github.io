@@ -107,6 +107,96 @@ a:hover > .card-base,
   letter-spacing: -0.012em;
 }
 
+/* ---------- 统一排版尺度 ---------- */
+.custom-md {
+  font-size: var(--ds-text-body);
+  line-height: var(--ds-leading-body);
+  letter-spacing: 0.004em;
+}
+
+.custom-md :where(p, li, blockquote) {
+  line-height: var(--ds-leading-body);
+}
+
+.custom-md :where(h1, h2, h3, h4) {
+  line-height: var(--ds-leading-heading);
+  letter-spacing: -0.018em;
+  text-wrap: balance;
+}
+
+.custom-md h1 {
+  font-size: var(--ds-text-display);
+}
+
+.custom-md h2 {
+  font-size: var(--ds-text-heading-2);
+  margin-top: var(--ds-space-10);
+}
+
+.custom-md h3 {
+  font-size: var(--ds-text-heading-3);
+  margin-top: var(--ds-space-8);
+}
+
+.post-card {
+  isolation: isolate;
+  box-shadow: var(--ds-shadow-card);
+}
+
+.post-card::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: var(--ds-space-6);
+  right: var(--ds-space-6);
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  opacity: 0;
+  transform: scaleX(0.35);
+  transition:
+    opacity var(--ds-motion-base) var(--ds-ease-out),
+    transform var(--ds-motion-page) var(--ds-ease-out);
+}
+
+.post-card:has(a:hover),
+.post-card:focus-within {
+  box-shadow: var(--ds-shadow-card-hover);
+}
+
+.post-card:has(a:hover)::after,
+.post-card:focus-within::after {
+  opacity: 0.7;
+  transform: scaleX(1);
+}
+
+.post-card__title {
+  font-size: var(--ds-text-title) !important;
+  line-height: var(--ds-leading-display);
+  text-wrap: balance;
+  transition:
+    color var(--ds-motion-base) var(--ds-ease-out),
+    transform var(--ds-motion-base) var(--ds-ease-out);
+}
+
+.post-card:has(a:hover) .post-card__title,
+.post-card:focus-within .post-card__title {
+  transform: translateX(2px);
+}
+
+.post-card__description {
+  font-size: var(--ds-text-body);
+  line-height: 1.68;
+}
+
+.post-card__metrics {
+  font-family: var(--font-mono);
+  font-size: var(--ds-text-meta) !important;
+  line-height: var(--ds-leading-meta);
+  font-variant-numeric: tabular-nums;
+}
+
 /* 关于页：项目条目左色条装饰（内容不变，仅排版微调） */
 .about-markdown h3 {
   position: relative;
@@ -140,6 +230,43 @@ a:hover > .card-base,
 .btn-regular.rounded-lg:hover,
 a.btn-regular:hover {
   border-color: color-mix(in oklch, var(--accent-neon) 40%, transparent);
+}
+
+.tag-chip {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid transparent;
+  transition:
+    color var(--ds-motion-fast) var(--ds-ease-out),
+    border-color var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-base) var(--ds-ease-out),
+    transform var(--ds-motion-base) var(--ds-ease-out);
+}
+
+.tag-chip::after {
+  content: "";
+  position: absolute;
+  left: var(--ds-space-2);
+  right: var(--ds-space-2);
+  bottom: 0.2rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--ds-motion-base) var(--ds-ease-out);
+}
+
+.tag-chip:hover,
+.tag-chip:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(114, 216, 210, 0.28);
+  box-shadow: 0 8px 18px -14px rgba(114, 216, 210, 0.7);
+}
+
+.tag-chip:hover::after,
+.tag-chip:focus-visible::after {
+  transform: scaleX(1);
 }
 
 /* ---------- 选区 / 焦点：科技可读 ---------- */
@@ -201,7 +328,10 @@ a.btn-regular:hover {
   .card-base,
   .card-base:has(a:hover),
   .btn-plain,
-  .btn-regular {
+  .btn-regular,
+  .post-card__title,
+  .tag-chip,
+  .tag-chip::after {
     transition: none !important;
     transform: none !important;
   }

@@ -122,6 +122,9 @@ html.dark .tag-dist__meta {
   gap: 0.5rem 0.75rem;
   align-items: center;
   min-height: 1.25rem;
+  transition:
+    transform var(--ds-motion-base) var(--ds-ease-out),
+    opacity var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .tag-dist__name {
@@ -152,6 +155,9 @@ a.tag-dist__name:hover {
   background: var(--bar-track);
   overflow: hidden;
   border: 1px solid color-mix(in oklch, white 5%, transparent);
+  transition:
+    border-color var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-base) var(--ds-ease-out);
 }
 
 :root:not(.dark) .tag-dist__track {
@@ -169,6 +175,31 @@ a.tag-dist__name:hover {
   box-shadow: 0 0 12px -2px color-mix(in oklch, var(--accent-neon, var(--primary)) 50%, transparent);
   transform-origin: left center;
   animation: tag-bar-grow 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition:
+    filter var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-base) var(--ds-ease-out);
+}
+
+.tag-dist__row:hover,
+.tag-dist__row:focus-within {
+  transform: translateX(2px);
+}
+
+.tag-dist__row:hover .tag-dist__track,
+.tag-dist__row:focus-within .tag-dist__track {
+  border-color: rgba(114, 216, 210, 0.36);
+  box-shadow: 0 0 0 2px rgba(114, 216, 210, 0.08);
+}
+
+.tag-dist__row:hover .tag-dist__fill,
+.tag-dist__row:focus-within .tag-dist__fill {
+  filter: brightness(1.15) saturate(1.08);
+  box-shadow: 0 0 14px -2px rgba(114, 216, 210, 0.65);
+}
+
+.tag-dist__row:hover .tag-dist__count,
+.tag-dist__row:focus-within .tag-dist__count {
+  color: var(--primary);
 }
 
 .tag-dist__count {
@@ -196,8 +227,12 @@ html.dark .tag-dist__count {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tag-dist__fill {
+  .tag-dist__fill,
+  .tag-dist__row,
+  .tag-dist__track {
     animation: none !important;
+    transition: none !important;
+    transform: none !important;
   }
 }
 

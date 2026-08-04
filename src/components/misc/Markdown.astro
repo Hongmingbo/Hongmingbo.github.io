@@ -11,30 +11,49 @@ const className = Astro.props.class;
 </div>
 
 <script>
-document.addEventListener("click", function (e: MouseEvent) {
-    const target = e.target as Element | null;
-    if (target && target.classList.contains("copy-btn")) {
-        const preEle = target.closest("pre");
-        const codeEle = preEle?.querySelector("code");
-        const code = Array.from(codeEle?.querySelectorAll(".code:not(summary *)") ?? [])
-            .map(el => el.textContent)
-            .map(t => t === "\n" ? "" : t)
-            .join("\n");
-        navigator.clipboard.writeText(code);
+const root = document.documentElement;
 
-        const timeoutId = target.getAttribute("data-timeout-id");
-        if (timeoutId) {
-            clearTimeout(parseInt(timeoutId));
+if (!root.hasAttribute("data-copy-handler-bound")) {
+    root.setAttribute("data-copy-handler-bound", "true");
+
+    document.addEventListener("click", async (event: MouseEvent) => {
+        const origin = event.target;
+        if (!(origin instanceof Element)) return;
+
+        const button = origin.closest<HTMLButtonElement>(".copy-btn");
+        if (!button) return;
+
+        const pre = button.closest("pre");
+        const codeElement = pre?.querySelector("code");
+        const code = Array.from(codeElement?.querySelectorAll(".code:not(summary *)") ?? [])
+            .map((line) => line.textContent ?? "")
+            .map((line) => line === "\n" ? "" : line)
+            .join("\n");
+
+        const timeoutId = button.getAttribute("data-timeout-id");
+        if (timeoutId) window.clearTimeout(Number(timeoutId));
+
+        const idleLabel = button.dataset.copyIdleLabel ?? button.getAttribute("aria-label") ?? "复制代码";
+        button.dataset.copyIdleLabel = idleLabel;
+        button.classList.remove("success", "error");
+
+        try {
+            if (!code || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+            await navigator.clipboard.writeText(code);
+            button.classList.add("success");
+            button.setAttribute("aria-label", "已复制");
+        } catch {
+            button.classList.add("error");
+            button.setAttribute("aria-label", "复制失败");
         }
 
-        target.classList.add("success");
+        const newTimeoutId = window.setTimeout(() => {
+            button.classList.remove("success", "error");
+            button.setAttribute("aria-label", idleLabel);
+            button.removeAttribute("data-timeout-id");
+        }, 1800);
 
-        // 设置新的timeout并保存ID到按钮的自定义属性中
-        const newTimeoutId = setTimeout(() => {
-            target.classList.remove("success");
-        }, 1000);
-
-        target.setAttribute("data-timeout-id", newTimeoutId.toString());
-    }
-});
+        button.setAttribute("data-timeout-id", newTimeoutId.toString());
+    });
+}
 </script>
