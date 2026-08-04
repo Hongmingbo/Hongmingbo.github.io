@@ -175,14 +175,8 @@ a:hover > .card-base,
   font-size: var(--ds-text-title) !important;
   line-height: var(--ds-leading-display);
   text-wrap: balance;
-  transition:
-    color var(--ds-motion-base) var(--ds-ease-out),
-    transform var(--ds-motion-base) var(--ds-ease-out);
-}
-
-.post-card:has(a:hover) .post-card__title,
-.post-card:focus-within .post-card__title {
-  transform: translateX(2px);
+  /* 标题与左侧绝对定位竖线保持稳定几何关系；不对标题整体做 transform */
+  transition: color var(--ds-motion-base) var(--ds-ease-out);
 }
 
 .post-card__description {
