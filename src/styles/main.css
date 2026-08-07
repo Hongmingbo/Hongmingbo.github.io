@@ -132,7 +132,7 @@
     left: calc(50% - 1px);
     border-left: 2px dashed var(--line-color);
     pointer-events: none;
-    transition: all 0.3s;
+    transition: border-color 180ms var(--ds-ease-out);
     transform: translateY(-50%);
 }
 
@@ -141,7 +141,7 @@
 }
 
 .custom-md spoiler {
-  @apply bg-[var(--codeblock-bg)] hover:bg-transparent px-1 py-0.5 overflow-hidden rounded-md transition-all duration-150;
+  @apply bg-[var(--codeblock-bg)] hover:bg-transparent px-1 py-0.5 overflow-hidden rounded-md transition-[background-color,color] duration-150 ease-out;
 
   &:not(:hover) {
     color: var(--codeblock-bg);

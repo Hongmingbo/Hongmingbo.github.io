@@ -183,17 +183,17 @@ html.dark #search-panel .search-panel__status {
   border: 1px solid transparent;
   border-radius: 0.5rem !important;
   margin-top: 0.15rem;
-  animation: search-row-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: search-row-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-#search-panel a.group:nth-child(1) { animation-delay: 30ms; }
-#search-panel a.group:nth-child(2) { animation-delay: 60ms; }
-#search-panel a.group:nth-child(3) { animation-delay: 90ms; }
-#search-panel a.group:nth-child(4) { animation-delay: 120ms; }
-#search-panel a.group:nth-child(5) { animation-delay: 150ms; }
-#search-panel a.group:nth-child(6) { animation-delay: 180ms; }
-#search-panel a.group:nth-child(7) { animation-delay: 210ms; }
-#search-panel a.group:nth-child(8) { animation-delay: 240ms; }
+#search-panel a.group:nth-child(1) { animation-delay: 24ms; }
+#search-panel a.group:nth-child(2) { animation-delay: 48ms; }
+#search-panel a.group:nth-child(3) { animation-delay: 72ms; }
+#search-panel a.group:nth-child(4) { animation-delay: 96ms; }
+#search-panel a.group:nth-child(5) { animation-delay: 120ms; }
+#search-panel a.group:nth-child(6) { animation-delay: 144ms; }
+#search-panel a.group:nth-child(7) { animation-delay: 168ms; }
+#search-panel a.group:nth-child(8) { animation-delay: 192ms; }
 
 #search-panel a.group:hover,
 .search-panel a.group:hover {
@@ -230,7 +230,7 @@ html.dark #search-panel .search-panel__status {
 
 /* 面板打开时的容器过渡（配合 float-panel） */
 #search-panel:not(.float-panel-closed) {
-  animation: search-panel-open 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: search-panel-open 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 @keyframes search-panel-open {
@@ -265,7 +265,10 @@ html.dark #search-panel .search-panel__status {
   color: var(--chip-color, rgba(0, 0, 0, 0.75));
   background: transparent;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .search-panel__chip:hover {
   border-color: var(--primary);
@@ -297,7 +300,9 @@ html.dark #search-panel .search-panel__status {
   color: var(--primary);
   background: transparent;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .search-panel__more:hover {
   border-color: var(--primary);

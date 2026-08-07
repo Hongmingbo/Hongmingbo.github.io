@@ -22,7 +22,7 @@ const className = Astro.props.class;
         <slot></slot>
     </div>
     {isCollapsed && <div class="expand-btn px-4 -mb-2">
-        <button class="btn-plain rounded-lg w-full h-9">
+        <button class="btn-plain rounded-lg w-full h-9" aria-expanded="false" aria-controls={id}>
             <div class="text-[var(--primary)] flex items-center justify-center gap-2 -translate-x-2">
                 <Icon name="material-symbols:more-horiz" class="text-[1.75rem]"></Icon> {i18n(I18nKey.more)}
             </div>
@@ -38,19 +38,47 @@ const className = Astro.props.class;
 
 <script>
     class WidgetLayout extends HTMLElement {
-        constructor() {
-            super();
+        connectedCallback() {
+            if (this.dataset.isCollapsed !== "true" || this.dataset.expandBound === "true") return;
 
-            if (this.dataset.isCollapsed !== "true")
-                return;
-
+            this.dataset.expandBound = "true";
             const id = this.dataset.id;
-            const btn = this.querySelector('.expand-btn');
-            const wrapper = this.querySelector(`#${id}`)
-            btn!.addEventListener('click', () => {
-                wrapper!.classList.remove('collapsed');
-                btn!.classList.add('hidden');
-            })
+            const btn = this.querySelector<HTMLButtonElement>('.expand-btn button');
+            const wrapper = this.querySelector<HTMLElement>(`#${id}`);
+            if (!btn || !wrapper) return;
+
+            btn.addEventListener('click', () => {
+                const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                const currentHeight = wrapper.getBoundingClientRect().height;
+
+                wrapper.classList.remove('collapsed');
+                const targetHeight = wrapper.scrollHeight;
+                btn.setAttribute('aria-expanded', 'true');
+                btn.closest('.expand-btn')?.classList.add('hidden');
+
+                if (reduce || !wrapper.animate) return;
+
+                wrapper.style.height = `${currentHeight}px`;
+                wrapper.style.opacity = '0.72';
+                wrapper.getBoundingClientRect();
+
+                const animation = wrapper.animate(
+                    [
+                        { height: `${currentHeight}px`, opacity: 0.72 },
+                        { height: `${targetHeight}px`, opacity: 1 },
+                    ],
+                    {
+                        duration: 200,
+                        easing: 'cubic-bezier(0.23, 1, 0.32, 1)',
+                        fill: 'forwards',
+                    },
+                );
+
+                animation.addEventListener('finish', () => {
+                    wrapper.style.removeProperty('height');
+                    wrapper.style.removeProperty('opacity');
+                }, { once: true });
+            });
         }
     }
 

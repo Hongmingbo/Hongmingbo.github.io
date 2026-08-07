@@ -88,13 +88,18 @@ a:hover > .card-base,
 .card-base:has(a:hover) {
   border-color: var(--card-border-hover);
   box-shadow: var(--glow-neon);
-  transform: translateY(-2px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card-base:has(a:hover) {
+    transform: translateY(-2px);
+  }
 }
 
 /* 左侧主色细条：文章标题 already has before bar — 强化 glow */
 .card-base a.group::before {
   box-shadow: 0 0 10px color-mix(in oklch, var(--primary) 50%, transparent);
-  transition: box-shadow 0.35s var(--ease-tech), height 0.35s var(--ease-tech);
+  transition: box-shadow var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .card-base a.group:hover::before {
@@ -253,9 +258,14 @@ a.btn-regular:hover {
 
 .tag-chip:hover,
 .tag-chip:focus-visible {
-  transform: translateY(-1px);
   border-color: rgba(114, 216, 210, 0.28);
   box-shadow: 0 8px 18px -14px rgba(114, 216, 210, 0.7);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tag-chip:hover {
+    transform: translateY(-1px);
+  }
 }
 
 .tag-chip:hover::after,
