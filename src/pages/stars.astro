@@ -70,7 +70,7 @@ const GITHUB_USER = "Hongmingbo";
     --card-shadow: 0 1px 3px oklch(0.30 0.02 var(--hue) / 0.08);
     --card-shadow-hover: 0 8px 28px oklch(0.55 0.15 var(--hue) / 0.18);
   }
-  :global(.dark) #stars-manager {
+  .dark #stars-manager {
     --border-color: oklch(0.48 0.04 var(--hue));
     --border-strong: oklch(0.80 0.14 var(--hue));
     --card-shadow: 0 1px 3px oklch(0.15 0.01 var(--hue) / 0.5);
@@ -113,6 +113,20 @@ const GITHUB_USER = "Hongmingbo";
     user-select: none;
     white-space: nowrap;
   }
+
+  /* 排序下拉框：隐藏原生贴边箭头，用 SVG 箭头并左移 */
+  #stars-sort {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    background-size: 14px;
+    padding-right: 38px;
+  }
+  .dark #stars-sort {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
   .stars-cat-tab:hover {
     border-color: oklch(0.55 0.15 var(--hue));
     opacity: 1;
@@ -139,7 +153,7 @@ const GITHUB_USER = "Hongmingbo";
     color: var(--deep-text);
     opacity: 0.65;
   }
-  :global(.dark) .stars-topic {
+  .dark .stars-topic {
     background: oklch(0.28 0.02 var(--hue));
   }
   @keyframes stars-fade-in {
