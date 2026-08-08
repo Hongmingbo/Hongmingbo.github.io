@@ -6,6 +6,7 @@ tags: ["DeepSeek", "AI幻觉", "提示词工程", "RAG"]
 category: "AI Agent"
 draft: false
 lang: zh-CN
+image: /covers/deepseek-and-ai-hallucination.webp
 ---
 
 AI 幻觉是当前大语言模型最受关注的问题之一。它并非简单的模型缺陷，而是统计概率驱动下的"合理猜测"——模型在缺乏可靠数据时，以最高概率路径补全输出，导致事实性或忠实性偏差。

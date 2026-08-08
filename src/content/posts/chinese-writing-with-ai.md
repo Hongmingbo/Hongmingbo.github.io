@@ -10,6 +10,7 @@ tags:
 category: 写作
 draft: false
 lang: zh_CN
+image: /covers/chinese-writing-with-ai.webp
 ---
 “去 AI 味”正在变成一个流行需求，但它也很容易被误解成：把句子改得口语化，删掉结构词，再加一点情绪。
 

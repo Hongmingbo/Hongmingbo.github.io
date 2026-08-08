@@ -10,6 +10,7 @@ tags:
 category: AI Agent
 draft: false
 lang: zh_CN
+image: /covers/ai-agent-operating-system.webp
 ---
 大多数人使用 AI，仍停留在“问一句、答一句”的阶段。这种方式适合快速获取答案，却无法积累稳定的工作能力：下一次对话要重新解释背景，做过的事情无法复用，复杂任务也很难验证。
 
