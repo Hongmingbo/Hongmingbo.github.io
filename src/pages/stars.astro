@@ -1,0 +1,480 @@
+---
+import MainGridLayout from "@layouts/MainGridLayout.astro";
+import I18nKey from "../i18n/i18nKey";
+import { i18n } from "../i18n/translation";
+
+const GITHUB_USER = "Hongmingbo";
+---
+
+<MainGridLayout title="GitHub Stars" description="我的 GitHub 星标仓库管理">
+  <div id="stars-manager" class="w-full">
+    <!-- Header -->
+    <div class="card-base px-6 py-5 mb-4">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-3">
+          <svg class="w-7 h-7 text-[oklch(0.55_0.15_var(--hue))]" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222 0 1.606-.014 2.898-.014 3.293 0 .322.216.694.825.576C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+          <h1 class="text-xl font-bold text-[oklch(0.45_0.12_var(--hue))] dark:text-[oklch(0.75_0.14_var(--hue))]">GitHub Stars</h1>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input id="stars-search" type="text" placeholder="搜索仓库…" class="pl-9 pr-3 py-2 text-sm rounded-lg border border-[var(--border-color,oklch(0.85_0.01_var(--hue)))] bg-[var(--card-bg)] text-[var(--deep-text)] focus:outline-none focus:border-[oklch(0.55_0.15_var(--hue))] w-48 transition-colors" />
+          </div>
+          <select id="stars-sort" class="px-3 py-2 text-sm rounded-lg border border-[var(--border-color,oklch(0.85_0.01_var(--hue)))] bg-[var(--card-bg)] text-[var(--deep-text)] cursor-pointer focus:outline-none focus:border-[oklch(0.55_0.15_var(--hue))] transition-colors">
+            <option value="stars-desc">⭐ 星标最多</option>
+            <option value="stars-asc">⭐ 星标最少</option>
+            <option value="name-asc">📝 名称 A→Z</option>
+            <option value="name-desc">📝 名称 Z→A</option>
+            <option value="updated-desc">🕐 最近更新</option>
+          </select>
+        </div>
+      </div>
+      <!-- Stats bar -->
+      <div id="stars-stats" class="flex gap-4 mt-3 text-sm opacity-60"></div>
+    </div>
+
+    <!-- Category tabs -->
+    <div id="stars-categories" class="flex gap-2 flex-wrap mb-4 px-1"></div>
+
+    <!-- Loading state -->
+    <div id="stars-loading" class="flex flex-col items-center justify-center py-20 opacity-50">
+      <div class="w-10 h-10 border-3 border-[oklch(0.55_0.15_var(--hue))] border-t-transparent rounded-full animate-spin mb-3"></div>
+      <p class="text-sm">正在从 GitHub 拉取星标仓库…</p>
+    </div>
+
+    <!-- Error state -->
+    <div id="stars-error" class="hidden card-base px-6 py-12 text-center">
+      <p class="text-[oklch(0.55_0.2_25)] font-semibold mb-2">⚠️ 加载失败</p>
+      <p id="stars-error-msg" class="text-sm opacity-60 mb-4"></p>
+      <button id="stars-retry" class="px-4 py-2 rounded-lg bg-[oklch(0.55_0.15_var(--hue))] text-white text-sm hover:opacity-80 transition-opacity">重试</button>
+    </div>
+
+    <!-- Repo grid -->
+    <div id="stars-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+
+    <!-- Empty state -->
+    <div id="stars-empty" class="hidden text-center py-20 opacity-40">
+      <p class="text-sm">没有匹配的仓库</p>
+    </div>
+
+    <!-- Cache info -->
+    <div id="stars-cache-info" class="text-center text-xs opacity-30 mt-6 pb-4"></div>
+  </div>
+</MainGridLayout>
+
+<style>
+  #stars-manager {
+    --border-color: oklch(0.85_0.01_var(--hue));
+  }
+  :global(.dark) #stars-manager {
+    --border-color: oklch(0.35_0.02_var(--hue));
+  }
+  .stars-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-large);
+    padding: 16px;
+    transition: box-shadow 0.25s, transform 0.25s, border-color 0.25s;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-decoration: none;
+    color: inherit;
+  }
+  .stars-card:hover {
+    box-shadow: 0 6px 20px oklch(0.55_0.15_var(--hue) / 0.12);
+    transform: translateY(-2px);
+    border-color: oklch(0.55_0.15_var(--hue));
+  }
+  .stars-cat-tab {
+    padding: 5px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--card-bg);
+    color: var(--deep-text);
+    opacity: 0.6;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .stars-cat-tab:hover {
+    border-color: oklch(0.55_0.15_var(--hue));
+    opacity: 1;
+  }
+  .stars-cat-tab.active {
+    background: oklch(0.55_0.15_var(--hue));
+    color: white;
+    border-color: oklch(0.55_0.15_var(--hue));
+    opacity: 1;
+  }
+  .stars-lang-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .stars-topic {
+    font-size: 10px;
+    padding: 1px 7px;
+    border-radius: 8px;
+    background: oklch(0.92_0.02_var(--hue));
+    color: var(--deep-text);
+    opacity: 0.6;
+  }
+  :global(.dark) .stars-topic {
+    background: oklch(0.30_0.02_var(--hue));
+  }
+  @keyframes stars-fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .stars-card { animation: stars-fade-in 0.3s ease-out; }
+</style>
+
+<script>
+const GITHUB_USER = "{GITHUB_USER}";
+
+// Category mapping
+const CATEGORIES = [
+  { id: "all",       label: "全部",       icon: "📋" },
+  { id: "agent",     label: "AI Agent",   icon: "🤖" },
+  { id: "video",     label: "AI 视频",    icon: "🎬" },
+  { id: "image",     label: "AI 图像",    icon: "🎨" },
+  { id: "api-proxy", label: "API 代理",   icon: "🔌" },
+  { id: "social",    label: "社交自动化", icon: "💬" },
+  { id: "network",   label: "网络代理",   icon: "🌐" },
+  { id: "dev-tools", label: "开发工具",   icon: "🛠️" },
+  { id: "reverse",   label: "逆向工程",   icon: "🔍" },
+  { id: "system",    label: "系统工具",   icon: "⚙️" },
+  { id: "frontend",  label: "前端/博客",  icon: "📝" },
+];
+
+const LANG_COLORS = {
+  Python: "#3572A5", TypeScript: "#3178c6", JavaScript: "#f1e05a",
+  Rust: "#dea584", Go: "#00ADD8", Dart: "#00B4AB", "C#": "#178600",
+  "C++": "#f34b7d", C: "#555555", Kotlin: "#A97BFF", Astro: "#ff5a03",
+  HTML: "#e34c26", CSS: "#563d7c", Shell: "#89e051", Vue: "#41b883",
+  Svelte: "#ff3e00", Java: "#b07219", "N/A": "#9e9e9e",
+};
+
+// Keyword → category mapping for auto-classification
+const CAT_KEYWORDS = {
+  "agent":     ["agent", "ai-agent", "ai agent", "chatbot", "llm", "assistant", "hermes", "astrbot", "qwenpaw", "rikkahub"],
+  "video":     ["video", "hyperframe", "arcreel", "storyboard", "movie", "film"],
+  "image":     ["image", "canvas", "gpt-image", "sam", "diffusion", "comfyui", "prompt"],
+  "api-proxy": ["api", "proxy", "gateway", "switch", "grok2api", "chatgpt2api", "openai", "reverse", "deepseek"],
+  "social":    ["wechat", "微信", "bilibili", "b站", "qq", "bot", "social", "chat"],
+  "network":   ["clash", "proxy", "network", "flclash", "rule"],
+  "dev-tools": ["cli", "tool", "installer", "apk", "codex", "yt-dlp", "download", "developer", "engineering"],
+  "reverse":   ["ctf", "reverse", "逆向", "crackme", "exploit"],
+  "system":    ["windows", "cleanup", "disk", "island", "tunnel", "内网穿透", "system"],
+  "frontend":  ["astro", "blog", "fuwari", "frontend", "template", "web"],
+};
+
+function classifyRepo(repo) {
+  // Exact overrides (repo name → category) take precedence
+  const name = (repo.full_name || repo.name || "").toLowerCase();
+  const OVERRIDES = {
+    "chen08209/flclash": "network",
+    "teressalodas/flclash-scripts": "network",
+    "lingbol088-spec/reverse-flow-skill": "reverse",
+    "arcreel/arcreel": "video",
+    "yaoqinwei1128/arcreel-": "video",
+    "freestylefly/awesome-gpt-image-2": "image",
+    "youmind-openlab/awesome-gpt-image-2": "image",
+    "cooksleep/gpt_image_playground": "image",
+    "basketikun/infinite-canvas": "image",
+    "hero8152/infinite-canvas": "image",
+    "sam404s/sam-image-app": "image",
+    "cluic/wxauto": "social",
+    "fclwtt/wechat-cli": "social",
+    "the-yex/wechat-ilink-sdk": "social",
+    "xiaoyaya191/bilibili_learning_bot": "social",
+    "saicaca/fuwari": "frontend",
+    "wang1970/api-switch": "api-proxy",
+    "jiujiu532/grok2api": "api-proxy",
+    "basketikun/chatgpt2api": "api-proxy",
+    "farion1231/cc-switch": "api-proxy",
+    "zhu1090093659/deepseek-pp": "api-proxy",
+    "loyalsoldier/clash-rules": "network",
+    "gongjuliang/xiaoliang02": "system",
+    "chunyu33/light-c": "system",
+    "eatgrapes/winisland": "system",
+    "paving-base/apk-installer": "dev-tools",
+    "yynxxxxx/codex-x": "dev-tools",
+    "yynxxxxx/codex-5.5-codex-instruct-5.5": "dev-tools",
+    "yt-dlp/yt-dlp": "dev-tools",
+    "hkuDS/cli-anything": "dev-tools",
+    "emilkowalski/skills": "dev-tools",
+    "rikkahub/rikkahub": "agent",
+    "nousresearch/hermes-agent": "agent",
+    "ekkolearnai/hermes-studio": "agent",
+    "agentscope-ai/qwenpaw": "agent",
+    "astrbotdevs/astrbot": "agent",
+    "heygen-com/hyperframes": "video",
+  };
+  if (OVERRIDES[name]) return OVERRIDES[name];
+
+  const text = ((repo.name || "") + " " + (repo.description || "") + " " + (repo.topics || []).join(" ")).toLowerCase();
+  for (const [cat, keywords] of Object.entries(CAT_KEYWORDS)) {
+    if (keywords.some(kw => text.includes(kw))) return cat;
+  }
+  return "dev-tools";
+}
+
+function fmtNum(n) {
+  if (n >= 10000) return (n / 10000).toFixed(1) + "w";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return String(n);
+}
+
+// State
+let allRepos = [];
+let activeCat = "all";
+let searchTerm = "";
+let sortBy = "stars-desc";
+let dataSource = "api";
+
+// Cache: 5 minutes
+const CACHE_KEY = "github-stars-cache";
+const CACHE_TTL = 5 * 60 * 1000;
+
+// Load static JSON first (zero rate-limit risk), then try live API
+async function loadData() {
+  let staticData = null;
+  try {
+    const resp = await fetch("/stars-data.json");
+    if (resp.ok) {
+      staticData = await resp.json();
+      if (staticData && Array.isArray(staticData.repos)) {
+        return { repos: staticData.repos, fromCache: true, source: "static" };
+      }
+    }
+  } catch (e) {}
+
+  // Fallback: localStorage cache
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+    if (cached && cached.timestamp && Date.now() - cached.timestamp < CACHE_TTL) {
+      return { repos: cached.repos, fromCache: true, source: "cache" };
+    }
+  } catch (e) {}
+
+  // Last resort: live API
+  return { repos: await fetchLive(), fromCache: false, source: "api" };
+}
+
+async function fetchLive() {
+  const repos = [];
+  let page = 1;
+  const perPage = 100;
+  while (true) {
+    const url = `https://api.github.com/users/${GITHUB_USER}/starred?per_page=${perPage}&page=${page}`;
+    const resp = await fetch(url, {
+      headers: { "Accept": "application/vnd.github.v3+json" },
+    });
+    if (!resp.ok) {
+      if (resp.status === 403) throw new Error("GitHub API 速率限制（未认证 60 次/小时），已使用静态数据。5 分钟缓存自动刷新");
+      throw new Error(`GitHub API 返回 ${resp.status}`);
+    }
+    const data = await resp.json();
+    if (data.length === 0) break;
+    repos.push(...data);
+    if (data.length < perPage) break;
+    page++;
+    if (page > 10) break;
+  }
+  return repos;
+}
+
+async function fetchStarredRepos() {
+  const { repos: rawRepos, fromCache, source } = await loadData();
+
+  // Normalize + classify
+  const normalized = (rawRepos || []).map(r => ({
+    name: r.name || r.full_name,
+    desc: r.desc || r.description || "",
+    lang: r.lang || r.language || "N/A",
+    stars: r.stars || r.stargazers_count || 0,
+    forks: r.forks || r.forks_count || 0,
+    updated: r.updated || (r.updated_at || "").slice(0, 10),
+    url: r.url || r.html_url,
+    topics: r.topics || [],
+    cat: r.cat || classifyRepo(r),
+  }));
+
+  // Save to localStorage cache (normalized shape)
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ repos: normalized, timestamp: Date.now() }));
+  } catch (e) {}
+
+  return { repos: normalized, fromCache, source };
+}
+
+function getFilteredRepos() {
+  let list = allRepos.slice();
+  if (activeCat !== "all") list = list.filter(r => r.cat === activeCat);
+  if (searchTerm) {
+    const q = searchTerm.toLowerCase();
+    list = list.filter(r =>
+      r.name.toLowerCase().includes(q) ||
+      r.desc.toLowerCase().includes(q) ||
+      r.topics.some(t => t.toLowerCase().includes(q))
+    );
+  }
+  const [field, dir] = sortBy.split("-");
+  const asc = dir === "asc";
+  list.sort((a, b) => {
+    let va = a[field], vb = b[field];
+    if (field === "name") { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+    if (va < vb) return asc ? -1 : 1;
+    if (va > vb) return asc ? 1 : -1;
+    return 0;
+  });
+  return list;
+}
+
+function renderCategories() {
+  const container = document.getElementById("stars-categories");
+  container.innerHTML = CATEGORIES.map(c => {
+    const count = c.id === "all" ? allRepos.length : allRepos.filter(r => r.cat === c.id).length;
+    if (c.id !== "all" && count === 0) return "";
+    return `<div class="stars-cat-tab ${c.id === activeCat ? "active" : ""}" data-cat="${c.id}">${c.icon} ${c.label}<span style="font-size:11px;opacity:0.6;margin-left:3px">${count}</span></div>`;
+  }).join("");
+  container.querySelectorAll(".stars-cat-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      activeCat = tab.dataset.cat;
+      renderCategories();
+      renderGrid();
+    });
+  });
+}
+
+function renderGrid() {
+  const list = getFilteredRepos();
+  const grid = document.getElementById("stars-grid");
+  const empty = document.getElementById("stars-empty");
+  const stats = document.getElementById("stars-stats");
+
+  const totalStars = list.reduce((s, r) => s + r.stars, 0);
+  const langSet = new Set(list.map(r => r.lang));
+  stats.innerHTML = `
+    <span>📦 <strong>${list.length}</strong> 个仓库</span>
+    <span>⭐ <strong>${fmtNum(totalStars)}</strong> 总星标</span>
+    <span>🔤 <strong>${langSet.size}</strong> 种语言</span>
+  `;
+
+  if (list.length === 0) {
+    grid.innerHTML = "";
+    empty.classList.remove("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+
+  grid.innerHTML = list.map(r => {
+    const langColor = LANG_COLORS[r.lang] || "#9e9e9e";
+    const catLabel = CATEGORIES.find(c => c.id === r.cat)?.label || r.cat;
+    const topicsHtml = r.topics.slice(0, 5).map(t => `<span class="stars-topic">${t}</span>`).join("");
+    return `
+      <a class="stars-card" href="${r.url}" target="_blank" rel="noopener">
+        <div class="flex items-start justify-between gap-2">
+          <div class="text-sm font-semibold text-[oklch(0.45_0.12_var(--hue))] dark:text-[oklch(0.75_0.14_var(--hue))] break-all leading-snug">${r.name}</div>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-[oklch(0.92_0.02_var(--hue))] dark:bg-[oklch(0.30_0.02_var(--hue))] opacity-60 whitespace-nowrap flex-shrink-0">${catLabel}</span>
+        </div>
+        <div class="text-xs opacity-60 leading-relaxed" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${r.desc || "无描述"}</div>
+        ${topicsHtml ? `<div class="flex flex-wrap gap-1">${topicsHtml}</div>` : ""}
+        <div class="flex items-center gap-3 text-xs opacity-50 mt-auto pt-1">
+          <span class="flex items-center gap-1"><span class="stars-lang-dot" style="background:${langColor}"></span>${r.lang}</span>
+          <span>⭐ ${fmtNum(r.stars)}</span>
+          <span>🍴 ${fmtNum(r.forks)}</span>
+          <span>🕐 ${r.updated}</span>
+        </div>
+      </a>
+    `;
+  }).join("");
+}
+
+async function loadAndRender() {
+  const loading = document.getElementById("stars-loading");
+  const error = document.getElementById("stars-error");
+  const errorMsg = document.getElementById("stars-error-msg");
+  const grid = document.getElementById("stars-grid");
+  const cacheInfo = document.getElementById("stars-cache-info");
+
+  loading.classList.remove("hidden");
+  error.classList.add("hidden");
+  grid.innerHTML = "";
+
+  try {
+    const { repos, fromCache, source } = await fetchStarredRepos();
+    allRepos = repos;
+    loading.classList.add("hidden");
+
+    renderCategories();
+    renderGrid();
+
+    const srcLabel = source === "static" ? "静态数据" : source === "cache" ? "本地缓存" : "GitHub API";
+    const ageInfo = fromCache ? `（${Math.round((Date.now() - (JSON.parse(localStorage.getItem(CACHE_KEY) || "{}").timestamp || Date.now())) / 1000)}秒前）` : "";
+    cacheInfo.textContent = `数据来源：${srcLabel}${ageInfo} · ${new Date().toLocaleString("zh-CN")}`;
+
+    // Background live refresh: silently hit GitHub API to update data
+    if (source !== "api") {
+      refreshLiveInBackground();
+    }
+  } catch (err) {
+    loading.classList.add("hidden");
+    error.classList.remove("hidden");
+    errorMsg.textContent = err.message;
+  }
+}
+
+// Background live refresh — silently re-fetch from GitHub API
+// so the page stays current without blocking initial render.
+async function refreshLiveInBackground() {
+  try {
+    const liveRepos = await fetchLive();
+    if (!liveRepos || liveRepos.length === 0) return;
+    allRepos = liveRepos.map(r => ({
+      name: r.full_name,
+      desc: r.description || "",
+      lang: r.language || "N/A",
+      stars: r.stargazers_count,
+      forks: r.forks_count,
+      updated: (r.updated_at || "").slice(0, 10),
+      url: r.html_url,
+      topics: r.topics || [],
+      cat: classifyRepo(r),
+    }));
+    // Re-render + update cache
+    renderCategories();
+    renderGrid();
+    document.getElementById("stars-cache-info").textContent =
+      `数据来源：GitHub API（实时） · ${new Date().toLocaleString("zh-CN")}`;
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ repos: allRepos, timestamp: Date.now() }));
+    } catch (e) {}
+  } catch (e) {
+    // Silent: keep static/cache data on rate-limit or network failure
+  }
+}
+
+// Event listeners
+document.getElementById("stars-search").addEventListener("input", (e) => {
+  searchTerm = e.target.value;
+  renderGrid();
+});
+document.getElementById("stars-sort").addEventListener("change", (e) => {
+  sortBy = e.target.value;
+  renderGrid();
+});
+document.getElementById("stars-retry").addEventListener("click", () => {
+  localStorage.removeItem(CACHE_KEY);
+  loadAndRender();
+});
+
+// Init
+loadAndRender();
+</script>
