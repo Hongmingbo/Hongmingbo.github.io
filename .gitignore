@@ -34,3 +34,6 @@ yarn.lock
 archive-custom-v2/node_modules/
 archive-custom-v2/dist/
 archive-custom-v2/.astro/
+
+# local rollback snapshots
+.hermes-backups/

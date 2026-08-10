@@ -5,6 +5,7 @@ import "@fontsource-variable/jetbrains-mono";
 import "@fontsource-variable/jetbrains-mono/wght-italic.css";
 import ConfigCarrier from "@components/ConfigCarrier.astro";
 import GlobalStyles from "@components/GlobalStyles.astro";
+import MusicDock from "@components/MusicDock.svelte";
 import { profileConfig, siteConfig } from "@/config";
 import notoLatinUrl from "@fontsource-variable/noto-sans-sc/files/noto-sans-sc-latin-wght-normal.woff2?url";
 import {
@@ -161,6 +162,7 @@ const bannerOffset =
 		>
 			<GlobalStyles />
 			<ConfigCarrier></ConfigCarrier>
+			<MusicDock client:only="svelte" />
 			<slot />
 
 		<!-- increase the page height during page transition to prevent the scrolling animation from jumping -->
