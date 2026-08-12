@@ -31,9 +31,13 @@ assert.equal(await bff.getStreamUrl("abc123"), "https://music.hmb2011.bond/track
 const originalFetch = globalThis.fetch;
 let qrMethod = "";
 let qrUrl = "";
+let qrContentType = "";
+let qrBody = "";
 globalThis.fetch = async (input, init) => {
 	qrUrl = String(input);
 	qrMethod = String(init?.method ?? "GET");
+	qrContentType = String(new Headers(init?.headers).get("Content-Type") ?? "");
+	qrBody = String(init?.body ?? "");
 	return new Response(JSON.stringify({ status: 1, data: { key: "opaque-test-key", image: "data:image/png;base64,test" } }), {
 		status: 200,
 		headers: { "Content-Type": "application/json" },
@@ -43,6 +47,8 @@ try {
 	const qr = await bff.createQr();
 	assert.equal(qrMethod, "POST");
 	assert.equal(qrUrl, "https://music.hmb2011.bond/auth/qr");
+	assert.equal(qrContentType, "application/json");
+	assert.equal(qrBody, "{}");
 	assert.equal(qr.key, "opaque-test-key");
 } finally {
 	globalThis.fetch = originalFetch;
