@@ -20,6 +20,9 @@
 	type VipState = "idle" | "checking" | "claimed" | "risk" | "error";
 
 	const VIP_DATE_PREFIX = "hengduo-music-vip-date:";
+	const FAVORITES_KEY = "hengduo-music-favorites";
+	const SHUFFLE_KEY = "hengduo-music-shuffle";
+	const REPEAT_KEY = "hengduo-music-repeat";
 	const isDev = import.meta.env.DEV;
 	const devApiUrl = (isDev ? (import.meta.env.PUBLIC_MUSIC_DEV_API_URL as string | undefined) : "") ?? "";
 
@@ -63,6 +66,10 @@
 	let vipState: VipState = "idle";
 	let vipMessage = "登录后自动检查今日权益";
 	let notice = "";
+	let favorites: Set<string> = new Set();
+	let shuffleEnabled = false;
+	let repeatMode: "list" | "one" | "off" = "list";
+	let playGeneration = 0;
 	let qrTimer: ReturnType<typeof setInterval> | null = null;
 	let qrBusy = false;
 	let countdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -70,6 +77,8 @@
 	$: apiConfigured = Boolean(apiUrl.trim());
 	$: progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 	$: dockLabel = currentSong ? `${currentSong.name} · ${currentSong.author}` : "连接你的音乐平台";
+	$: currentIndex = songs.findIndex((song) => song.hash === currentSong?.hash);
+	$: isFavorite = currentSong ? favorites.has(currentSong.hash) : false;
 
 	const isAllowedApiOrigin = (value: string): boolean => {
 		const normalized = normalizeApiBaseUrl(value);
@@ -241,6 +250,7 @@
 			showLogin = true;
 			return;
 		}
+		const generation = ++playGeneration;
 		currentSongLoading = song.hash;
 		setNotice(`正在连接 BFF 播放流：「${song.name}」`);
 		try {
@@ -250,12 +260,16 @@
 			audio.src = audioUrl;
 			audio.currentTime = 0;
 			await audio.play();
+			if (generation !== playGeneration) return;
 			updateMediaSession();
+			scrollActiveTrackIntoView();
 			void claimDailyVip();
 		} catch (error) {
+			// 快速切歌时浏览器会中断上一次 audio.play()，这是正常竞态而非失败。
+			if (error instanceof DOMException && error.name === "AbortError") return;
 			setNotice(errorMessage(error, "BFF 播放流连接失败"));
 		} finally {
-			currentSongLoading = "";
+			if (generation === playGeneration) currentSongLoading = "";
 		}
 	};
 
@@ -272,8 +286,49 @@
 
 	const playNext = async () => {
 		if (!currentSong || songs.length === 0) return;
+		if (shuffleEnabled && songs.length > 1) {
+			let nextIndex = Math.floor(Math.random() * songs.length);
+			const currentIndexNow = songs.findIndex((song) => song.hash === currentSong?.hash);
+			if (nextIndex === currentIndexNow) nextIndex = (nextIndex + 1) % songs.length;
+			await playSong(songs[nextIndex]);
+			return;
+		}
 		const index = songs.findIndex((song) => song.hash === currentSong?.hash);
 		await playSong(songs[(index + 1) % songs.length]);
+	};
+
+	const toggleFavorite = () => {
+		if (!currentSong) return;
+		const next = new Set(favorites);
+		if (next.has(currentSong.hash)) {
+			next.delete(currentSong.hash);
+			setNotice("已取消收藏当前歌曲");
+		} else {
+			next.add(currentSong.hash);
+			setNotice("已收藏当前歌曲");
+		}
+		favorites = next;
+		localStorage.setItem(FAVORITES_KEY, JSON.stringify([...next]));
+	};
+
+	const toggleShuffle = () => {
+		shuffleEnabled = !shuffleEnabled;
+		localStorage.setItem(SHUFFLE_KEY, shuffleEnabled ? "1" : "0");
+		setNotice(shuffleEnabled ? "随机播放已开启" : "随机播放已关闭");
+	};
+
+	const cycleRepeat = () => {
+		repeatMode = repeatMode === "list" ? "one" : repeatMode === "one" ? "off" : "list";
+		localStorage.setItem(REPEAT_KEY, repeatMode);
+		setNotice(repeatMode === "list" ? "列表循环" : repeatMode === "one" ? "单曲循环" : "顺序播放");
+	};
+
+	const scrollActiveTrackIntoView = () => {
+		requestAnimationFrame(() => {
+			const list = document.querySelector<HTMLElement>(".music-song-list");
+			const active = list?.querySelector<HTMLElement>(".music-song--active");
+			active?.scrollIntoView({ block: "nearest" });
+		});
 	};
 
 	const playPrevious = async () => {
@@ -477,6 +532,15 @@
 		apiUrl = normalizeApiBaseUrl(isDev && devApiUrl ? devApiUrl : MUSIC_BFF_ORIGIN);
 		const savedVolume = Number(localStorage.getItem("hengduo-music-volume"));
 		if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) volume = savedVolume;
+		try {
+			const savedFavorites = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
+			if (Array.isArray(savedFavorites)) favorites = new Set(savedFavorites.filter((item) => typeof item === "string"));
+		} catch {
+			favorites = new Set();
+		}
+		shuffleEnabled = localStorage.getItem(SHUFFLE_KEY) === "1";
+		const savedRepeat = localStorage.getItem(REPEAT_KEY);
+		repeatMode = savedRepeat === "one" || savedRepeat === "off" ? savedRepeat : "list";
 		audio = new Audio();
 		audio.crossOrigin = "use-credentials";
 		audio.preload = "metadata";
@@ -485,7 +549,18 @@
 		audio.addEventListener("loadedmetadata", () => (duration = audio?.duration ?? 0));
 		audio.addEventListener("play", () => (isPlaying = true));
 		audio.addEventListener("pause", () => (isPlaying = false));
-		audio.addEventListener("ended", () => void playNext());
+		audio.addEventListener("ended", () => {
+			if (repeatMode === "one" && currentSong) {
+				audio.currentTime = 0;
+				void audio.play();
+				return;
+			}
+			if (repeatMode === "off") {
+				const index = songs.findIndex((song) => song.hash === currentSong?.hash);
+				if (index === songs.length - 1) return;
+			}
+			void playNext();
+		});
 		audio.addEventListener("error", () => setNotice("音频地址已失效，请重新点击歌曲"));
 
 		if ("mediaSession" in navigator) {
@@ -552,11 +627,19 @@
 							<div class="music-cover music-cover--empty"><Icon icon="material-symbols:radio-outline-rounded" /></div>
 						{/if}
 						<div class="music-track-copy">
-							<span class="music-status-line">{apiStatus === "ready" ? "SERVICE ONLINE" : "SERVICE OFFLINE"}</span>
+							<span class="music-track-status">
+								{#if isPlaying}<span class="music-eq" aria-hidden="true"><i></i><i></i><i></i></span>{/if}
+								<span class="music-status-line">{apiStatus === "ready" ? "SERVICE ONLINE" : "SERVICE OFFLINE"}</span>
+							</span>
 							<strong>{currentSong?.name ?? "还没有开始播放"}</strong>
-							<span>{currentSong?.author ?? "登录后读取你的歌单"}</span>
-						</div>
-					</div>
+							<span>{currentSong?.author ?? "登录后读取你的歌单"}{currentIndex >= 0 ? ` · ${currentIndex + 1}/${songs.length}` : ""}</span>
+							</div>
+							{#if currentSong}
+							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? "取消收藏" : "收藏当前歌曲"} title={isFavorite ? "取消收藏" : "收藏"} on:click={toggleFavorite}>
+								<Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} />
+							</button>
+							{/if}
+							</div>
 
 					<div class="music-progress-row">
 						<span>{formatTime(currentTime)}</span>
@@ -564,13 +647,17 @@
 						<span>{formatTime(duration)}</span>
 					</div>
 					<div class="music-controls">
+						<button class:music-mode-button--active={shuffleEnabled} class="music-icon-button music-mode-button" type="button" aria-label={shuffleEnabled ? "关闭随机播放" : "开启随机播放"} title="随机播放" on:click={toggleShuffle}><Icon icon="material-symbols:shuffle-rounded" /></button>
 						<button class="music-icon-button" type="button" aria-label="上一首" on:click={playPrevious}><Icon icon="material-symbols:skip-previous-rounded" /></button>
-						<button class="music-play-button" type="button" aria-label={isPlaying ? "暂停" : "播放"} on:click={togglePlay}>
+						<button class:music-play-button--playing={isPlaying} class="music-play-button" type="button" aria-label={isPlaying ? "暂停" : "播放"} on:click={togglePlay}>
 							<Icon icon={isPlaying ? "material-symbols:pause-rounded" : "material-symbols:play-arrow-rounded"} />
 						</button>
 						<button class="music-icon-button" type="button" aria-label="下一首" on:click={playNext}><Icon icon="material-symbols:skip-next-rounded" /></button>
+						<button class:music-mode-button--active={repeatMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label={repeatMode === "list" ? "切换到单曲循环" : repeatMode === "one" ? "切换到顺序播放" : "切换到列表循环"} title={repeatMode === "one" ? "单曲循环" : repeatMode === "off" ? "顺序播放" : "列表循环"} on:click={cycleRepeat}>
+							<Icon icon={repeatMode === "one" ? "material-symbols:repeat-one-rounded" : "material-symbols:repeat-rounded"} />
+						</button>
 						<label class="music-volume" aria-label="音量"><Icon icon="material-symbols:volume-up-rounded" /><input type="range" min="0" max="100" value={volume * 100} on:input={changeVolume} /></label>
-					</div>
+				</div>
 				</div>
 
 				<div class="music-account-row">
@@ -614,8 +701,13 @@
 						{#each songs.slice(0, 30) as song}
 							<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
 								<span class="music-song-index">{currentSongLoading === song.hash ? "…" : String(songs.indexOf(song) + 1).padStart(2, "0")}</span>
+								{#if song.img}
+									<img class="music-song-cover" src={song.img} alt="" loading="lazy" />
+								{:else}
+									<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>
+								{/if}
 								<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span>
-								<Icon icon="material-symbols:play-arrow-rounded" />
+								<Icon icon={currentSongLoading === song.hash ? "material-symbols:more-horiz-rounded" : currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 							</button>
 						{/each}
 					</div>
@@ -741,19 +833,30 @@
 	.music-primary--small { min-height: 2rem; }
 	.music-quiet { border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 95%, transparent); color: var(--text-60, rgb(71 85 105)); background: transparent; }
 	.music-now-playing { display: flex; align-items: center; gap: 0.75rem; }
-	.music-cover { flex: 0 0 3.3rem; width: 3.3rem; height: 3.3rem; border-radius: 0.7rem; object-fit: cover; box-shadow: 0 8px 18px -12px rgb(15 23 42 / 0.7); }
+	.music-cover { flex: 0 0 3.6rem; width: 3.6rem; height: 3.6rem; border-radius: 0.85rem; object-fit: cover; box-shadow: 0 8px 18px -12px rgb(15 23 42 / 0.7); }
 	.music-cover--empty { display: grid; place-items: center; color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 1.5rem; }
 	.music-track-copy { min-width: 0; display: grid; gap: 0.12rem; }
 	.music-track-copy strong, .music-track-copy span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.music-track-copy strong { font-size: 0.85rem; }
 	.music-track-copy span:last-child { color: var(--text-50, rgb(100 116 139)); font-size: 0.72rem; }
+	.music-track-status { display: inline-flex; align-items: center; gap: 0.35rem; }
+	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 0; border-radius: 0.65rem; color: var(--text-45, rgb(148 163 184)); background: transparent; cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-favorite:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: scale(1.06); }
+	.music-favorite--active { color: var(--primary); }
+	.music-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 0.7rem; }
+	.music-eq i { display: block; width: 2.5px; border-radius: 2px; background: var(--primary); transform-origin: bottom; animation: music-eq-bounce 900ms ease-in-out infinite alternate; }
+	.music-eq i:nth-child(2) { animation-delay: -300ms; }
+	.music-eq i:nth-child(3) { animation-delay: -600ms; }
 	.music-progress-row { display: grid; grid-template-columns: 2.3rem minmax(0, 1fr) 2.3rem; align-items: center; gap: 0.4rem; margin-top: 0.85rem; color: var(--text-50, rgb(100 116 139)); font-family: var(--font-mono, monospace); font-size: 0.6rem; }
 	.music-progress-row span:last-child { text-align: right; }
 	input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer; }
-	.music-controls { margin-top: 0.55rem; justify-content: center; }
-	.music-play-button { display: grid; place-items: center; width: 2.65rem; height: 2.65rem; border: 0; border-radius: 50%; color: #fff; background: var(--primary); cursor: pointer; font-size: 1.45rem; transition: transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-controls { position: relative; margin-top: 0.55rem; justify-content: center; }
+	.music-play-button { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border: 0; border-radius: 50%; color: #fff; background: var(--primary); cursor: pointer; font-size: 1.5rem; transition: transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), box-shadow 180ms ease; }
 	.music-play-button:hover { transform: scale(1.05); }
-	.music-volume { display: flex; align-items: center; gap: 0.25rem; margin-left: 0.7rem; color: var(--text-50, rgb(100 116 139)); font-size: 0.95rem; }
+	.music-play-button:active { transform: scale(0.94); }
+	.music-play-button--playing { box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 16%, transparent); }
+	.music-mode-button--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); }
+	.music-volume { position: absolute; right: 0; display: flex; align-items: center; gap: 0.25rem; color: var(--text-50, rgb(100 116 139)); font-size: 0.95rem; }
 	.music-volume input { width: 4.5rem; }
 	.music-account-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.65rem; }
 	.music-account-row strong { display: block; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; }
@@ -766,9 +869,13 @@
 	.music-list-status { display: flex; align-items: center; justify-content: space-between; gap: 0.65rem; padding: 0.35rem 0.15rem; }
 	.music-list-status .music-muted { flex: 1; }
 	.music-list-status .music-quiet { flex: 0 0 auto; }
-	.music-song { display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.48rem 0.55rem; border: 1px solid transparent; border-radius: 0.65rem; color: inherit; background: transparent; text-align: left; cursor: pointer; transition: background 180ms ease, border-color 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-song { position: relative; display: flex; align-items: center; gap: 0.6rem; width: 100%; min-height: 2.75rem; padding: 0.48rem 0.55rem; border: 1px solid transparent; border-radius: 0.65rem; color: inherit; background: transparent; text-align: left; cursor: pointer; transition: background 180ms ease, border-color 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-song:hover, .music-song--active { border-color: color-mix(in oklch, var(--primary) 20%, transparent); background: color-mix(in oklch, var(--primary) 8%, transparent); }
 	.music-song:hover { transform: translateX(2px); }
+	.music-song--active::before { position: absolute; left: -1px; top: 24%; bottom: 24%; width: 3px; border-radius: 3px; background: var(--primary); content: ""; }
+	.music-song--active .music-song-index { color: var(--primary); }
+	.music-song-cover { flex: 0 0 2.1rem; width: 2.1rem; height: 2.1rem; border-radius: 0.45rem; object-fit: cover; background: color-mix(in oklch, var(--primary) 10%, transparent); }
+	.music-song-cover--empty { display: grid; place-items: center; color: var(--primary); font-size: 1rem; }
 	.music-song-index { width: 1.6rem; color: var(--text-35, rgb(148 163 184)); font-family: var(--font-mono, monospace); font-size: 0.62rem; }
 	.music-song-info { min-width: 0; display: grid; flex: 1; gap: 0.08rem; }
 	.music-song-info strong, .music-song-info small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -797,7 +904,16 @@
 	:global(.dark) .music-field input, :global(.dark) .music-field select { background: rgb(255 255 255 / 0.05); }
 
 	@keyframes music-panel-in { from { opacity: 0; transform: translateY(0.55rem) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+	@keyframes music-eq-bounce { from { transform: scaleY(0.45); } to { transform: scaleY(1); } }
 	@keyframes music-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent); } 50% { box-shadow: 0 0 0 5px color-mix(in oklch, var(--primary) 12%, transparent); } }
-	@media (max-width: 640px) { .music-dock { right: 0.7rem; bottom: 0.7rem; width: calc(100vw - 1.4rem); } .music-panel { max-height: calc(100vh - 5.5rem); } .music-volume { display: none; } }
-	@media (prefers-reduced-motion: reduce) { .music-panel, .music-login-card { animation: none; } .music-trigger-pulse { animation: none; } .music-dock-trigger, .music-play-button, .music-song, .music-icon-button, .music-primary, .music-quiet { transition: none; } }
+	@media (max-width: 640px) {
+		.music-dock { right: 0; bottom: 0; left: 0; width: 100%; padding: 0 0.7rem 0.7rem; }
+		.music-panel { max-height: min(74vh, calc(100vh - 5.5rem)); margin-bottom: 0.65rem; border-radius: 1.4rem 1.4rem 0 0; }
+		.music-panel::before { content: ""; display: block; width: 2.75rem; height: 0.28rem; margin: 0 auto 0.8rem; border-radius: 999px; background: color-mix(in oklch, var(--text-40, #94a3b8) 45%, transparent); }
+		.music-volume { display: none; }
+		.music-song { min-height: 3rem; }
+		.music-play-button { width: 3.1rem; height: 3.1rem; font-size: 1.6rem; }
+		.music-icon-button { width: 2.5rem; height: 2.5rem; }
+	}
+	@media (prefers-reduced-motion: reduce) { .music-panel, .music-login-card { animation: none; } .music-trigger-pulse { animation: none; } .music-eq i { animation: none; } .music-dock-trigger, .music-play-button, .music-song, .music-icon-button, .music-primary, .music-quiet, .music-favorite { transition: none; } }
 </style>

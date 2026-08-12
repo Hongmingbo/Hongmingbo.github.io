@@ -1,6 +1,8 @@
 ---
 title: 上下文工程的核心，是管理信息预算
 published: 2026-07-19
+featured: true
+featuredRank: 2
 description: 长上下文不是无限记忆。把每个 token 都当作注意力预算，才能让 Agent 在复杂任务中保持判断力。
 tags:
   - Context Engineering

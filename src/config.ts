@@ -42,6 +42,7 @@ export const navBarConfig: NavBarConfig = {
 			url: "/stars",
 			external: false,
 		},
+		LinkPreset.Projects,
 		LinkPreset.About,
 		{
 			name: "GitHub",

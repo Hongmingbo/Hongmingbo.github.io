@@ -1,6 +1,8 @@
 ---
 title: 学习大型代码库：不要通读，先建立地图
 published: 2026-07-17
+featured: true
+featuredRank: 3
 description: 面对上千文件的项目，最有效的起点不是从头读到尾，而是验证来源、找到入口、精读少量核心文件。
 tags:
   - 开发实践

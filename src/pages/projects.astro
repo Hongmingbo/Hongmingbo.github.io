@@ -1,0 +1,55 @@
+---
+import MainGridLayout from "@layouts/MainGridLayout.astro";
+import ProjectCard from "@components/ProjectCard.astro";
+import { projectGroups, projects } from "@/data/projects";
+---
+
+<MainGridLayout title="项目档案" description="可持续运行的系统、工具与研究记录。">
+	<div class="projects-page">
+		<header class="projects-hero">
+			<p class="projects-hero__eyebrow">PROJECT ARCHIVE / 2026</p>
+			<h1>项目档案</h1>
+			<p>可持续运行的系统、工具与研究记录。这里展示正在使用、持续迭代或值得回看的工作，不把 fork 或私有仓库包装成原创项目。</p>
+			<div class="projects-hero__stats" aria-label="项目统计">
+				<span><strong>{projects.length}</strong> 条记录</span>
+				<span><strong>{projects.filter((project) => project.status === "production").length}</strong> 个运行中</span>
+				<span><strong>{projects.filter((project) => project.provenance === "original").length}</strong> 个原创</span>
+			</div>
+		</header>
+
+		{projectGroups.map((group) => {
+			const groupProjects = projects.filter((project) => project.status === group.id);
+			return groupProjects.length > 0 && (
+				<section class="project-group" aria-labelledby={`project-group-${group.id}`}>
+					<div class="project-group__heading">
+						<div>
+							<p class="project-group__eyebrow">{group.id.toUpperCase()}</p>
+							<h2 id={`project-group-${group.id}`}>{group.title}</h2>
+						</div>
+						<p>{group.note}</p>
+					</div>
+					<div class="project-grid">
+						{groupProjects.map((project, index) => <ProjectCard project={project} index={index + 1} />)}
+					</div>
+				</section>
+			);
+		})}
+	</div>
+</MainGridLayout>
+
+<style>
+	.projects-page { display: grid; gap: 1.4rem; }
+	.projects-hero { padding: 1.15rem 1.25rem 1.25rem; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: var(--radius-large); background: linear-gradient(135deg, color-mix(in oklch, var(--primary) 10%, var(--card-bg, #fff)), color-mix(in oklch, var(--card-bg, #fff) 86%, transparent)); box-shadow: 0 20px 45px -34px color-mix(in oklch, var(--primary) 48%, transparent); }
+	.projects-hero__eyebrow, .project-group__eyebrow { margin: 0; color: var(--primary); font-family: var(--font-mono, monospace); font-size: 0.62rem; letter-spacing: 0.14em; }
+	.projects-hero h1 { margin: 0.55rem 0 0; font-size: clamp(1.7rem, 4vw, 2.45rem); line-height: 1.1; }
+	.projects-hero > p:not(.projects-hero__eyebrow) { max-width: 42rem; margin: 0.75rem 0 0; color: var(--text-70, #475569); font-size: 0.82rem; line-height: 1.8; }
+	.projects-hero__stats { display: flex; flex-wrap: wrap; gap: 0.45rem 1rem; margin-top: 1rem; color: var(--text-50, #64748b); font-family: var(--font-mono, monospace); font-size: 0.65rem; }
+	.projects-hero__stats strong { color: var(--primary); font-size: 0.9rem; }
+	.project-group { display: grid; gap: 0.7rem; }
+	.project-group__heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; padding: 0 0.2rem; }
+	.project-group__heading h2 { margin: 0.25rem 0 0; font-size: 1.1rem; }
+	.project-group__heading > p { max-width: 22rem; margin: 0; color: var(--text-50, #64748b); font-size: 0.7rem; line-height: 1.5; text-align: right; }
+	.project-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+	:global(.dark) .projects-hero { background: linear-gradient(135deg, color-mix(in oklch, var(--primary) 13%, var(--card-bg, #172033)), color-mix(in oklch, var(--card-bg, #172033) 88%, transparent)); }
+	@media (max-width: 760px) { .project-grid { grid-template-columns: 1fr; } .project-group__heading { align-items: start; flex-direction: column; } .project-group__heading > p { max-width: none; text-align: left; } }
+</style>

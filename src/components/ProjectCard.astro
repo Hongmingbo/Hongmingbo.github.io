@@ -1,0 +1,95 @@
+---
+import { Icon } from "astro-icon/components";
+import { projectKindLabel, projectStatusLabel, type Project } from "@/data/projects";
+
+interface Props {
+	project: Project;
+	index: number;
+}
+
+const { project, index } = Astro.props;
+const projectLinks = project.links ?? [];
+---
+
+<article class:list={["project-card", `project-card--${project.status}`]}>
+	<div class="project-card__rail" aria-hidden="true">
+		<span>{String(index).padStart(2, "0")}</span>
+	</div>
+	<div class="project-card__content">
+		<div class="project-card__topline">
+			{projectKindLabel[project.kind] !== projectStatusLabel[project.status] && <span class="project-card__kind">{projectKindLabel[project.kind]}</span>}
+			<span class="project-card__status"><i aria-hidden="true"></i>{projectStatusLabel[project.status]}</span>
+			<time datetime={project.updated.replace(".", "-")}>{project.updated}</time>
+		</div>
+		<h2>{project.name}</h2>
+		<p>{project.description}</p>
+		<div class="project-card__stack" aria-label="技术栈">
+			{project.stack.map((item) => <span>{item}</span>)}
+		</div>
+		<div class="project-card__footer">
+			<div class="project-card__links">
+				{projectLinks.map((link) => (
+					<a href={link.href} target={link.external ? "_blank" : undefined} rel={link.external ? "noreferrer" : undefined}>
+						{link.label}
+						<Icon name={link.external ? "fa6-solid:arrow-up-right-from-square" : "material-symbols:arrow-forward-rounded"} aria-hidden="true" />
+					</a>
+				))}
+				{project.article && <a href={project.article.href}>{project.article.label}<Icon name="material-symbols:arrow-forward-rounded" aria-hidden="true" /></a>}
+			</div>
+			<span class="project-card__provenance">{project.provenance === "original" ? "ORIGINAL" : "STUDY"}</span>
+		</div>
+	</div>
+</article>
+
+<style>
+	.project-card {
+		position: relative;
+		display: grid;
+		grid-template-columns: 2.75rem minmax(0, 1fr);
+		min-height: 15rem;
+		overflow: hidden;
+		border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 86%, transparent);
+		border-radius: var(--radius-large);
+		background: color-mix(in oklch, var(--card-bg, #fff) 84%, transparent);
+		box-shadow: 0 16px 38px -32px rgb(15 23 42 / 0.62);
+		transition: transform 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), border-color 220ms ease, box-shadow 220ms ease;
+	}
+	.project-card:hover {
+		transform: translateY(-3px);
+		border-color: color-mix(in oklch, var(--primary) 48%, var(--card-border, #dce5e5));
+		box-shadow: 0 22px 42px -30px color-mix(in oklch, var(--primary) 48%, transparent);
+	}
+	.project-card__rail {
+		display: flex;
+		justify-content: center;
+		padding-top: 1rem;
+		border-right: 1px dashed color-mix(in oklch, var(--primary) 30%, var(--card-border, #dce5e5));
+		color: color-mix(in oklch, var(--primary) 72%, var(--text-50, #64748b));
+		font-family: var(--font-mono, monospace);
+		font-size: 0.65rem;
+	}
+	.project-card__content { display: flex; min-width: 0; flex-direction: column; padding: 1rem 1.1rem 0.95rem; }
+	.project-card__topline { display: flex; align-items: center; flex-wrap: wrap; gap: 0.45rem 0.7rem; color: var(--text-50, #64748b); font-family: var(--font-mono, monospace); font-size: 0.61rem; letter-spacing: 0.04em; }
+	.project-card__kind { color: var(--primary); }
+	.project-card__status { display: inline-flex; align-items: center; gap: 0.28rem; }
+	.project-card__status i { width: 0.38rem; height: 0.38rem; border-radius: 999px; background: var(--primary); box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 12%, transparent); }
+	.project-card--production .project-card__status i { background: #2c9b76; box-shadow: 0 0 0 3px rgb(44 155 118 / 0.13); }
+	.project-card--research .project-card__status i { background: #8a72c4; box-shadow: 0 0 0 3px rgb(138 114 196 / 0.13); }
+	.project-card h2 { margin: 0.72rem 0 0; font-size: clamp(1.05rem, 1.5vw, 1.35rem); line-height: 1.35; }
+	.project-card p { margin: 0.55rem 0 0; color: var(--text-70, #475569); font-size: 0.78rem; line-height: 1.7; }
+	.project-card__stack { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: auto; padding-top: 1rem; }
+	.project-card__stack span { padding: 0.25rem 0.45rem; border: 1px solid color-mix(in oklch, var(--primary) 18%, transparent); border-radius: 0.45rem; color: var(--text-60, #475569); background: color-mix(in oklch, var(--primary) 6%, transparent); font-family: var(--font-mono, monospace); font-size: 0.59rem; }
+	.project-card__footer { display: flex; align-items: end; justify-content: space-between; gap: 0.6rem; margin-top: 0.85rem; }
+	.project-card__links { display: flex; flex-wrap: wrap; gap: 0.45rem 0.75rem; }
+	.project-card__links a { display: inline-flex; align-items: center; gap: 0.2rem; color: var(--primary); font-size: 0.68rem; }
+	.project-card__links a svg { transition: transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.project-card__links a:hover svg { transform: translateX(2px); }
+	.project-card__provenance { flex: 0 0 auto; color: var(--text-40, #94a3b8); font-family: var(--font-mono, monospace); font-size: 0.56rem; letter-spacing: 0.08em; }
+	:global(.dark) .project-card { background: color-mix(in oklch, var(--card-bg, #172033) 82%, transparent); }
+	@media (max-width: 560px) {
+		.project-card { grid-template-columns: 2.3rem minmax(0, 1fr); min-height: 0; }
+		.project-card__content { padding: 0.9rem 0.85rem; }
+		.project-card__footer { align-items: start; flex-direction: column; }
+	}
+	@media (prefers-reduced-motion: reduce) { .project-card, .project-card__links a svg { transition: none; } .project-card:hover { transform: none; } }
+</style>

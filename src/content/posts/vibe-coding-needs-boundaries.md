@@ -1,6 +1,8 @@
 ---
 title: Vibe Coding 不是随意编程，而是更严格地表达意图
 published: 2026-07-18
+featured: true
+featuredRank: 4
 description: AI 编程降低了实现门槛，却提高了需求表达、边界设定和验证的要求。
 tags:
   - Vibe Coding

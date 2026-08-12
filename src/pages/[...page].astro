@@ -1,5 +1,7 @@
 ---
 import type { GetStaticPaths } from "astro";
+import { getCollection } from "astro:content";
+import FeaturedPosts from "../components/FeaturedPosts.astro";
 import Pagination from "../components/control/Pagination.astro";
 import PostPage from "../components/PostPage.astro";
 import { PAGE_SIZE } from "../constants/constants";
@@ -8,16 +10,21 @@ import { getSortedPosts } from "../utils/content-utils";
 
 export const getStaticPaths = (async ({ paginate }) => {
 	const allBlogPosts = await getSortedPosts();
-	return paginate(allBlogPosts, { pageSize: PAGE_SIZE });
+	const latestPosts = allBlogPosts.filter((entry) => entry.data.featured !== true);
+	return paginate(latestPosts, { pageSize: PAGE_SIZE });
 }) satisfies GetStaticPaths;
 // https://github.com/withastro/astro/issues/6507#issuecomment-1489916992
 
 const { page } = Astro.props;
 
 const len = page.data.length;
+const allPosts = await getCollection("posts", ({ data }) => {
+	return import.meta.env.PROD ? data.draft !== true : true;
+});
 ---
 
 <MainGridLayout>
+    {page.currentPage === 1 && <FeaturedPosts posts={allPosts} />}
     <PostPage page={page}></PostPage>
     <Pagination class="mx-auto onload-animation" page={page} style={`animation-delay: calc(var(--content-delay) + ${(len)*50}ms)`}></Pagination>
 </MainGridLayout>

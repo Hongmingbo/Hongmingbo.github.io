@@ -1,6 +1,8 @@
 ---
 title: 把 AI Agent 当成操作系统，而不是聊天工具
 published: 2026-07-20
+featured: true
+featuredRank: 1
 description: 从一次性对话到可持续协作，真正的分水岭不在模型，而在记忆、技能、权限与验证如何被组织。
 tags:
   - AI Agent
