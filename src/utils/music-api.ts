@@ -128,6 +128,36 @@ export const runDailyVipFlow = async (input: {
 
 const asList = (value: unknown): any[] => (Array.isArray(value) ? value : []);
 
+const AUDIO_EXTENSION_RE = /\.(?:mp3|flac|m4a|aac|ogg|wav|wma|ape|opus)(?:\?.*)?$/i;
+const SONG_TITLE_SEPARATOR_RE = /\s*(?:[-–—+|｜:：])\s*/;
+
+const textValue = (value: unknown): string => {
+	if (typeof value === "string" || typeof value === "number") return String(value).trim();
+	if (Array.isArray(value)) return value.map(textValue).filter(Boolean).join("、");
+	return "";
+};
+
+const stripAudioExtension = (value: string): string => value.replace(AUDIO_EXTENSION_RE, "").trim();
+
+const stripAuthorPrefix = (title: string, author: string): string => {
+	const cleanTitle = stripAudioExtension(title);
+	const cleanAuthor = author.trim();
+	if (!cleanTitle || !cleanAuthor) return cleanTitle;
+	const prefix = new RegExp(`^${cleanAuthor.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\s*(?:[-–—+|｜:：])\\s*`, "i");
+	return cleanTitle.replace(prefix, "").trim() || cleanTitle;
+};
+
+const parseSongIdentity = (item: any): { name: string; author: string } => {
+	const rawName = textValue(item.name ?? item.songname ?? item.SongName ?? item.OriSongName ?? item.AudioName ?? item.audio_name ?? item.FileName ?? item.filename);
+	const explicitAuthor = textValue(item.author ?? item.singername ?? item.singerName ?? item.SingerName ?? item.singer ?? item.artist ?? item.Artist ?? item.singers);
+	const cleanName = stripAuthorPrefix(rawName, explicitAuthor);
+	if (explicitAuthor) return { name: cleanName || "未命名歌曲", author: explicitAuthor };
+
+	const parts = cleanName.split(SONG_TITLE_SEPARATOR_RE).map((part) => part.trim()).filter(Boolean);
+	if (parts.length === 2 && parts[0] && parts[1]) return { name: parts[1], author: parts[0] };
+	return { name: cleanName || "未命名歌曲", author: "未知艺术家" };
+};
+
 export const normalizePlaylists = (payload: unknown): MusicPlaylist[] => {
 	const data = responseData<any>(payload);
 	const info = asList(data?.info ?? data?.lists ?? data);
@@ -147,15 +177,18 @@ export const normalizeSongs = (payload: unknown): MusicSong[] => {
 	const info = asList(data?.info ?? data?.lists ?? data);
 	return info
 		.filter((item) => item && typeof (item.hash ?? item.FileHash) === "string")
-		.map((item) => ({
-			...item,
-			hash: String(item.hash ?? item.FileHash),
-			name: String(item.name ?? item.songname ?? item.OriSongName ?? "未命名歌曲"),
-			author: String(item.author ?? item.singername ?? item.singerName ?? "未知艺术家"),
-			img: String(item.cover ?? item.pic ?? item.image ?? item.img ?? "").replace("{size}", "480"),
-			timeLength: Number(item.timelen ?? item.duration ?? item.timeLength ?? 0) || 0,
-			album: item.album ?? item.album_name ?? "",
-		}));
+		.map((item) => {
+			const identity = parseSongIdentity(item);
+			return {
+				...item,
+				hash: String(item.hash ?? item.FileHash),
+				name: identity.name,
+				author: identity.author,
+				img: String(item.cover ?? item.pic ?? item.image ?? item.img ?? "").replace("{size}", "480"),
+				timeLength: Number(item.timelen ?? item.duration ?? item.timeLength ?? 0) || 0,
+				album: item.album ?? item.album_name ?? "",
+			};
+		});
 };
 
 /**
@@ -292,6 +325,6 @@ export class MusicApiClient {
 	}
 
 	async upgradeVip(): Promise<any> {
-		return this.request("/vip/daily/upgrade", { method: "POST" });
+		return this.request("/vip/daily/upgrade", { method: "POST", body: {} });
 	}
 }
