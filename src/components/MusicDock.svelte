@@ -193,7 +193,8 @@
 
 	const loadUserData = async () => {
 		if (!client || !auth) return;
-		await claimDailyVip();
+		// VIP is a best-effort background task. A transient Tunnel/VIP failure must not block playlists.
+		void claimDailyVip();
 		try {
 			playlists = await client.getPlaylists();
 			if (playlists.length > 0) {
@@ -205,6 +206,14 @@
 		} catch (error) {
 			songsMessage = errorMessage(error, "歌单加载失败");
 		}
+	};
+
+	const retryMusicLibrary = async () => {
+		if (playlists.length > 0 && selectedPlaylistId) {
+			await loadSongs();
+			return;
+		}
+		await loadUserData();
 	};
 
 	const onPlaylistChange = (event: Event) => {
@@ -594,8 +603,13 @@
 						</select>
 					</label>
 					<div class="music-song-list" aria-label="歌曲列表">
-						{#if songsLoading || songsMessage}
-							<p class="music-muted">{songsLoading ? "正在读取歌单…" : songsMessage}</p>
+						{#if songsLoading}
+							<p class="music-muted">正在读取歌单…</p>
+						{:else if songsMessage}
+							<div class="music-list-status">
+								<p class="music-muted">{songsMessage}</p>
+								<button class="music-quiet" type="button" on:click={() => void retryMusicLibrary()}>{playlists.length ? "重新加载歌曲" : "重新加载歌单"}</button>
+							</div>
 						{/if}
 						{#each songs.slice(0, 30) as song}
 							<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
@@ -749,6 +763,9 @@
 	.music-vip-state--risk .music-state-dot { background: #d18b3d; }
 	.music-playlist-field { margin-top: 0.65rem; }
 	.music-song-list { display: grid; gap: 0.25rem; max-height: 13rem; margin-top: 0.6rem; overflow: auto; }
+	.music-list-status { display: flex; align-items: center; justify-content: space-between; gap: 0.65rem; padding: 0.35rem 0.15rem; }
+	.music-list-status .music-muted { flex: 1; }
+	.music-list-status .music-quiet { flex: 0 0 auto; }
 	.music-song { display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.48rem 0.55rem; border: 1px solid transparent; border-radius: 0.65rem; color: inherit; background: transparent; text-align: left; cursor: pointer; transition: background 180ms ease, border-color 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-song:hover, .music-song--active { border-color: color-mix(in oklch, var(--primary) 20%, transparent); background: color-mix(in oklch, var(--primary) 8%, transparent); }
 	.music-song:hover { transform: translateX(2px); }

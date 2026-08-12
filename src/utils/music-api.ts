@@ -227,7 +227,7 @@ export class MusicApiClient {
 	}
 
 	async createQr(): Promise<{ key: string; image: string }> {
-		const payload = await this.request("/auth/qr");
+		const payload = await this.request("/auth/qr", { method: "POST" });
 		if (!responseSucceeded(payload)) throw new MusicApiError("二维码创建失败", payload, undefined, responseErrorCode(payload));
 		const data = responseData<any>(payload);
 		const key = String(data?.key ?? data?.id ?? "");
