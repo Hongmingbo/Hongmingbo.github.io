@@ -61,7 +61,8 @@
 	let volume = 0.7;
 	let lyricsOpen = false;
 	let lyricsLoading = false;
-	let lyricsText = "";
+	let lyricsLines: Array<{ time: number | null; text: string }> = [];
+	let activeLyricIndex = -1;
 	let lyricsMessage = "点击“歌词”加载当前歌曲歌词";
 	let vipState: VipState = "idle";
 	let vipMessage = "登录后自动检查今日权益";
@@ -350,15 +351,40 @@
 		localStorage.setItem("hengduo-music-volume", String(volume));
 	};
 
-	const parseLyrics = (raw: string): string => {
+	const parseLyrics = (raw: string): Array<{ time: number | null; text: string }> => {
 		return raw
 			.split(/\r?\n/)
-			.map((line) => line.trim())
-			.filter(Boolean)
-			.map((line) => line.replace(/^\[[^\]]+\]/, "").trim())
-			.filter(Boolean)
-			.slice(0, 120)
-			.join("\n");
+			.map((line) => {
+				const trimmed = line.trim();
+				if (!trimmed) return null;
+				const match = trimmed.match(/^\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]\s*(.*)$/);
+				if (!match) return { time: null, text: trimmed.slice(0, 200) };
+				const time =
+					Number(match[1]) * 60 +
+					Number(match[2]) +
+					Number(match[3] ?? 0) / (match[3]?.length === 3 ? 1000 : 100);
+				return { time, text: match[4].trim().slice(0, 200) };
+			})
+			.filter((x): x is { time: number | null; text: string } => x !== null && x.text !== "")
+			.slice(0, 120);
+	};
+
+	const updateActiveLyric = () => {
+		const t = audio?.currentTime ?? 0;
+		let idx = -1;
+		for (let i = 0; i < lyricsLines.length; i++) {
+			const line = lyricsLines[i];
+			if (line.time === null) continue;
+			if (t >= line.time) idx = i;
+			else break;
+		}
+		if (idx === activeLyricIndex) return;
+		activeLyricIndex = idx;
+		requestAnimationFrame(() => {
+			const container = document.querySelector<HTMLElement>(".music-lyrics");
+			const active = container?.querySelector<HTMLElement>(".music-lyric--active");
+			active?.scrollIntoView({ block: "center", behavior: "smooth" });
+		});
 	};
 
 	const loadLyrics = async () => {
@@ -367,10 +393,10 @@
 		lyricsLoading = true;
 		lyricsMessage = "正在加载歌词…";
 		try {
-			lyricsText = parseLyrics(await client.getLyrics(currentSong.hash));
-			lyricsMessage = lyricsText ? "" : "没有返回可显示的歌词";
+			lyricsLines = parseLyrics(await client.getLyrics(currentSong.hash));
+			lyricsMessage = lyricsLines.length > 0 ? "" : "没有返回可显示的歌词";
 		} catch (error) {
-			lyricsText = "";
+			lyricsLines = [];
 			lyricsMessage = errorMessage(error, "歌词加载失败");
 		} finally {
 			lyricsLoading = false;
@@ -545,7 +571,10 @@
 		audio.crossOrigin = "use-credentials";
 		audio.preload = "metadata";
 		audio.volume = volume;
-		audio.addEventListener("timeupdate", () => (currentTime = audio?.currentTime ?? 0));
+		audio.addEventListener("timeupdate", () => {
+			currentTime = audio?.currentTime ?? 0;
+			updateActiveLyric();
+		});
 		audio.addEventListener("loadedmetadata", () => (duration = audio?.duration ?? 0));
 		audio.addEventListener("play", () => (isPlaying = true));
 		audio.addEventListener("pause", () => (isPlaying = false));
@@ -719,7 +748,15 @@
 					</div>
 					{#if lyricsOpen}
 						<div class="music-lyrics" aria-live="polite">
-							{#if lyricsText}<pre>{lyricsText}</pre>{:else}<p class="music-muted">{lyricsMessage}</p>{/if}
+							{#if lyricsLines.length > 0}
+								<ul>
+									{#each lyricsLines as line, i (i)}
+										<li class:music-lyric--active={i === activeLyricIndex} class="music-lyric">{line.text}</li>
+									{/each}
+								</ul>
+							{:else}
+								<p class="music-muted">{lyricsMessage}</p>
+							{/if}
 						</div>
 					{/if}
 				{/if}
@@ -762,7 +799,13 @@
 		</section>
 	{/if}
 	<button class="music-dock-trigger" type="button" aria-expanded={expanded} aria-label="打开音乐播放器" on:click={() => (expanded = !expanded)}>
-		<span class:music-trigger-pulse={isPlaying} class="music-trigger-icon"><Icon icon={isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:radio-outline-rounded"} /></span>
+		<span class:music-trigger-pulse={isPlaying} class="music-trigger-icon">
+			{#if currentSong?.img}
+				<img class:music-trigger-spin={isPlaying} class="music-trigger-cover" src={currentSong.img} alt="" />
+			{:else}
+				<Icon icon={isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:radio-outline-rounded"} />
+			{/if}
+		</span>
 		<span class="music-trigger-copy"><strong>音乐</strong><small>{expanded ? "收起" : dockLabel}</small></span>
 		<Icon class="music-trigger-chevron" icon={expanded ? "material-symbols:keyboard-arrow-down-rounded" : "material-symbols:keyboard-arrow-up-rounded"} />
 	</button>
@@ -774,7 +817,7 @@
 		right: 1rem;
 		bottom: 1rem;
 		z-index: 70;
-		width: min(25rem, calc(100vw - 2rem));
+		width: auto;
 		font-family: var(--font-sans, "Noto Sans SC", sans-serif);
 		color: var(--text-90, rgb(30 41 59));
 	}
@@ -792,22 +835,26 @@
 		display: flex;
 		align-items: center;
 		gap: 0.7rem;
-		width: 100%;
-		min-height: 3.75rem;
-		padding: 0.55rem 0.7rem 0.55rem 0.6rem;
-		border-radius: 1rem;
+		width: auto;
+		min-height: 0;
+		padding: 0.35rem;
+		border-radius: 999px;
 		text-align: left;
 		cursor: pointer;
 		transition: transform var(--ds-motion-base, 320ms) var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), box-shadow var(--ds-motion-base, 320ms) var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
 	}
 
 	.music-dock-trigger:hover { transform: translateY(-2px); box-shadow: 0 22px 48px -25px rgb(15 23 42 / 0.62), 0 0 0 1px color-mix(in oklch, var(--primary) 36%, transparent) inset; }
-	.music-trigger-icon { display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 0.8rem; color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 1.35rem; }
+	.music-trigger-icon { position: relative; display: grid; place-items: center; width: 3.4rem; height: 3.4rem; overflow: hidden; border-radius: 50%; color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 1.35rem; }
+	.music-trigger-icon:has(img)::before { position: absolute; inset: 0; z-index: 1; border-radius: 50%; background: linear-gradient(135deg, rgb(255 255 255 / 0.22), transparent 46%); pointer-events: none; content: ""; }
+	.music-trigger-icon:has(img)::after { position: absolute; inset: 0; z-index: 2; margin: auto; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: rgb(9 14 24 / 0.92); box-shadow: 0 0 0 2px rgb(255 255 255 / 0.28), 0 0 0 4px rgb(9 14 24 / 0.32); content: ""; }
+	.music-trigger-cover { width: 100%; height: 100%; object-fit: cover; }
+	.music-trigger-spin { animation: music-spin 16s linear infinite; }
 	.music-trigger-pulse { animation: music-pulse 1.8s ease-in-out infinite; }
-	.music-trigger-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 0.05rem; }
+	.music-trigger-copy { display: none; min-width: 0; flex: 1; flex-direction: column; gap: 0.05rem; }
 	.music-trigger-copy strong { font-size: 0.8rem; letter-spacing: 0.08em; }
 	.music-trigger-copy small { overflow: hidden; color: var(--text-50, rgb(100 116 139)); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
-	.music-trigger-chevron { color: var(--primary); font-size: 1.25rem; }
+	:global(.music-trigger-chevron) { display: none; color: var(--primary); font-size: 1.25rem; }
 
 	.music-panel { position: relative; max-height: min(38rem, calc(100vh - 6rem)); margin-bottom: 0.65rem; padding: 1rem; border-radius: 1.25rem; overflow: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; }
@@ -883,8 +930,10 @@
 	.music-song-info small { color: var(--text-50, rgb(100 116 139)); font-size: 0.64rem; }
 	.music-song > :global(svg) { color: var(--primary); font-size: 1.1rem; }
 	.music-secondary-actions { justify-content: flex-end; margin-top: 0.5rem; }
-	.music-lyrics { max-height: 12rem; margin-top: 0.55rem; padding: 0.7rem; overflow: auto; border-radius: 0.7rem; background: color-mix(in oklch, var(--page-bg, #f8fafc) 82%, transparent); }
-	.music-lyrics pre { margin: 0; white-space: pre-wrap; color: var(--text-60, rgb(71 85 105)); font: 0.7rem/1.8 var(--font-sans, "Noto Sans SC", sans-serif); }
+	.music-lyrics { max-height: 12rem; margin-top: 0.55rem; padding: 0.45rem; overflow: auto; border-radius: 0.7rem; background: color-mix(in oklch, var(--page-bg, #f8fafc) 82%, transparent); }
+	.music-lyrics ul { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; }
+	.music-lyric { padding: 0.32rem 0.55rem; border-radius: 0.45rem; color: var(--text-60, rgb(71 85 105)); font-size: 0.74rem; line-height: 1.7; transition: color 180ms ease, background 180ms ease; }
+	.music-lyric--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 9%, transparent); font-weight: 600; }
 	.music-login-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1rem; background: rgb(15 23 42 / 0.28); backdrop-filter: blur(5px); }
 	.music-login-card { width: min(27rem, 100%); max-height: calc(100vh - 2rem); padding: 1rem; overflow: auto; border: 1px solid color-mix(in oklch, var(--primary) 25%, var(--card-border, #dce5e5)); border-radius: 1.2rem; background: var(--card-bg, #fff); box-shadow: 0 30px 80px -35px rgb(15 23 42 / 0.65); animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-login-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.25rem; padding: 0.25rem; border-radius: 0.75rem; background: color-mix(in oklch, var(--primary) 7%, var(--page-bg, #f8fafc)); }
@@ -906,8 +955,12 @@
 	@keyframes music-panel-in { from { opacity: 0; transform: translateY(0.55rem) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 	@keyframes music-eq-bounce { from { transform: scaleY(0.45); } to { transform: scaleY(1); } }
 	@keyframes music-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent); } 50% { box-shadow: 0 0 0 5px color-mix(in oklch, var(--primary) 12%, transparent); } }
+	@keyframes music-spin { to { transform: rotate(360deg); } }
 	@media (max-width: 640px) {
 		.music-dock { right: 0; bottom: 0; left: 0; width: 100%; padding: 0 0.7rem 0.7rem; }
+		.music-dock-trigger { width: 100%; min-height: 3.75rem; padding: 0.55rem 0.7rem 0.55rem 0.6rem; border-radius: 1rem; }
+		.music-trigger-copy { display: flex; }
+		:global(.music-trigger-chevron) { display: inline; }
 		.music-panel { max-height: min(74vh, calc(100vh - 5.5rem)); margin-bottom: 0.65rem; border-radius: 1.4rem 1.4rem 0 0; }
 		.music-panel::before { content: ""; display: block; width: 2.75rem; height: 0.28rem; margin: 0 auto 0.8rem; border-radius: 999px; background: color-mix(in oklch, var(--text-40, #94a3b8) 45%, transparent); }
 		.music-volume { display: none; }
@@ -915,5 +968,5 @@
 		.music-play-button { width: 3.1rem; height: 3.1rem; font-size: 1.6rem; }
 		.music-icon-button { width: 2.5rem; height: 2.5rem; }
 	}
-	@media (prefers-reduced-motion: reduce) { .music-panel, .music-login-card { animation: none; } .music-trigger-pulse { animation: none; } .music-eq i { animation: none; } .music-dock-trigger, .music-play-button, .music-song, .music-icon-button, .music-primary, .music-quiet, .music-favorite { transition: none; } }
+	@media (prefers-reduced-motion: reduce) { .music-panel, .music-login-card { animation: none; } .music-trigger-pulse, .music-trigger-cover { animation: none; } .music-eq i { animation: none; } .music-dock-trigger, .music-play-button, .music-song, .music-icon-button, .music-primary, .music-quiet, .music-favorite { transition: none; } }
 </style>

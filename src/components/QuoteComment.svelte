@@ -203,7 +203,7 @@
 	.quote-comment-toggle > span:nth-child(2) { display: grid; gap: 0.08rem; min-width: 0; flex: 1; }
 	.quote-comment-toggle strong { font-size: 0.82rem; }
 	.quote-comment-toggle small { color: var(--text-50, rgb(100 116 139)); font-size: 0.68rem; }
-	.quote-comment-toggle__chevron { color: var(--primary); font-size: 1.2rem; }
+	:global(.quote-comment-toggle__chevron) { color: var(--primary); font-size: 1.2rem; }
 
 	.quote-comment-body { display: grid; gap: 0.6rem; padding: 0 0.9rem 0.9rem; }
 	.quote-comment-textarea {
