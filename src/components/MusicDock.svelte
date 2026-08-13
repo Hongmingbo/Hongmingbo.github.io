@@ -226,6 +226,26 @@
 		await loadUserData();
 	};
 
+	// 播放流失败时主动复核会话：BFF 会话 TTL 较短（默认 8h），过期后
+	// 播放流会返回 401，此时应引导重新登录，而不是让用户看到误导性的“连接失败”。
+	const recoverSessionAfterPlaybackFailure = async () => {
+		if (!client || !auth) return;
+		try {
+			const session = await client.getSession();
+			if (!session) {
+				auth = null;
+				playlists = [];
+				songs = [];
+				currentSong = null;
+				isPlaying = false;
+				setNotice("登录已过期，请重新登录后继续播放");
+				showLogin = true;
+			}
+		} catch {
+			// BFF 自身不可达（网络/隧道问题）时保持原提示，不重复打扰。
+		}
+	};
+
 	const onPlaylistChange = (event: Event) => {
 		selectedPlaylistId = (event.currentTarget as HTMLSelectElement).value;
 		void loadSongs();
@@ -268,6 +288,11 @@
 		} catch (error) {
 			// 快速切歌时浏览器会中断上一次 audio.play()，这是正常竞态而非失败。
 			if (error instanceof DOMException && error.name === "AbortError") return;
+			// 媒体加载失败（网络错误/资源不支持）时主动验证会话是否过期。
+			const mediaErrorCode = audio?.error?.code;
+			if (mediaErrorCode === 2 || mediaErrorCode === 4 || (error instanceof DOMException && error.name === "NotSupportedError")) {
+				void recoverSessionAfterPlaybackFailure();
+			}
 			setNotice(errorMessage(error, "BFF 播放流连接失败"));
 		} finally {
 			if (generation === playGeneration) currentSongLoading = "";
