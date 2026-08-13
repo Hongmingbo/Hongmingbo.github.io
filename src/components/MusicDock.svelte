@@ -712,7 +712,11 @@
 						</button>
 					</div>
 					<div class="music-volume-row">
-						<label class="music-volume" aria-label="音量"><Icon icon="material-symbols:volume-up-rounded" /><input type="range" min="0" max="100" value={volume * 100} on:input={changeVolume} /></label>
+						<label class="music-volume" aria-label="音量">
+							<span class="music-volume-icon" aria-hidden="true"><Icon icon="material-symbols:volume-up-rounded" /></span>
+							<input aria-label="调整音量" type="range" min="0" max="100" value={volume * 100} on:input={changeVolume} />
+							<span class="music-volume-value" aria-hidden="true">{Math.round(volume * 100)}%</span>
+						</label>
 					</div>
 				</div>
 
@@ -921,7 +925,8 @@
 	.music-eq i { display: block; width: 2.5px; border-radius: 2px; background: var(--primary); transform-origin: bottom; animation: music-eq-bounce 900ms ease-in-out infinite alternate; }
 	.music-eq i:nth-child(2) { animation-delay: -300ms; }
 	.music-eq i:nth-child(3) { animation-delay: -600ms; }
-	.music-progress-row { display: grid; grid-template-columns: 2.3rem minmax(0, 1fr) 2.3rem; align-items: center; gap: 0.4rem; margin-top: 0.85rem; color: var(--text-50, rgb(100 116 139)); font-family: var(--font-mono, monospace); font-size: 0.6rem; }
+	.music-progress-row, .music-volume { display: grid; grid-template-columns: 2.3rem minmax(0, 1fr) 2.3rem; align-items: center; gap: 0.4rem; }
+	.music-progress-row { margin-top: 0.85rem; color: var(--text-50, rgb(100 116 139)); font-family: var(--font-mono, monospace); font-size: 0.6rem; }
 	.music-progress-row span:last-child { text-align: right; }
 	input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer; }
 	.music-controls { margin-top: 0.55rem; justify-content: center; }
@@ -930,9 +935,11 @@
 	.music-play-button:active { transform: scale(0.94); }
 	.music-play-button--playing { box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 16%, transparent); }
 	.music-mode-button--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); }
-	.music-volume-row { display: flex; justify-content: center; margin-top: 0.4rem; }
-	.music-volume { display: flex; align-items: center; gap: 0.25rem; color: var(--text-50, rgb(100 116 139)); font-size: 0.95rem; }
-	.music-volume input { width: 4.5rem; }
+	.music-volume-row { margin-top: 0.55rem; }
+	.music-volume { width: 100%; color: var(--text-50, rgb(100 116 139)); font-family: var(--font-mono, monospace); font-size: 0.66rem; }
+	.music-volume-icon { display: grid; place-items: center; justify-self: start; width: 2.3rem; color: var(--text-60, rgb(71 85 105)); font-family: inherit; font-size: 1rem; }
+	.music-volume-value { justify-self: end; min-width: 2.3rem; color: var(--text-50, rgb(100 116 139)); text-align: right; }
+	.music-volume input { min-width: 0; }
 	.music-account-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.65rem; }
 	.music-account-row strong { display: block; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; }
 	.music-vip-state { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.65rem; color: var(--text-50, rgb(100 116 139)); font-size: 0.7rem; }
