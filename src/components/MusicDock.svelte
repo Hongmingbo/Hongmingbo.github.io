@@ -971,18 +971,19 @@
 	.music-lyric { padding: 0.32rem 0.55rem; border-radius: 0.45rem; color: var(--text-60, rgb(71 85 105)); font-size: 0.74rem; line-height: 1.7; transition: color 180ms ease, background 180ms ease; }
 	.music-lyric--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 9%, transparent); font-weight: 600; }
 	.music-login-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1rem; background: rgb(15 23 42 / 0.28); backdrop-filter: blur(5px); }
-	.music-login-card { width: min(27rem, 100%); max-height: calc(100vh - 2rem); padding: 1rem; overflow: auto; border: 1px solid color-mix(in oklch, var(--primary) 25%, var(--card-border, #dce5e5)); border-radius: 1.2rem; background: var(--card-bg, #fff); box-shadow: 0 30px 80px -35px rgb(15 23 42 / 0.65); animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	.music-login-card { width: min(27rem, 100%); max-height: calc(100vh - 2rem); padding: 1.25rem 1.35rem 1.15rem; overflow: auto; border: 1px solid color-mix(in oklch, var(--primary) 25%, var(--card-border, #dce5e5)); border-radius: 1.2rem; background: var(--card-bg, #fff); box-shadow: 0 30px 80px -35px rgb(15 23 42 / 0.65); animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	.music-login-card > .music-panel__header { margin-bottom: 1.05rem; }
 	.music-login-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.25rem; padding: 0.25rem; border-radius: 0.75rem; background: color-mix(in oklch, var(--primary) 7%, var(--page-bg, #f8fafc)); }
 	.music-login-tabs button { min-height: 2.1rem; border: 0; border-radius: 0.55rem; color: var(--text-50, rgb(100 116 139)); background: transparent; font: inherit; font-size: 0.7rem; cursor: pointer; }
 	.music-login-tab--active { color: var(--primary) !important; background: var(--card-bg, #fff) !important; box-shadow: 0 5px 12px -10px rgb(15 23 42 / 0.55); }
-	.music-qr-block { display: grid; justify-items: center; gap: 0.65rem; padding: 1rem 0 0.35rem; text-align: center; }
-	.music-qr-block img { width: 11rem; height: 11rem; padding: 0.45rem; border-radius: 0.8rem; background: #fff; }
-	.music-qr-empty { display: grid; place-items: center; gap: 0.4rem; width: 11rem; height: 11rem; border: 1px dashed color-mix(in oklch, var(--primary) 35%, var(--card-border, #dce5e5)); border-radius: 0.8rem; color: var(--primary); font-size: 2.2rem; }
+	.music-qr-block { display: grid; justify-items: center; gap: 0.85rem; padding: 1.25rem 0 0.75rem; text-align: center; }
+	.music-qr-block img { width: 13rem; height: 13rem; padding: 0.45rem; border-radius: 0.8rem; background: #fff; }
+	.music-qr-empty { display: grid; place-items: center; gap: 0.55rem; width: 13rem; height: 13rem; border: 1px dashed color-mix(in oklch, var(--primary) 35%, var(--card-border, #dce5e5)); border-radius: 0.8rem; color: var(--primary); font-size: 2.4rem; }
 	.music-qr-empty span { color: var(--text-50, rgb(100 116 139)); font-size: 0.68rem; }
 	.music-qr-block p { margin: 0; color: var(--text-60, rgb(71 85 105)); font-size: 0.72rem; }
 	.music-code-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; }
 	.music-account-options { display: grid; gap: 0.4rem; }
-	.music-login-note { margin-top: 0.75rem; text-align: center; }
+	.music-login-note { margin: 1rem 0 0; padding: 0 0.35rem; text-align: center; line-height: 1.6; }
 
 	:global(.dark) .music-dock-trigger, :global(.dark) .music-panel { color: var(--text-90, rgb(226 232 240)); background: color-mix(in oklch, var(--card-bg, #172033) 90%, transparent); }
 	:global(.dark) .music-login-card { background: var(--card-bg, #172033); }
