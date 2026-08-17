@@ -888,7 +888,7 @@
 	.music-trigger-copy small { overflow: hidden; color: var(--text-50, rgb(100 116 139)); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
 	:global(.music-trigger-chevron) { display: none; color: var(--primary); font-size: 1.25rem; }
 
-	.music-panel { position: relative; max-height: min(44rem, calc(100vh - 2rem)); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	.music-panel { position: relative; max-height: min(44rem, calc(100vh - 2rem)); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; }
 	.music-panel__header h2 { margin: 0.15rem 0 0; font-size: 1.25rem; line-height: 1.2; }
 	.music-kicker, .music-section-label { margin: 0; color: var(--primary); font-family: var(--font-mono, monospace); font-size: 0.62rem; letter-spacing: 0.13em; }
@@ -948,7 +948,8 @@
 	.music-vip-state--ok .music-state-dot { background: #36a269; box-shadow: 0 0 0 4px rgb(54 162 105 / 0.12); }
 	.music-vip-state--risk .music-state-dot { background: #d18b3d; }
 	.music-playlist-field { margin-top: 0.65rem; }
-	.music-song-list { display: grid; gap: 0.25rem; max-height: 13rem; margin-top: 0.6rem; overflow: auto; }
+	.music-song-list { display: grid; gap: 0.25rem; max-height: 13rem; margin-top: 0.6rem; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
+	.music-song-list::-webkit-scrollbar { display: none; }
 	.music-list-status { display: flex; align-items: center; justify-content: space-between; gap: 0.65rem; padding: 0.35rem 0.15rem; }
 	.music-list-status .music-muted { flex: 1; }
 	.music-list-status .music-quiet { flex: 0 0 auto; }
