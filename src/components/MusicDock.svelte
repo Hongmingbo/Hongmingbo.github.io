@@ -793,41 +793,41 @@
 				{/if}
 			{/if}
 
-			{#if showLogin && apiStatus === "ready"}
-				<div class="music-login-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (showLogin = false)}>
-					<div class="music-login-card" role="dialog" aria-modal="true" aria-label="登录酷狗概念版">
-						<header class="music-panel__header"><div><p class="music-kicker">ACCOUNT ACCESS</p><h2>登录酷狗概念版</h2></div><button class="music-icon-button" type="button" aria-label="关闭登录窗口" on:click={() => (showLogin = false)}><Icon icon="material-symbols:close-rounded" /></button></header>
-						<div class="music-login-tabs">
-							<button class:music-login-tab--active={loginMode === "qr"} type="button" on:click={() => selectLoginMode("qr")}>二维码</button>
-							<button class:music-login-tab--active={loginMode === "phone"} type="button" on:click={() => selectLoginMode("phone")}>手机验证码</button>
-							<button class:music-login-tab--active={loginMode === "password"} type="button" on:click={() => selectLoginMode("password")}>账号密码</button>
-						</div>
-						{#if loginMode === "qr"}
-							<div class="music-qr-block">
-								{#if qrImage}<img src={qrImage} alt="酷狗登录二维码" />{:else}<div class="music-qr-empty"><Icon icon="material-symbols:qr-code-2-rounded" /><span>点击生成登录二维码</span></div>{/if}
-								<p>{qrMessage}</p>
-								<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void startQrLogin()}>{loginBusy ? "生成中…" : "生成二维码"}</button>
-							</div>
-						{:else if loginMode === "phone"}
-							<div class="music-login-form">
-								<label class="music-field"><span>手机号</span><input bind:value={phone} inputmode="numeric" autocomplete="tel" placeholder="请输入手机号" /></label>
-								<div class="music-code-row"><label class="music-field"><span>验证码</span><input bind:value={phoneCode} inputmode="numeric" autocomplete="one-time-code" placeholder="短信验证码" /></label><button class="music-quiet" type="button" disabled={loginBusy || phoneCountdown > 0} on:click={() => void sendPhoneCode()}>{phoneCountdown ? `${phoneCountdown}s` : "发送验证码"}</button></div>
-								{#if accountOptions.length}<div class="music-account-options"><span class="music-muted">请选择账号</span>{#each accountOptions as account}<button class="music-song" type="button" on:click={() => void phoneLogin(account.userid)}><span class="music-song-info"><strong>{account.nickname ?? `账号 ${account.userid}`}</strong><small>选择此账号登录</small></span><Icon icon="material-symbols:chevron-right-rounded" /></button>{/each}</div>{:else}<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void phoneLogin()}>{loginBusy ? "登录中…" : "手机登录"}</button>{/if}
-							</div>
-						{:else}
-							<div class="music-login-form">
-								<p class="music-muted">密码仅用于本次请求，组件不会保存密码。建议优先使用二维码或手机验证码。</p>
-								<label class="music-field"><span>账号</span><input bind:value={username} autocomplete="username" placeholder="酷狗账号" /></label>
-								<label class="music-field"><span>密码</span><input bind:value={password} type="password" autocomplete="current-password" placeholder="不会保存" /></label>
-								<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void passwordLogin()}>{loginBusy ? "登录中…" : "账号登录"}</button>
-							</div>
-						{/if}
-						{#if loginMessage}<p class="music-status-line music-error">{loginMessage}</p>{/if}
-						<p class="music-login-note">仅连接你自己的音乐账号；博客不会保存密码或任何第三方登录会话。</p>
-					</div>
-				</div>
-			{/if}
 		</section>
+	{/if}
+	{#if showLogin && apiStatus === "ready"}
+		<div class="music-login-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (showLogin = false)}>
+			<div class="music-login-card" role="dialog" aria-modal="true" aria-label="登录酷狗概念版">
+				<header class="music-panel__header"><div><p class="music-kicker">ACCOUNT ACCESS</p><h2>登录酷狗概念版</h2></div><button class="music-icon-button" type="button" aria-label="关闭登录窗口" on:click={() => (showLogin = false)}><Icon icon="material-symbols:close-rounded" /></button></header>
+				<div class="music-login-tabs">
+					<button class:music-login-tab--active={loginMode === "qr"} type="button" on:click={() => selectLoginMode("qr")}>二维码</button>
+					<button class:music-login-tab--active={loginMode === "phone"} type="button" on:click={() => selectLoginMode("phone")}>手机验证码</button>
+					<button class:music-login-tab--active={loginMode === "password"} type="button" on:click={() => selectLoginMode("password")}>账号密码</button>
+				</div>
+				{#if loginMode === "qr"}
+					<div class="music-qr-block">
+						{#if qrImage}<img src={qrImage} alt="酷狗登录二维码" />{:else}<div class="music-qr-empty"><Icon icon="material-symbols:qr-code-2-rounded" /><span>点击生成登录二维码</span></div>{/if}
+						<p>{qrMessage}</p>
+						<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void startQrLogin()}>{loginBusy ? "生成中…" : "生成二维码"}</button>
+					</div>
+				{:else if loginMode === "phone"}
+					<div class="music-login-form">
+						<label class="music-field"><span>手机号</span><input bind:value={phone} inputmode="numeric" autocomplete="tel" placeholder="请输入手机号" /></label>
+						<div class="music-code-row"><label class="music-field"><span>验证码</span><input bind:value={phoneCode} inputmode="numeric" autocomplete="one-time-code" placeholder="短信验证码" /></label><button class="music-quiet" type="button" disabled={loginBusy || phoneCountdown > 0} on:click={() => void sendPhoneCode()}>{phoneCountdown ? `${phoneCountdown}s` : "发送验证码"}</button></div>
+						{#if accountOptions.length}<div class="music-account-options"><span class="music-muted">请选择账号</span>{#each accountOptions as account}<button class="music-song" type="button" on:click={() => void phoneLogin(account.userid)}><span class="music-song-info"><strong>{account.nickname ?? `账号 ${account.userid}`}</strong><small>选择此账号登录</small></span><Icon icon="material-symbols:chevron-right-rounded" /></button>{/each}</div>{:else}<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void phoneLogin()}>{loginBusy ? "登录中…" : "手机登录"}</button>{/if}
+					</div>
+				{:else}
+					<div class="music-login-form">
+						<p class="music-muted">密码仅用于本次请求，组件不会保存密码。建议优先使用二维码或手机验证码。</p>
+						<label class="music-field"><span>账号</span><input bind:value={username} autocomplete="username" placeholder="酷狗账号" /></label>
+						<label class="music-field"><span>密码</span><input bind:value={password} type="password" autocomplete="current-password" placeholder="不会保存" /></label>
+						<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void passwordLogin()}>{loginBusy ? "登录中…" : "账号登录"}</button>
+					</div>
+				{/if}
+				{#if loginMessage}<p class="music-status-line music-error">{loginMessage}</p>{/if}
+				<p class="music-login-note">仅连接你自己的音乐账号；博客不会保存密码或任何第三方登录会话。</p>
+			</div>
+		</div>
 	{/if}
 	<button class="music-dock-trigger" type="button" aria-expanded={expanded} aria-label="打开音乐播放器" on:click={() => (expanded = !expanded)}>
 		<span class:music-trigger-pulse={isPlaying} class="music-trigger-icon">
