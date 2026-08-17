@@ -191,6 +191,8 @@ export const normalizeSongs = (payload: unknown): MusicSong[] => {
 		});
 };
 
+export const isSongInPlaylist = (hash: string, songs: MusicSong[]): boolean => songs.some((song) => song.hash === hash);
+
 /**
  * Browser-side client for the hardened music BFF, not for KuGouMusicApi directly.
  * The BFF owns upstream credentials/device state and returns only public profile data.
@@ -305,6 +307,15 @@ export class MusicApiClient {
 			if (songs.length < 300) break;
 		}
 		return all;
+	}
+
+	async searchSongs(keyword: string, page = 1, pagesize = 50): Promise<MusicSong[]> {
+		const payload = await this.request("/search/songs", { query: { keyword, page, pagesize } });
+		return normalizeSongs(payload);
+	}
+
+	async addPlaylistTracks(listid: string | number, data: string): Promise<unknown> {
+		return this.request(`/playlists/${encodeURIComponent(String(listid))}/add`, { method: "POST", body: { data } });
 	}
 
 	async getStreamUrl(hash: string): Promise<string> {

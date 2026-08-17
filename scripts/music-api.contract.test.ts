@@ -6,6 +6,7 @@ import {
 	normalizeApiBaseUrl,
 	normalizePlaylists,
 	normalizeSongs,
+	isSongInPlaylist,
 	responseData,
 	responseSucceeded,
 } from "../src/utils/music-api.ts";
@@ -37,6 +38,8 @@ assert.equal(cleanedFilenameTracks[0].name, "晴天");
 assert.equal(cleanedFilenameTracks[0].author, "周杰伦");
 assert.equal(cleanedFilenameTracks[1].name, "江南");
 assert.equal(cleanedFilenameTracks[1].author, "林俊杰");
+assert.equal(isSongInPlaylist("ABC", normalizeSongs(tracks)), true);
+assert.equal(isSongInPlaylist("NOT_IN_PLAYLIST", normalizeSongs(tracks)), false);
 assert.equal(normalizeApiBaseUrl(" https://api.example.test/ "), "https://api.example.test");
 assert.equal(normalizeApiBaseUrl("javascript:alert(1)"), "");
 assert.equal(MUSIC_BFF_ORIGIN, "https://music.hmb2011.bond");
@@ -52,6 +55,12 @@ let upgradeMethod = "";
 let upgradeUrl = "";
 let upgradeContentType = "";
 let upgradeBody = "";
+let searchMethod = "";
+let searchUrl = "";
+let searchBody = "";
+let addMethod = "";
+let addUrl = "";
+let addBody = "";
 globalThis.fetch = async (input, init) => {
 	const url = String(input);
 	const method = String(init?.method ?? "GET");
@@ -67,8 +76,16 @@ globalThis.fetch = async (input, init) => {
 		upgradeMethod = method;
 		upgradeContentType = contentType;
 		upgradeBody = body;
+	} else if (url.includes("/search")) {
+		searchUrl = url;
+		searchMethod = method;
+		searchBody = body;
+	} else if (url.endsWith("/playlists/123/add")) {
+		addUrl = url;
+		addMethod = method;
+		addBody = body;
 	}
-	return new Response(JSON.stringify({ status: 1, data: { key: "opaque-test-key", image: "[screenshot]" } }), {
+	return new Response(JSON.stringify({ status: 1, data: { key: "opaque-test-key", image: "[screenshot]", info: [] } }), {
 		status: 200,
 		headers: { "Content-Type": "application/json" },
 	});
@@ -86,6 +103,16 @@ try {
 	assert.equal(upgradeUrl, "https://music.hmb2011.bond/vip/daily/upgrade");
 	assert.equal(upgradeContentType, "application/json");
 	assert.equal(upgradeBody, "{}");
+
+	await bff.searchSongs("未收藏歌曲", 2, 50);
+	assert.equal(searchMethod, "GET");
+	assert.equal(searchUrl, "https://music.hmb2011.bond/search/songs?keyword=%E6%9C%AA%E6%94%B6%E8%97%8F%E6%AD%8C%E6%9B%B2&page=2&pagesize=50");
+	assert.equal(searchBody, "");
+
+	await bff.addPlaylistTracks("123", "歌曲名|HASH123|42|99");
+	assert.equal(addMethod, "POST");
+	assert.equal(addUrl, "https://music.hmb2011.bond/playlists/123/add");
+	assert.equal(addBody, JSON.stringify({ data: "歌曲名|HASH123|42|99" }));
 } finally {
 	globalThis.fetch = originalFetch;
 }

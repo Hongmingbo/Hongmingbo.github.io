@@ -6,6 +6,7 @@
 		MusicApiClient,
 		MusicApiError,
 		MUSIC_BFF_ORIGIN,
+		isSongInPlaylist,
 		normalizeApiBaseUrl,
 		responseData,
 		responseErrorCode,
@@ -18,9 +19,9 @@
 	type ApiStatus = "idle" | "connecting" | "ready" | "error";
 	type LoginMode = "qr" | "phone" | "password";
 	type VipState = "idle" | "checking" | "claimed" | "risk" | "error";
+	type SearchScope = "all" | "playlist";
 
 	const VIP_DATE_PREFIX = "hengduo-music-vip-date:";
-	const FAVORITES_KEY = "hengduo-music-favorites";
 	const SHUFFLE_KEY = "hengduo-music-shuffle";
 	const REPEAT_KEY = "hengduo-music-repeat";
 	const isDev = import.meta.env.DEV;
@@ -52,6 +53,14 @@
 	let songs: MusicSong[] = [];
 	let songsLoading = false;
 	let songsMessage = "登录后加载你的歌单";
+	let searchQuery = "";
+	let searchScope: SearchScope = "all";
+	let searchBusy = false;
+	let searchMessage = "搜索全网歌曲，结果不会自动加入歌单";
+	let searchResults: MusicSong[] = [];
+	let addTargetSong: MusicSong | null = null;
+	let addTargetPlaylistId = "";
+	let addBusy = false;
 	let currentSong: MusicSong | null = null;
 	let currentSongLoading = "";
 	let audio: HTMLAudioElement | null = null;
@@ -67,7 +76,6 @@
 	let vipState: VipState = "idle";
 	let vipMessage = "登录后自动检查今日权益";
 	let notice = "";
-	let favorites: Set<string> = new Set();
 	let shuffleEnabled = false;
 	let repeatMode: "list" | "one" | "off" = "list";
 	let playGeneration = 0;
@@ -79,7 +87,7 @@
 	$: progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 	$: dockLabel = currentSong ? `${currentSong.name} · ${currentSong.author}` : "连接你的音乐平台";
 	$: currentIndex = songs.findIndex((song) => song.hash === currentSong?.hash);
-	$: isFavorite = currentSong ? favorites.has(currentSong.hash) : false;
+	$: isFavorite = currentSong ? isSongInPlaylist(currentSong.hash, songs) : false;
 
 	const isAllowedApiOrigin = (value: string): boolean => {
 		const normalized = normalizeApiBaseUrl(value);
@@ -266,6 +274,67 @@
 		}
 	};
 
+	const searchMusic = async () => {
+		const keyword = searchQuery.trim();
+		if (!keyword) {
+			searchResults = [];
+			searchMessage = "请输入歌曲名、歌手或关键词";
+			return;
+		}
+		searchBusy = true;
+		searchMessage = searchScope === "all" ? "正在搜索全网歌曲…" : "正在筛选当前歌单…";
+		try {
+			if (searchScope === "playlist") {
+				const lower = keyword.toLocaleLowerCase();
+				searchResults = songs.filter((song) => `${song.name} ${song.author}`.toLocaleLowerCase().includes(lower));
+			} else if (client) {
+				searchResults = await client.searchSongs(keyword, 1, 100);
+			}
+			searchMessage = searchResults.length ? `找到 ${searchResults.length} 首歌曲` : "没有找到匹配歌曲";
+		} catch (error) {
+			searchResults = [];
+			searchMessage = errorMessage(error, "歌曲搜索失败");
+		} finally {
+			searchBusy = false;
+		}
+	};
+
+	const searchSongAddData = (song: MusicSong) => {
+		const albumId = Number(song.album_id ?? song.albumid ?? 0) || 0;
+		const mixSongId = Number(song.mixsongid ?? song.mix_song_id ?? 0) || 0;
+		return `${song.name}|${song.hash}|${albumId}|${mixSongId}`;
+	};
+
+	const openAddSong = (song: MusicSong) => {
+		if (!auth || playlists.length === 0) {
+			setNotice("请先登录并加载至少一个歌单");
+			return;
+		}
+		addTargetSong = song;
+		addTargetPlaylistId = selectedPlaylistId || String(playlists[0].listid);
+	};
+
+	const addSongToPlaylist = async () => {
+		if (!client || !addTargetSong || !addTargetPlaylistId || addBusy) return;
+		if (addTargetPlaylistId === selectedPlaylistId && isSongInPlaylist(addTargetSong.hash, songs)) {
+			setNotice("这首歌已在当前歌单");
+			addTargetSong = null;
+			return;
+		}
+		addBusy = true;
+		try {
+			await client.addPlaylistTracks(addTargetPlaylistId, searchSongAddData(addTargetSong));
+			const target = playlists.find((playlist) => String(playlist.listid) === addTargetPlaylistId);
+			setNotice(`已添加到「${target?.name ?? "歌单"}」`);
+			if (addTargetPlaylistId === selectedPlaylistId) await loadSongs();
+			addTargetSong = null;
+		} catch (error) {
+			setNotice(errorMessage(error, "添加到歌单失败"));
+		} finally {
+			addBusy = false;
+		}
+	};
+
 	const playSong = async (song: MusicSong) => {
 		if (!client || !auth || !audio) {
 			showLogin = true;
@@ -325,16 +394,7 @@
 
 	const toggleFavorite = () => {
 		if (!currentSong) return;
-		const next = new Set(favorites);
-		if (next.has(currentSong.hash)) {
-			next.delete(currentSong.hash);
-			setNotice("已取消收藏当前歌曲");
-		} else {
-			next.add(currentSong.hash);
-			setNotice("已收藏当前歌曲");
-		}
-		favorites = next;
-		localStorage.setItem(FAVORITES_KEY, JSON.stringify([...next]));
+		openAddSong(currentSong);
 	};
 
 	const toggleShuffle = () => {
@@ -583,12 +643,6 @@
 		apiUrl = normalizeApiBaseUrl(isDev && devApiUrl ? devApiUrl : MUSIC_BFF_ORIGIN);
 		const savedVolume = Number(localStorage.getItem("hengduo-music-volume"));
 		if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) volume = savedVolume;
-		try {
-			const savedFavorites = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
-			if (Array.isArray(savedFavorites)) favorites = new Set(savedFavorites.filter((item) => typeof item === "string"));
-		} catch {
-			favorites = new Set();
-		}
 		shuffleEnabled = localStorage.getItem(SHUFFLE_KEY) === "1";
 		const savedRepeat = localStorage.getItem(REPEAT_KEY);
 		repeatMode = savedRepeat === "one" || savedRepeat === "off" ? savedRepeat : "list";
@@ -689,7 +743,7 @@
 							<span>{currentSong?.author ?? "登录后读取你的歌单"}{currentIndex >= 0 ? ` · ${currentIndex + 1}/${songs.length}` : ""}</span>
 							</div>
 							{#if currentSong}
-							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? "取消收藏" : "收藏当前歌曲"} title={isFavorite ? "取消收藏" : "收藏"} on:click={toggleFavorite}>
+							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? "已在当前歌单，选择其他歌单" : "添加当前歌曲到云端歌单"} title={isFavorite ? "已在当前歌单，选择其他歌单" : "添加到云端歌单"} on:click={toggleFavorite}>
 								<Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} />
 							</button>
 							{/if}
@@ -749,28 +803,46 @@
 							{/each}
 						</select>
 					</label>
-					<div class="music-song-list" aria-label="歌曲列表">
-						{#if songsLoading}
-							<p class="music-muted">正在读取歌单…</p>
-						{:else if songsMessage}
-							<div class="music-list-status">
-								<p class="music-muted">{songsMessage}</p>
-								<button class="music-quiet" type="button" on:click={() => void retryMusicLibrary()}>{playlists.length ? "重新加载歌曲" : "重新加载歌单"}</button>
-							</div>
-						{/if}
-						{#each songs.slice(0, 30) as song}
-							<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
-								<span class="music-song-index">{currentSongLoading === song.hash ? "…" : String(songs.indexOf(song) + 1).padStart(2, "0")}</span>
-								{#if song.img}
-									<img class="music-song-cover" src={song.img} alt="" loading="lazy" />
-								{:else}
-									<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>
-								{/if}
-								<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span>
-								<Icon icon={currentSongLoading === song.hash ? "material-symbols:more-horiz-rounded" : currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
-							</button>
-						{/each}
+					<div class="music-search-box">
+						<div class="music-search-row">
+							<input bind:value={searchQuery} aria-label="搜索歌曲" placeholder="搜索全网歌曲或当前歌单" on:keydown={(event) => event.key === "Enter" && void searchMusic()} />
+							<select bind:value={searchScope} aria-label="搜索范围"><option value="all">全网歌曲</option><option value="playlist">当前歌单</option></select>
+							<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchMusic()}>{searchBusy ? "搜索中…" : "搜索"}</button>
+						</div>
+						<p class="music-search-message">{searchMessage}</p>
 					</div>
+					{#if searchQuery.trim()}
+						<div class="music-song-list music-search-results" aria-label="搜索结果">
+							{#each searchResults as song, i}
+								<div class="music-search-result">
+									<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
+										<span class="music-song-index">{String(i + 1).padStart(2, "0")}</span><span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span><span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span><Icon icon="material-symbols:play-arrow-rounded" />
+									</button>
+									<button class:music-search-favorite--active={isSongInPlaylist(song.hash, songs)} class="music-search-favorite" type="button" aria-label={isSongInPlaylist(song.hash, songs) ? `${song.name} 已在当前歌单` : `添加 ${song.name} 到歌单`} title={isSongInPlaylist(song.hash, songs) ? "已在当前歌单，可选择其他歌单" : "添加到歌单"} on:click={() => openAddSong(song)}><Icon icon={isSongInPlaylist(song.hash, songs) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+								</div>
+							{/each}
+							{#if !searchBusy && searchResults.length === 0}<p class="music-muted">{searchMessage}</p>{/if}
+						</div>
+					{:else}
+						<div class="music-song-list" aria-label="歌曲列表">
+							{#if songsLoading}
+								<p class="music-muted">正在读取歌单…</p>
+							{:else if songsMessage}
+								<div class="music-list-status"><p class="music-muted">{songsMessage}</p><button class="music-quiet" type="button" on:click={() => void retryMusicLibrary()}>{playlists.length ? "重新加载歌曲" : "重新加载歌单"}</button></div>
+							{/if}
+							{#each songs as song}
+								<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
+									<span class="music-song-index">{currentSongLoading === song.hash ? "…" : String(songs.indexOf(song) + 1).padStart(2, "0")}</span>
+									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
+									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span><Icon icon={currentSongLoading === song.hash ? "material-symbols:more-horiz-rounded" : currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
+								</button>
+							{/each}
+						</div>
+					{/if}
+					{#if addTargetSong}
+						<div class="music-add-song-card"><div><span class="music-section-label">ADD TO PLAYLIST</span><strong>{addTargetSong.name}</strong></div><select bind:value={addTargetPlaylistId} aria-label="选择目标歌单">{#each playlists as playlist}<option value={String(playlist.listid)}>{playlist.name}</option>{/each}</select><div class="music-actions"><button class="music-quiet" type="button" on:click={() => (addTargetSong = null)}>取消</button><button class="music-primary music-primary--small" type="button" disabled={addBusy} on:click={() => void addSongToPlaylist()}>{addBusy ? "添加中…" : "确认添加"}</button></div></div>
+					{/if}
+
 					<div class="music-secondary-actions">
 						<button class="music-quiet" type="button" disabled={!currentSong || lyricsLoading} on:click={() => void loadLyrics()}>{lyricsLoading ? "歌词加载中…" : "歌词"}</button>
 						{#if lyricsOpen}
@@ -948,6 +1020,10 @@
 	.music-vip-state--ok .music-state-dot { background: #36a269; box-shadow: 0 0 0 4px rgb(54 162 105 / 0.12); }
 	.music-vip-state--risk .music-state-dot { background: #d18b3d; }
 	.music-playlist-field { margin-top: 0.65rem; }
+	.music-search-box { display: grid; gap: 0.25rem; margin-top: 0.75rem; }
+	.music-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.35rem; align-items: center; }
+	.music-search-row input, .music-search-row select, .music-add-song-card select { min-width: 0; min-height: 2rem; padding: 0.35rem 0.5rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.55rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.68rem; }
+	.music-search-message { margin: 0; color: var(--text-50, rgb(100 116 139)); font-size: 0.64rem; }
 	.music-song-list { display: grid; gap: 0.25rem; max-height: 13rem; margin-top: 0.6rem; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
 	.music-song-list::-webkit-scrollbar { display: none; }
 	.music-list-status { display: flex; align-items: center; justify-content: space-between; gap: 0.65rem; padding: 0.35rem 0.15rem; }
@@ -955,7 +1031,14 @@
 	.music-list-status .music-quiet { flex: 0 0 auto; }
 	.music-song { position: relative; display: flex; align-items: center; gap: 0.6rem; width: 100%; min-height: 2.75rem; padding: 0.48rem 0.55rem; border: 1px solid transparent; border-radius: 0.65rem; color: inherit; background: transparent; text-align: left; cursor: pointer; transition: background 180ms ease, border-color 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-song:hover, .music-song--active { border-color: color-mix(in oklch, var(--primary) 20%, transparent); background: color-mix(in oklch, var(--primary) 8%, transparent); }
-	.music-song:hover { transform: translateX(2px); }
+	.music-search-results { margin-top: 0.55rem; }
+	.music-search-result { display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
+	.music-search-result .music-song { min-width: 0; flex: 1; }
+	.music-search-favorite { display: grid; place-items: center; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid transparent; border-radius: 0.6rem; color: var(--text-45, rgb(148 163 184)); background: transparent; cursor: pointer; font-size: 1.1rem; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
+	.music-search-favorite:hover { border-color: color-mix(in oklch, var(--primary) 20%, transparent); color: var(--primary); background: color-mix(in oklch, var(--primary) 8%, transparent); }
+	.music-search-favorite--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 8%, transparent); }
+	.music-add-song-card { display: grid; gap: 0.55rem; margin-top: 0.6rem; padding: 0.7rem; border: 1px solid color-mix(in oklch, var(--primary) 22%, var(--card-border, #dce5e5)); border-radius: 0.75rem; background: color-mix(in oklch, var(--primary) 5%, transparent); }
+	.music-add-song-card strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.76rem; }
 	.music-song--active::before { position: absolute; left: -1px; top: 24%; bottom: 24%; width: 3px; border-radius: 3px; background: var(--primary); content: ""; }
 	.music-song--active .music-song-index { color: var(--primary); }
 	.music-song-cover { flex: 0 0 2.1rem; width: 2.1rem; height: 2.1rem; border-radius: 0.45rem; object-fit: cover; background: color-mix(in oklch, var(--primary) 10%, transparent); }
