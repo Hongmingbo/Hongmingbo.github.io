@@ -9,8 +9,8 @@
 		MusicRiskVerifyError,
 		MUSIC_BFF_ORIGIN,
 		isSongInPlaylist,
+		musicErrorMessage,
 		normalizeApiBaseUrl,
-		responseErrorCode,
 		runDailyVipFlow,
 		type MusicSession,
 		type MusicPlaylist,
@@ -113,18 +113,7 @@
 		return `${mins}:${secs}`;
 	};
 
-	const errorCode = (error: unknown): number | string | undefined => {
-		if (error instanceof MusicApiError && error.code !== undefined) return error.code;
-		return responseErrorCode(error);
-	};
-
-	const errorMessage = (error: unknown, fallback: string): string => {
-		const code = errorCode(error);
-		if (String(code) === "131001") return "今日已经领取过 VIP";
-		if (String(code) === "20028") return "当前账号需要在酷狗官方客户端完成验证";
-		if (error instanceof MusicApiError && error.message) return error.message;
-		return fallback;
-	};
+	const errorMessage = (error: unknown, fallback: string): string => musicErrorMessage(error, fallback);
 
 	const clearQrTimer = () => {
 		if (qrTimer) clearInterval(qrTimer);
@@ -570,6 +559,9 @@
 	const startQrLogin = async () => {
 		if (!client) return;
 		clearQrTimer();
+		qrImage = "";
+		qrKey = "";
+		qrMessage = "正在生成二维码…";
 		loginBusy = true;
 		loginMessage = "正在生成二维码…";
 		try {
@@ -604,6 +596,9 @@
 				}
 			}, 1200);
 		} catch (error) {
+			qrImage = "";
+			qrKey = "";
+			qrMessage = "二维码暂时无法生成，请稍后再试";
 			loginBusy = false;
 			loginMessage = errorMessage(error, "二维码生成失败");
 		}

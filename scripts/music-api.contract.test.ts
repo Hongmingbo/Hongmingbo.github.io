@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import {
 	getShanghaiDateKey,
 	MusicApiClient,
+	MusicApiError,
 	MUSIC_BFF_ORIGIN,
 	MusicRiskVerifyError,
+	musicErrorMessage,
 	normalizeApiBaseUrl,
 	normalizePlaylists,
 	normalizeSongs,
@@ -19,6 +21,10 @@ assert.equal(classifyMusicRisk(23), "captcha");
 assert.equal(classifyMusicRisk("32"), "sms");
 assert.equal(classifyMusicRisk(38), "login");
 assert.equal(classifyMusicRisk(999), "unsupported");
+assert.equal(
+	musicErrorMessage(new MusicApiError("音乐服务返回 HTTP 429", { error_code: "RATE_LIMITED" }, 429, "RATE_LIMITED"), "fallback"),
+	"请求过于频繁，请稍后再试",
+);
 assert.deepEqual(responseData(wrapped), { info: [{ listid: 1, name: "我喜欢" }] });
 assert.deepEqual(normalizePlaylists(wrapped), [{ listid: 1, name: "我喜欢", count: undefined, cover: "" }]);
 

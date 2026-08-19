@@ -79,6 +79,16 @@ export const responseErrorCode = (payload: any): number | string | undefined => 
 	return raw === undefined || raw === null ? undefined : raw;
 };
 
+export const musicErrorMessage = (error: unknown, fallback: string): string => {
+	const code = error instanceof MusicApiError ? error.code : responseErrorCode(error as any);
+	const status = error instanceof MusicApiError ? error.status : Number((error as any)?.status);
+	if (status === 429 || String(code) === "RATE_LIMITED") return "请求过于频繁，请稍后再试";
+	if (String(code) === "131001") return "今日已经领取过 VIP";
+	if (String(code) === "20028") return "当前账号需要在酷狗官方客户端完成验证";
+	if (error instanceof MusicApiError && error.message) return error.message;
+	return fallback;
+};
+
 export const responseSucceeded = (payload: unknown): boolean => {
 	const status = responseStatus(payload);
 	return status === 1 || status === 200;
