@@ -52,7 +52,7 @@ assert.equal(formatCommentDate("bad-date"), "");
 assert.equal(normalizeCommentApiBaseUrl(" https://api.hmb2011.bond/ "), "https://api.hmb2011.bond");
 assert.equal(normalizeCommentApiBaseUrl("javascript:alert(1)"), "");
 assert.equal(normalizeCommentApiBaseUrl("http://evil.example.com"), "");
-assert.equal(COMMENT_API_ORIGIN, ""); // 云机就绪前保持离线
+assert.equal(COMMENT_API_ORIGIN, "https://api.hmb2011.bond"); // 生产评论 API 已上线
 
 // —— 客户端请求形状（fetch stub）——
 let listUrl = "";

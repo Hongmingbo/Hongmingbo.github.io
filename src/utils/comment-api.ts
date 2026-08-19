@@ -45,7 +45,7 @@ export interface CommentListResult {
 }
 
 /** 生产评论 API 源；云机就绪后改为 https://api.hmb2011.bond */
-export const COMMENT_API_ORIGIN = "";
+export const COMMENT_API_ORIGIN = "https://api.hmb2011.bond";
 
 export const responseStatus = (payload: unknown): number | undefined =>
 	payload && typeof payload === "object" && "status" in payload
