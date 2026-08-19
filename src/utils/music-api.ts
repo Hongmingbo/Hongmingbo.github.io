@@ -5,6 +5,13 @@ export interface MusicSession {
 	pic?: string;
 }
 
+/** BFF 二维码轮询结果。二维码状态与成功会话严格分离，避免 UI 猜测响应结构。 */
+export interface MusicQrPoll {
+	status: number;
+	nickname?: string;
+	session?: MusicSession;
+}
+
 export interface MusicRiskChallenge {
 	eventid: string;
 	ssaCode?: string;
@@ -315,11 +322,16 @@ export class MusicApiClient {
 		return { key, image };
 	}
 
-	async checkQr(key: string): Promise<any> {
+	async checkQr(key: string): Promise<MusicQrPoll> {
 		const payload = await this.request("/auth/qr/status", { query: { key } });
 		const data = responseData<any>(payload);
-		if (Number(data?.status) === 4) return this.sessionFromQr(payload);
-		return payload;
+		const status = Number(data?.status);
+		if (!Number.isInteger(status) || status < 0) throw new MusicApiError("二维码状态响应无效", payload);
+		return {
+			status,
+			nickname: typeof data?.nickname === "string" ? data.nickname : "",
+			...(status === 4 ? { session: this.sessionFromQr(payload) } : {}),
+		};
 	}
 
 	private sessionFromLogin(payload: unknown): MusicSession {

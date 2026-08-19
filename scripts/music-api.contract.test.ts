@@ -68,6 +68,8 @@ let addUrl = "";
 let addBody = "";
 let prepareMethod = "";
 let prepareUrl = "";
+let qrStatusMethod = "";
+let qrStatusUrl = "";
 globalThis.fetch = async (input, init) => {
 	const url = String(input);
 	const method = String(init?.method ?? "GET");
@@ -78,6 +80,13 @@ globalThis.fetch = async (input, init) => {
 		qrMethod = method;
 		qrContentType = contentType;
 		qrBody = body;
+	} else if (url.endsWith("/auth/qr/status?key=opaque-test-key")) {
+		qrStatusUrl = url;
+		qrStatusMethod = method;
+		return new Response(JSON.stringify({ status: 1, data: { status: 4, userid: 7, nickname: "扫码用户" } }), {
+			status: 200,
+			headers: { "Content-Type": "application/json" },
+		});
 	} else if (url.endsWith("/vip/daily/upgrade")) {
 		upgradeUrl = url;
 		upgradeMethod = method;
@@ -123,6 +132,12 @@ try {
 	assert.equal(qrContentType, "application/json");
 	assert.equal(qrBody, "{}");
 	assert.equal(qr.key, "opaque-test-key");
+	const qrPoll = await bff.checkQr(qr.key);
+	assert.equal(qrStatusMethod, "GET");
+	assert.equal(qrStatusUrl, "https://music.hmb2011.bond/auth/qr/status?key=opaque-test-key");
+	assert.equal(qrPoll.status, 4);
+	assert.equal(qrPoll.session?.userid, 7);
+	assert.equal(qrPoll.session?.nickname, "扫码用户");
 
 	await bff.upgradeVip();
 	assert.equal(upgradeMethod, "POST");

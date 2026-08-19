@@ -10,7 +10,6 @@
 		MUSIC_BFF_ORIGIN,
 		isSongInPlaylist,
 		normalizeApiBaseUrl,
-		responseData,
 		responseErrorCode,
 		runDailyVipFlow,
 		type MusicSession,
@@ -578,25 +577,25 @@
 			qrKey = qr.key;
 			qrImage = qr.image;
 			qrMessage = "请使用酷狗客户端扫码";
+			loginMessage = "";
 			loginBusy = false;
 			qrTimer = setInterval(async () => {
 				if (qrBusy || !client || !qrKey) return;
 				qrBusy = true;
 				try {
-					const payload = await client.checkQr(qrKey);
-					const data = responseData<any>(payload);
-					const nestedData = data?.data ?? payload?.data ?? {};
-					const state = Number(data?.status ?? nestedData?.status ?? payload?.status ?? 0);
-					if (state === 4) {
+					const poll = await client.checkQr(qrKey);
+					if (poll.status === 4) {
+						if (!poll.session) throw new MusicApiError("二维码会话响应无效");
 						clearQrTimer();
-						await setSession({ userid: data?.userid ?? nestedData?.userid, nickname: data?.nickname ?? nestedData?.nickname, pic: data?.pic ?? nestedData?.pic });
+						await setSession(poll.session);
 						return;
 					}
-					if (state === 2) qrMessage = `${data?.nickname ?? nestedData?.nickname ?? "用户"} 已扫码，等待确认`;
-					if (state === 0) {
+					if (poll.status === 2) qrMessage = `${poll.nickname || "用户"} 已扫码，等待确认`;
+					else if (poll.status === 1) qrMessage = "等待扫码";
+					else if (poll.status === 0) {
 						clearQrTimer();
 						qrMessage = "二维码已过期，请重新生成";
-					}
+					} else qrMessage = "正在等待酷狗确认";
 				} catch (error) {
 					clearQrTimer();
 					loginMessage = errorMessage(error, "二维码状态检查失败");
