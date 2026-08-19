@@ -5,6 +5,14 @@ export interface MusicSession {
 	pic?: string;
 }
 
+export interface MusicRiskChallenge {
+	eventid: string;
+	ssaCode?: string;
+	edt: string;
+	sid: string;
+	hash: string;
+}
+
 export interface MusicPlaylist {
 	listid: string | number;
 	name: string;
@@ -40,6 +48,16 @@ export class MusicApiError extends Error {
 	}
 }
 
+export class MusicRiskVerifyError extends MusicApiError {
+	readonly challenge: MusicRiskChallenge;
+
+	constructor(message: string, payload: unknown, challenge: MusicRiskChallenge) {
+		super(message, payload, 423, "RISK_VERIFY_REQUIRED");
+		this.name = "MusicRiskVerifyError";
+		this.challenge = challenge;
+	}
+}
+
 const apiData = (payload: any): any => payload?.data ?? payload?.body?.data ?? payload?.body ?? payload;
 export const responseData = <T = any>(payload: unknown): T => apiData(payload) as T;
 
@@ -57,6 +75,16 @@ export const responseErrorCode = (payload: any): number | string | undefined => 
 export const responseSucceeded = (payload: unknown): boolean => {
 	const status = responseStatus(payload);
 	return status === 1 || status === 200;
+};
+
+export type MusicRiskMode = "captcha" | "sms" | "login" | "unsupported";
+
+export const classifyMusicRisk = (value: unknown): MusicRiskMode => {
+	const type = Number(value);
+	if (type === 23) return "captcha";
+	if (type === 32) return "sms";
+	if (type === 38) return "login";
+	return "unsupported";
 };
 
 export const normalizeApiBaseUrl = (input: string): string => {
@@ -222,7 +250,23 @@ export class MusicApiClient {
 		const text = await response.text();
 		let payload: any = null;
 		try { payload = text ? JSON.parse(text) : null; } catch { payload = { message: text }; }
-		if (!response.ok) throw new MusicApiError(`音乐服务返回 HTTP ${response.status}`, payload, response.status, responseErrorCode(payload));
+		if (!response.ok) {
+			if (response.status === 423 && payload?.error_code === "RISK_VERIFY_REQUIRED") {
+				const data = payload?.data ?? {};
+				throw new MusicRiskVerifyError(
+					String(payload?.message || "需要完成安全验证"),
+					payload,
+					{
+						eventid: String(data.eventid || data.ssaCode || ""),
+						ssaCode: data.ssaCode ? String(data.ssaCode) : undefined,
+						edt: String(data.edt || ""),
+						sid: String(data.sid || ""),
+						hash: String(data.hash || ""),
+					},
+				);
+			}
+			throw new MusicApiError(`音乐服务返回 HTTP ${response.status}`, payload, response.status, responseErrorCode(payload));
+		}
 		return payload as T;
 	}
 
@@ -318,8 +362,30 @@ export class MusicApiClient {
 		return this.request(`/playlists/${encodeURIComponent(String(listid))}/add`, { method: "POST", body: { data } });
 	}
 
+	async getStreamPreparation(hash: string): Promise<void> {
+		await this.request(`/tracks/${encodeURIComponent(hash)}/prepare`);
+	}
+
+	async getRiskInfo(eventid: string): Promise<any> {
+		return this.request("/verify/info", { method: "POST", body: { eventid } });
+	}
+
+	async submitRiskVerification(input: { eventid: string; vType: number; verifycode: string; sid: string; edt: string }): Promise<any> {
+		return this.request("/verify/verify", {
+			method: "POST",
+			body: {
+				eventid: input.eventid,
+				v_type: input.vType,
+				verifycode: input.verifycode,
+				sid: input.sid,
+				edt: input.edt,
+			},
+		});
+	}
+
 	async getStreamUrl(hash: string): Promise<string> {
 		if (!this.baseUrl) throw new MusicApiError("音乐服务尚未配置");
+		await this.getStreamPreparation(hash);
 		// Native Audio requests this BFF URL directly. The BFF HttpOnly session cookie
 		// authenticates the request; this never resolves or exposes an upstream media URL.
 		return `${this.baseUrl}/tracks/${encodeURIComponent(hash)}/stream`;

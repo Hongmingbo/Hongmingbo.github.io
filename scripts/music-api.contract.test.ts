@@ -3,16 +3,22 @@ import {
 	getShanghaiDateKey,
 	MusicApiClient,
 	MUSIC_BFF_ORIGIN,
+	MusicRiskVerifyError,
 	normalizeApiBaseUrl,
 	normalizePlaylists,
 	normalizeSongs,
 	isSongInPlaylist,
 	responseData,
 	responseSucceeded,
+	classifyMusicRisk,
 } from "../src/utils/music-api.ts";
 
 const wrapped = { status: 1, data: { info: [{ listid: 1, name: "我喜欢" }] } };
 assert.equal(responseSucceeded(wrapped), true);
+assert.equal(classifyMusicRisk(23), "captcha");
+assert.equal(classifyMusicRisk("32"), "sms");
+assert.equal(classifyMusicRisk(38), "login");
+assert.equal(classifyMusicRisk(999), "unsupported");
 assert.deepEqual(responseData(wrapped), { info: [{ listid: 1, name: "我喜欢" }] });
 assert.deepEqual(normalizePlaylists(wrapped), [{ listid: 1, name: "我喜欢", count: undefined, cover: "" }]);
 
@@ -44,7 +50,6 @@ assert.equal(normalizeApiBaseUrl(" https://api.example.test/ "), "https://api.ex
 assert.equal(normalizeApiBaseUrl("javascript:alert(1)"), "");
 assert.equal(MUSIC_BFF_ORIGIN, "https://music.hmb2011.bond");
 const bff = new MusicApiClient(MUSIC_BFF_ORIGIN);
-assert.equal(await bff.getStreamUrl("abc123"), "https://music.hmb2011.bond/tracks/abc123/stream");
 
 const originalFetch = globalThis.fetch;
 let qrMethod = "";
@@ -61,6 +66,8 @@ let searchBody = "";
 let addMethod = "";
 let addUrl = "";
 let addBody = "";
+let prepareMethod = "";
+let prepareUrl = "";
 globalThis.fetch = async (input, init) => {
 	const url = String(input);
 	const method = String(init?.method ?? "GET");
@@ -84,6 +91,16 @@ globalThis.fetch = async (input, init) => {
 		addUrl = url;
 		addMethod = method;
 		addBody = body;
+	} else if (url.endsWith("/tracks/abc123/prepare")) {
+		prepareUrl = url;
+		prepareMethod = method;
+	} else if (url.endsWith("/tracks/risk/prepare")) {
+		return new Response(JSON.stringify({
+			status: 0,
+			error_code: "RISK_VERIFY_REQUIRED",
+			message: "本次请求需要验证",
+			data: { eventid: "event-1", ssaCode: "event-1", edt: "edt-1", sid: "sid-1", hash: "risk" },
+		}), { status: 423, headers: { "Content-Type": "application/json" } });
 	}
 	return new Response(JSON.stringify({ status: 1, data: { key: "opaque-test-key", image: "[screenshot]", info: [] } }), {
 		status: 200,
@@ -91,6 +108,15 @@ globalThis.fetch = async (input, init) => {
 	});
 };
 try {
+	assert.equal(await bff.getStreamUrl("abc123"), "https://music.hmb2011.bond/tracks/abc123/stream");
+	assert.equal(prepareMethod, "GET");
+	assert.equal(prepareUrl, "https://music.hmb2011.bond/tracks/abc123/prepare");
+
+	await assert.rejects(
+		() => bff.getStreamUrl("risk"),
+		(error: unknown) => error instanceof MusicRiskVerifyError && error.challenge.eventid === "event-1" && error.challenge.edt === "edt-1",
+	);
+
 	const qr = await bff.createQr();
 	assert.equal(qrMethod, "POST");
 	assert.equal(qrUrl, "https://music.hmb2011.bond/auth/qr");

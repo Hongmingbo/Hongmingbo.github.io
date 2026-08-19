@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import Icon from "@iconify/svelte";
+	import MusicRiskVerify from "./MusicRiskVerify.svelte";
 	import {
 		getShanghaiDateKey,
 		MusicApiClient,
 		MusicApiError,
+		MusicRiskVerifyError,
 		MUSIC_BFF_ORIGIN,
 		isSongInPlaylist,
 		normalizeApiBaseUrl,
@@ -76,6 +78,9 @@
 	let vipState: VipState = "idle";
 	let vipMessage = "登录后自动检查今日权益";
 	let notice = "";
+	let riskChallenge: import("@utils/music-api").MusicRiskChallenge | null = null;
+	let riskSong: MusicSong | null = null;
+	let pendingRiskSong: MusicSong | null = null;
 	let shuffleEnabled = false;
 	let repeatMode: "list" | "one" | "off" = "list";
 	let playGeneration = 0;
@@ -149,6 +154,12 @@
 		loginMessage = "";
 		setNotice("已登录酷狗概念版，正在加载你的音乐数据");
 		await loadUserData();
+		const pending = pendingRiskSong;
+		pendingRiskSong = null;
+		if (pending) {
+			setNotice("登录确认完成，正在继续播放…");
+			void playSong(pending);
+		}
 	};
 
 	const connectApi = async () => {
@@ -355,6 +366,12 @@
 			scrollActiveTrackIntoView();
 			void claimDailyVip();
 		} catch (error) {
+			if (error instanceof MusicRiskVerifyError) {
+				riskChallenge = error.challenge;
+				riskSong = song;
+				setNotice("VIP 播放需要完成一次人工安全验证");
+				return;
+			}
 			// 快速切歌时浏览器会中断上一次 audio.play()，这是正常竞态而非失败。
 			if (error instanceof DOMException && error.name === "AbortError") return;
 			// 媒体加载失败（网络错误/资源不支持）时主动验证会话是否过期。
@@ -366,6 +383,33 @@
 		} finally {
 			if (generation === playGeneration) currentSongLoading = "";
 		}
+	};
+
+	const handleRiskVerified = async () => {
+		const song = riskSong;
+		riskChallenge = null;
+		riskSong = null;
+		setNotice("安全验证通过，正在继续播放…");
+		if (song) await playSong(song);
+	};
+
+	const handleRiskCancelled = () => {
+		riskChallenge = null;
+		riskSong = null;
+		setNotice("已取消安全验证");
+	};
+
+	const handleRiskRelogin = () => {
+		pendingRiskSong = riskSong;
+		riskChallenge = null;
+		riskSong = null;
+		loginMode = "qr";
+		qrImage = "";
+		qrKey = "";
+		qrMessage = "请重新扫码确认酷狗账号";
+		loginMessage = "";
+		showLogin = true;
+		setNotice("酷狗要求登录确认，请重新扫码登录后继续播放");
 	};
 
 	const togglePlay = async () => {
@@ -913,6 +957,10 @@
 		<Icon class="music-trigger-chevron" icon={expanded ? "material-symbols:keyboard-arrow-down-rounded" : "material-symbols:keyboard-arrow-up-rounded"} />
 	</button>
 </div>
+
+{#if riskChallenge && client}
+	<MusicRiskVerify client={client} challenge={riskChallenge} on:verified={handleRiskVerified} on:cancel={handleRiskCancelled} on:relogin={handleRiskRelogin} />
+{/if}
 
 <style>
 	.music-dock {
