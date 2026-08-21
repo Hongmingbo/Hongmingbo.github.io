@@ -9,6 +9,7 @@ import {
 	normalizeApiBaseUrl,
 	normalizePlaylists,
 	normalizeSongs,
+	parseLyricsText,
 	isSongInPlaylist,
 	responseData,
 	responseSucceeded,
@@ -52,6 +53,11 @@ assert.equal(cleanedFilenameTracks[1].name, "江南");
 assert.equal(cleanedFilenameTracks[1].author, "林俊杰");
 assert.equal(isSongInPlaylist("ABC", normalizeSongs(tracks)), true);
 assert.equal(isSongInPlaylist("NOT_IN_PLAYLIST", normalizeSongs(tracks)), false);
+const parsedKrc = parseLyricsText("[ti:测试歌]\n[39674,6040]<0,460,0>北<460,430,0>风\n[01:02.50]普通歌词");
+assert.deepEqual(parsedKrc, [
+	{ time: 39.674, text: "北风" },
+	{ time: 62.5, text: "普通歌词" },
+]);
 assert.equal(normalizeApiBaseUrl(" https://api.example.test/ "), "https://api.example.test");
 assert.equal(normalizeApiBaseUrl("javascript:alert(1)"), "");
 assert.equal(MUSIC_BFF_ORIGIN, "https://music.hmb2011.bond");
@@ -76,12 +82,19 @@ let prepareMethod = "";
 let prepareUrl = "";
 let qrStatusMethod = "";
 let qrStatusUrl = "";
+let recommendationUrl = "";
+let recommendationMethod = "";
 globalThis.fetch = async (input, init) => {
 	const url = String(input);
 	const method = String(init?.method ?? "GET");
 	const contentType = String(new Headers(init?.headers).get("Content-Type") ?? "");
 	const body = String(init?.body ?? "");
-	if (url.endsWith("/auth/qr")) {
+	if (url.endsWith("/auth/password")) {
+		return new Response(JSON.stringify({ status: 0, error_code: "INVALID_CREDENTIALS", message: "账号或密码错误" }), {
+			status: 401,
+			headers: { "Content-Type": "application/json" },
+		});
+	} else if (url.endsWith("/auth/qr")) {
 		qrUrl = url;
 		qrMethod = method;
 		qrContentType = contentType;
@@ -90,6 +103,13 @@ globalThis.fetch = async (input, init) => {
 		qrStatusUrl = url;
 		qrStatusMethod = method;
 		return new Response(JSON.stringify({ status: 1, data: { status: 4, userid: 7, nickname: "扫码用户" } }), {
+			status: 200,
+			headers: { "Content-Type": "application/json" },
+		});
+	} else if (url.endsWith("/recommendations/daily")) {
+		recommendationUrl = url;
+		recommendationMethod = method;
+		return new Response(JSON.stringify({ status: 1, data: { song_list: [{ hash: "REC_HASH", songname: "推荐曲", author_name: "推荐歌手", sizable_cover: "https://img/{size}.jpg", time_length: 187 }] } }), {
 			status: 200,
 			headers: { "Content-Type": "application/json" },
 		});
@@ -122,6 +142,10 @@ globalThis.fetch = async (input, init) => {
 		headers: { "Content-Type": "application/json" },
 	});
 };
+await assert.rejects(
+	() => bff.loginPassword("user", "wrong"),
+	(error: unknown) => error instanceof MusicApiError && error.code === "INVALID_CREDENTIALS" && error.message === "账号或密码错误",
+);
 try {
 	assert.equal(await bff.getStreamUrl("abc123"), "https://music.hmb2011.bond/tracks/abc123/stream");
 	assert.equal(prepareMethod, "GET");
@@ -144,6 +168,13 @@ try {
 	assert.equal(qrPoll.status, 4);
 	assert.equal(qrPoll.session?.userid, 7);
 	assert.equal(qrPoll.session?.nickname, "扫码用户");
+	const recommendations = await bff.getDailyRecommendations();
+	assert.equal(recommendationMethod, "GET");
+	assert.equal(recommendationUrl, "https://music.hmb2011.bond/recommendations/daily");
+	assert.equal(recommendations[0].hash, "REC_HASH");
+	assert.equal(recommendations[0].author, "推荐歌手");
+	assert.equal(recommendations[0].img, "https://img/480.jpg");
+	assert.equal(recommendations[0].timeLength, 187);
 
 	await bff.upgradeVip();
 	assert.equal(upgradeMethod, "POST");

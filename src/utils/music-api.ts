@@ -68,6 +68,14 @@ export class MusicRiskVerifyError extends MusicApiError {
 const apiData = (payload: any): any => payload?.data ?? payload?.body?.data ?? payload?.body ?? payload;
 export const responseData = <T = any>(payload: unknown): T => apiData(payload) as T;
 
+const responseMessage = (payload: any): string => {
+	const body = payload?.body ?? payload;
+	for (const value of [body?.message, body?.error_msg, body?.msg, body?.error]) {
+		if (typeof value === "string" && value.trim()) return value.trim();
+	}
+	return "";
+};
+
 export const responseStatus = (payload: any): number | undefined => {
 	const raw = payload?.status ?? payload?.body?.status ?? payload?.code;
 	const parsed = Number(raw);
@@ -193,8 +201,8 @@ const stripAuthorPrefix = (title: string, author: string): string => {
 };
 
 const parseSongIdentity = (item: any): { name: string; author: string } => {
-	const rawName = textValue(item.name ?? item.songname ?? item.SongName ?? item.OriSongName ?? item.AudioName ?? item.audio_name ?? item.FileName ?? item.filename);
-	const explicitAuthor = textValue(item.author ?? item.singername ?? item.singerName ?? item.SingerName ?? item.singer ?? item.artist ?? item.Artist ?? item.singers);
+	const rawName = textValue(item.name ?? item.ori_audio_name ?? item.songname ?? item.SongName ?? item.OriSongName ?? item.AudioName ?? item.audio_name ?? item.FileName ?? item.filename);
+	const explicitAuthor = textValue(item.author ?? item.author_name ?? item.singername ?? item.singerName ?? item.SingerName ?? item.singer ?? item.artist ?? item.Artist ?? item.singers);
 	const cleanName = stripAuthorPrefix(rawName, explicitAuthor);
 	if (explicitAuthor) return { name: cleanName || "未命名歌曲", author: explicitAuthor };
 
@@ -219,7 +227,7 @@ export const normalizePlaylists = (payload: unknown): MusicPlaylist[] => {
 
 export const normalizeSongs = (payload: unknown): MusicSong[] => {
 	const data = responseData<any>(payload);
-	const info = asList(data?.info ?? data?.lists ?? data);
+	const info = asList(data?.info ?? data?.lists ?? data?.song_list ?? data);
 	return info
 		.filter((item) => item && typeof (item.hash ?? item.FileHash) === "string")
 		.map((item) => {
@@ -229,14 +237,61 @@ export const normalizeSongs = (payload: unknown): MusicSong[] => {
 				hash: String(item.hash ?? item.FileHash),
 				name: identity.name,
 				author: identity.author,
-				img: String(item.cover ?? item.pic ?? item.image ?? item.img ?? "").replace("{size}", "480"),
-				timeLength: Number(item.timelen ?? item.duration ?? item.timeLength ?? 0) || 0,
+				img: String(item.cover ?? item.sizable_cover ?? item.pic ?? item.image ?? item.img ?? "").replace("{size}", "480"),
+				timeLength: Number(item.timelen ?? item.time_length ?? item.duration ?? item.timeLength ?? 0) || 0,
 				album: item.album ?? item.album_name ?? "",
 			};
 		});
 };
 
 export const isSongInPlaylist = (hash: string, songs: MusicSong[]): boolean => songs.some((song) => song.hash === hash);
+
+export interface MusicLyricLine {
+	time: number | null;
+	text: string;
+}
+
+const LYRIC_META_RE = /^\[(?:ti|ar|al|by|offset|re|ve|sign|id|hash):/i;
+const KRC_CHAR_TAG_RE = /<\d+(?:,\d+)+>/g;
+const LRC_TIME_RE = /^\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]\s*/;
+const KRC_TIME_RE = /^\[(\d+),(\d+)\]\s*/;
+
+const parseLrcSeconds = (minutes: string, seconds: string, fraction = ""): number => {
+	const fractionValue = fraction ? Number(`0.${fraction}`) : 0;
+	return Number(minutes) * 60 + Number(seconds) + fractionValue;
+};
+
+/** Convert LRC/KRC text into clean line-level timestamps for the player UI. */
+export const parseLyricsText = (raw: string): MusicLyricLine[] => {
+	const lines: MusicLyricLine[] = [];
+	for (const original of String(raw || "").replace(/^\uFEFF/, "").split(/\r?\n/)) {
+		let line = original.trim();
+		if (!line || LYRIC_META_RE.test(line)) continue;
+
+		const krcMatch = line.match(KRC_TIME_RE);
+		if (krcMatch) {
+			const text = line.slice(krcMatch[0].length).replace(KRC_CHAR_TAG_RE, "").trim();
+			if (text) lines.push({ time: Number(krcMatch[1]) / 1000, text: text.slice(0, 240) });
+			continue;
+		}
+
+		const timestamps: number[] = [];
+		let timestampMatch: RegExpMatchArray | null;
+		while ((timestampMatch = line.match(LRC_TIME_RE))) {
+			timestamps.push(parseLrcSeconds(timestampMatch[1], timestampMatch[2], timestampMatch[3]));
+			line = line.slice(timestampMatch[0].length);
+		}
+		const text = line.replace(KRC_CHAR_TAG_RE, "").trim();
+		if (!text) continue;
+		if (timestamps.length === 0) lines.push({ time: null, text: text.slice(0, 240) });
+		else for (const time of timestamps) lines.push({ time, text: text.slice(0, 240) });
+	}
+	return lines.sort((a, b) => {
+		if (a.time === null) return 1;
+		if (b.time === null) return -1;
+		return a.time - b.time;
+	}).slice(0, 300);
+};
 
 /**
  * Browser-side client for the hardened music BFF, not for KuGouMusicApi directly.
@@ -282,7 +337,7 @@ export class MusicApiClient {
 					},
 				);
 			}
-			throw new MusicApiError(`音乐服务返回 HTTP ${response.status}`, payload, response.status, responseErrorCode(payload));
+			throw new MusicApiError(responseMessage(payload) || `音乐服务返回 HTTP ${response.status}`, payload, response.status, responseErrorCode(payload));
 		}
 		return payload as T;
 	}
@@ -373,6 +428,10 @@ export class MusicApiClient {
 			if (songs.length < 300) break;
 		}
 		return all;
+	}
+
+	async getDailyRecommendations(): Promise<MusicSong[]> {
+		return normalizeSongs(await this.request("/recommendations/daily"));
 	}
 
 	async searchSongs(keyword: string, page = 1, pagesize = 50): Promise<MusicSong[]> {

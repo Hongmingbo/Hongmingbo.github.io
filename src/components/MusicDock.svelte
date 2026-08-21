@@ -11,6 +11,7 @@
 		isSongInPlaylist,
 		musicErrorMessage,
 		normalizeApiBaseUrl,
+		parseLyricsText,
 		runDailyVipFlow,
 		type MusicSession,
 		type MusicPlaylist,
@@ -59,6 +60,10 @@
 	let searchBusy = false;
 	let searchMessage = "搜索全网歌曲，结果不会自动加入歌单";
 	let searchResults: MusicSong[] = [];
+	let dailySongs: MusicSong[] = [];
+	let dailyLoading = false;
+	let dailyOpen = false;
+	let dailyMessage = "点击加载今日推荐";
 	let addTargetSong: MusicSong | null = null;
 	let addTargetPlaylistId = "";
 	let addBusy = false;
@@ -468,23 +473,23 @@
 		localStorage.setItem("hengduo-music-volume", String(volume));
 	};
 
-	const parseLyrics = (raw: string): Array<{ time: number | null; text: string }> => {
-		return raw
-			.split(/\r?\n/)
-			.map((line) => {
-				const trimmed = line.trim();
-				if (!trimmed) return null;
-				const match = trimmed.match(/^\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]\s*(.*)$/);
-				if (!match) return { time: null, text: trimmed.slice(0, 200) };
-				const time =
-					Number(match[1]) * 60 +
-					Number(match[2]) +
-					Number(match[3] ?? 0) / (match[3]?.length === 3 ? 1000 : 100);
-				return { time, text: match[4].trim().slice(0, 200) };
-			})
-			.filter((x): x is { time: number | null; text: string } => x !== null && x.text !== "")
-			.slice(0, 120);
+	const loadDailyRecommendations = async () => {
+		if (!client || dailyLoading) return;
+		dailyOpen = true;
+		dailyLoading = true;
+		dailyMessage = "正在读取今日推荐…";
+		try {
+			dailySongs = await client.getDailyRecommendations();
+			dailyMessage = dailySongs.length > 0 ? "" : "今天暂时没有推荐歌曲";
+		} catch (error) {
+			dailySongs = [];
+			dailyMessage = errorMessage(error, "每日推荐加载失败");
+		} finally {
+			dailyLoading = false;
+		}
 	};
+
+	const parseLyrics = parseLyricsText;
 
 	const updateActiveLyric = () => {
 		const t = audio?.currentTime ?? 0;
@@ -506,9 +511,10 @@
 
 	const loadLyrics = async () => {
 		if (!client || !currentSong) return;
-		lyricsOpen = true;
-		lyricsLoading = true;
-		lyricsMessage = "正在加载歌词…";
+			lyricsOpen = true;
+			lyricsLoading = true;
+			activeLyricIndex = -1;
+			lyricsMessage = "正在加载歌词…";
 		try {
 			lyricsLines = parseLyrics(await client.getLyrics(currentSong.hash));
 			lyricsMessage = lyricsLines.length > 0 ? "" : "没有返回可显示的歌词";
@@ -831,6 +837,25 @@
 					<span class="music-state-dot"></span>
 					<span>{vipMessage}</span>
 				</div>
+				<div class="music-recommend-bar">
+					<div><span class="music-section-label">DISCOVER / TODAY</span><strong>每日推荐</strong></div>
+					<button class="music-quiet" type="button" disabled={dailyLoading} on:click={() => void loadDailyRecommendations()}>{dailyLoading ? "加载中…" : dailyOpen ? "刷新推荐" : "打开推荐"}</button>
+				</div>
+				{#if dailyOpen}
+					<div class="music-recommend-box" aria-label="每日推荐歌曲">
+						{#if dailySongs.length > 0}
+							<div class="music-recommend-list">
+								{#each dailySongs.slice(0, 12) as song, i}
+									<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
+										<span class="music-song-index">{String(i + 1).padStart(2, "0")}</span>
+										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
+										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span><Icon icon="material-symbols:play-arrow-rounded" />
+									</button>
+								{/each}
+							</div>
+						{:else if dailyMessage}<p class="music-muted">{dailyMessage}</p>{/if}
+					</div>
+				{/if}
 
 				{#if auth}
 					<label class="music-field music-playlist-field">
@@ -892,7 +917,7 @@
 							{#if lyricsLines.length > 0}
 								<ul>
 									{#each lyricsLines as line, i (i)}
-										<li class:music-lyric--active={i === activeLyricIndex} class="music-lyric">{line.text}</li>
+										<li class:music-lyric--active={i === activeLyricIndex} class:music-lyric--past={activeLyricIndex >= 0 && i < activeLyricIndex} class:music-lyric--next={i === activeLyricIndex + 1} class="music-lyric">{line.text}</li>
 									{/each}
 								</ul>
 							{:else}
@@ -1061,6 +1086,10 @@
 	.music-state-dot { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: #a3a3a3; }
 	.music-vip-state--ok .music-state-dot { background: #36a269; box-shadow: 0 0 0 4px rgb(54 162 105 / 0.12); }
 	.music-vip-state--risk .music-state-dot { background: #d18b3d; }
+	.music-recommend-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.75rem; margin-top: 0.65rem; padding: 0.8rem; border: 1px solid color-mix(in oklch, var(--primary) 18%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: color-mix(in oklch, var(--primary) 5%, var(--card-bg, #fff)); }
+	.music-recommend-bar strong { display: block; margin-top: 0.2rem; font-size: 0.78rem; }
+	.music-recommend-box { max-height: 14rem; margin-top: 0.45rem; padding: 0.35rem; overflow: auto; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 80%, transparent); border-radius: 0.8rem; background: color-mix(in oklch, var(--page-bg, #f8fafc) 72%, transparent); }
+	.music-recommend-list { display: grid; gap: 0.2rem; }
 	.music-playlist-field { margin-top: 0.65rem; }
 	.music-search-box { display: grid; gap: 0.25rem; margin-top: 0.75rem; }
 	.music-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.35rem; align-items: center; }
@@ -1092,10 +1121,12 @@
 	.music-song-info small { color: var(--text-50, rgb(100 116 139)); font-size: 0.64rem; }
 	.music-song > :global(svg) { color: var(--primary); font-size: 1.1rem; }
 	.music-secondary-actions { justify-content: flex-end; margin-top: 0.5rem; }
-	.music-lyrics { max-height: 12rem; margin-top: 0.55rem; padding: 0.45rem; overflow: auto; border-radius: 0.7rem; background: color-mix(in oklch, var(--page-bg, #f8fafc) 82%, transparent); }
-	.music-lyrics ul { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; }
-	.music-lyric { padding: 0.32rem 0.55rem; border-radius: 0.45rem; color: var(--text-60, rgb(71 85 105)); font-size: 0.74rem; line-height: 1.7; transition: color 180ms ease, background 180ms ease; }
-	.music-lyric--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 9%, transparent); font-weight: 600; }
+	.music-lyrics { max-height: 15rem; margin-top: 0.55rem; padding: 3.2rem 0.45rem; overflow: auto; scroll-padding-block: 5.5rem; scroll-behavior: smooth; border: 1px solid color-mix(in oklch, var(--primary) 10%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: linear-gradient(180deg, color-mix(in oklch, var(--primary) 4%, var(--page-bg, #f8fafc)), color-mix(in oklch, var(--page-bg, #f8fafc) 90%, transparent)); }
+	.music-lyrics ul { display: grid; gap: 0.22rem; margin: 0; padding: 0; list-style: none; }
+	.music-lyric { padding: 0.42rem 0.72rem; border-radius: 0.55rem; color: var(--text-40, rgb(148 163 184)); font-size: 0.76rem; line-height: 1.75; opacity: 0.52; transform: scale(0.98); text-align: center; transition: color 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), background 220ms ease, opacity 220ms ease, transform 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+		.music-lyric--past { opacity: 0.38; }
+		.music-lyric--next { color: var(--text-60, rgb(71 85 105)); opacity: 0.7; }
+		.music-lyric--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 0.86rem; font-weight: 700; opacity: 1; transform: scale(1); }
 	.music-login-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1rem; background: rgb(15 23 42 / 0.28); backdrop-filter: blur(5px); }
 	.music-login-card { width: min(27rem, 100%); max-height: calc(100vh - 2rem); padding: 1.25rem 1.35rem 1.15rem; overflow: auto; border: 1px solid color-mix(in oklch, var(--primary) 25%, var(--card-border, #dce5e5)); border-radius: 1.2rem; background: var(--card-bg, #fff); box-shadow: 0 30px 80px -35px rgb(15 23 42 / 0.65); animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-login-card > .music-panel__header { margin-bottom: 1.05rem; }
