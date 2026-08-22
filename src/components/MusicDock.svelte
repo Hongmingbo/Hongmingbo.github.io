@@ -13,6 +13,7 @@
 		normalizeApiBaseUrl,
 		parseLyricsText,
 		runDailyVipFlow,
+		shuffleSongs,
 		type MusicSession,
 		type MusicPlaylist,
 		type MusicSong,
@@ -479,7 +480,8 @@
 		dailyLoading = true;
 		dailyMessage = "正在读取今日推荐…";
 		try {
-			dailySongs = await client.getDailyRecommendations();
+			const songs = await client.getDailyRecommendations();
+			dailySongs = shuffleSongs(songs);
 			dailyMessage = dailySongs.length > 0 ? "" : "今天暂时没有推荐歌曲";
 		} catch (error) {
 			dailySongs = [];
@@ -487,6 +489,21 @@
 		} finally {
 			dailyLoading = false;
 		}
+	};
+
+	const reshuffleDailyRecommendations = () => {
+		if (dailySongs.length > 0) {
+			dailySongs = shuffleSongs(dailySongs);
+			setNotice("已为你换一批推荐歌曲");
+		} else {
+			void loadDailyRecommendations();
+		}
+	};
+
+	const seekToLyric = (time: number | null) => {
+		if (!audio || time === null || !Number.isFinite(time)) return;
+		audio.currentTime = Math.max(0, Math.min(time, duration || time));
+		updateActiveLyric();
 	};
 
 	const parseLyrics = parseLyricsText;
@@ -839,13 +856,16 @@
 				</div>
 				<div class="music-recommend-bar">
 					<div><span class="music-section-label">DISCOVER / TODAY</span><strong>每日推荐</strong></div>
-					<button class="music-quiet" type="button" disabled={dailyLoading} on:click={() => void loadDailyRecommendations()}>{dailyLoading ? "加载中…" : dailyOpen ? "刷新推荐" : "打开推荐"}</button>
+					<div class="music-actions">
+						<button class="music-quiet" type="button" disabled={dailyLoading || dailySongs.length === 0} on:click={reshuffleDailyRecommendations}>{dailyLoading ? "加载中…" : "换一批"}</button>
+						<button class="music-quiet" type="button" disabled={dailyLoading} on:click={() => void loadDailyRecommendations()}>{dailyLoading ? "加载中…" : dailyOpen ? "刷新推荐" : "打开推荐"}</button>
+					</div>
 				</div>
 				{#if dailyOpen}
 					<div class="music-recommend-box" aria-label="每日推荐歌曲">
 						{#if dailySongs.length > 0}
 							<div class="music-recommend-list">
-								{#each dailySongs.slice(0, 12) as song, i}
+								{#each dailySongs as song, i}
 									<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
 										<span class="music-song-index">{String(i + 1).padStart(2, "0")}</span>
 										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
@@ -917,7 +937,7 @@
 							{#if lyricsLines.length > 0}
 								<ul>
 									{#each lyricsLines as line, i (i)}
-										<li class:music-lyric--active={i === activeLyricIndex} class:music-lyric--past={activeLyricIndex >= 0 && i < activeLyricIndex} class:music-lyric--next={i === activeLyricIndex + 1} class="music-lyric">{line.text}</li>
+										<button class:music-lyric--active={i === activeLyricIndex} class:music-lyric--past={activeLyricIndex >= 0 && i < activeLyricIndex} class:music-lyric--next={i === activeLyricIndex + 1} class="music-lyric" type="button" disabled={line.time === null} on:click={() => seekToLyric(line.time)}>{line.text}</button>
 									{/each}
 								</ul>
 							{:else}
@@ -1123,7 +1143,8 @@
 	.music-secondary-actions { justify-content: flex-end; margin-top: 0.5rem; }
 	.music-lyrics { max-height: 15rem; margin-top: 0.55rem; padding: 3.2rem 0.45rem; overflow: auto; scroll-padding-block: 5.5rem; scroll-behavior: smooth; border: 1px solid color-mix(in oklch, var(--primary) 10%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: linear-gradient(180deg, color-mix(in oklch, var(--primary) 4%, var(--page-bg, #f8fafc)), color-mix(in oklch, var(--page-bg, #f8fafc) 90%, transparent)); }
 	.music-lyrics ul { display: grid; gap: 0.22rem; margin: 0; padding: 0; list-style: none; }
-	.music-lyric { padding: 0.42rem 0.72rem; border-radius: 0.55rem; color: var(--text-40, rgb(148 163 184)); font-size: 0.76rem; line-height: 1.75; opacity: 0.52; transform: scale(0.98); text-align: center; transition: color 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), background 220ms ease, opacity 220ms ease, transform 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-lyric { display: block; width: 100%; padding: 0.42rem 0.72rem; border: 0; border-radius: 0.55rem; color: var(--text-40, rgb(148 163 184)); background: transparent; font: inherit; font-size: 0.76rem; line-height: 1.75; opacity: 0.52; transform: scale(0.98); text-align: center; cursor: pointer; transition: color 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), background 220ms ease, opacity 220ms ease, transform 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-lyric:disabled { cursor: default; }
 		.music-lyric--past { opacity: 0.38; }
 		.music-lyric--next { color: var(--text-60, rgb(71 85 105)); opacity: 0.7; }
 		.music-lyric--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 0.86rem; font-weight: 700; opacity: 1; transform: scale(1); }

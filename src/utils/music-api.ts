@@ -246,6 +246,21 @@ export const normalizeSongs = (payload: unknown): MusicSong[] => {
 
 export const isSongInPlaylist = (hash: string, songs: MusicSong[]): boolean => songs.some((song) => song.hash === hash);
 
+/** Deterministic Fisher–Yates shuffle with optional seed. Never mutates the input. */
+export const shuffleSongs = <T,>(items: T[], seed = Math.floor(Math.random() * 2 ** 31)): T[] => {
+	const copy = [...items];
+	let state = seed >>> 0;
+	const next = () => {
+		state = (state * 1664525 + 1013904223) >>> 0;
+		return state / 2 ** 32;
+	};
+	for (let i = copy.length - 1; i > 0; i -= 1) {
+		const j = Math.floor(next() * (i + 1));
+		[copy[i], copy[j]] = [copy[j], copy[i]];
+	}
+	return copy;
+};
+
 export interface MusicLyricLine {
 	time: number | null;
 	text: string;

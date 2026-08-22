@@ -10,6 +10,7 @@ import {
 	normalizePlaylists,
 	normalizeSongs,
 	parseLyricsText,
+	shuffleSongs,
 	isSongInPlaylist,
 	responseData,
 	responseSucceeded,
@@ -58,6 +59,14 @@ assert.deepEqual(parsedKrc, [
 	{ time: 39.674, text: "北风" },
 	{ time: 62.5, text: "普通歌词" },
 ]);
+const shuffleSource = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const shuffledOnce = shuffleSongs(shuffleSource);
+const shuffledTwice = shuffleSongs(shuffleSource);
+assert.equal(shuffledOnce.length, 10);
+assert.deepEqual([...shuffledOnce].sort((a, b) => a - b), shuffleSource);
+// 确定性实现：同一输入与随机种子产生相同输出；不同种子大概率不同顺序
+assert.deepEqual(shuffleSongs(shuffleSource, 42), shuffleSongs(shuffleSource, 42));
+assert.notDeepEqual(shuffleSongs(shuffleSource, 1), shuffleSongs(shuffleSource, 2));
 assert.equal(normalizeApiBaseUrl(" https://api.example.test/ "), "https://api.example.test");
 assert.equal(normalizeApiBaseUrl("javascript:alert(1)"), "");
 assert.equal(MUSIC_BFF_ORIGIN, "https://music.hmb2011.bond");
