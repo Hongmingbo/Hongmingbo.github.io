@@ -56,6 +56,7 @@
 	let selectedPlaylistId = "";
 	let songs: MusicSong[] = [];
 	let songsLoading = false;
+	let songsCollapsed = false;
 	let songsMessage = "登录后加载你的歌单";
 	let searchQuery = "";
 	let searchScope: SearchScope = "all";
@@ -912,6 +913,7 @@
 				<div class="music-recommend-bar">
 					<div><span class="music-section-label">DISCOVER / TODAY</span><strong>每日推荐</strong></div>
 					<div class="music-actions">
+						{#if dailyOpen}<button class="music-quiet" type="button" on:click={() => (dailyOpen = false)}>收起推荐</button>{/if}
 						<button class="music-quiet" type="button" disabled={dailyLoading || dailySongs.length === 0} on:click={reshuffleDailyRecommendations}>{dailyLoading ? "加载中…" : "换一批"}</button>
 						<button class="music-quiet" type="button" disabled={dailyLoading} on:click={() => void loadDailyRecommendations()}>{dailyLoading ? "加载中…" : dailyOpen ? "刷新推荐" : "打开推荐"}</button>
 					</div>
@@ -962,20 +964,26 @@
 							{#if !searchBusy && searchResults.length === 0}<p class="music-muted">{searchMessage}</p>{/if}
 						</div>
 					{:else}
-						<div class="music-song-list" aria-label="歌曲列表">
-							{#if songsLoading}
-								<p class="music-muted">正在读取歌单…</p>
-							{:else if songsMessage}
-								<div class="music-list-status"><p class="music-muted">{songsMessage}</p><button class="music-quiet" type="button" on:click={() => void retryMusicLibrary()}>{playlists.length ? "重新加载歌曲" : "重新加载歌单"}</button></div>
-							{/if}
-							{#each songs as song}
-								<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
-									<span class="music-song-index">{currentSongLoading === song.hash ? "…" : String(songs.indexOf(song) + 1).padStart(2, "0")}</span>
-									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
-									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span><Icon icon={currentSongLoading === song.hash ? "material-symbols:more-horiz-rounded" : currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
-								</button>
-							{/each}
+						<div class="music-list-bar">
+							<span class="music-section-label">SONGS / PLAYLIST</span>
+							<button class="music-quiet" type="button" on:click={() => (songsCollapsed = !songsCollapsed)}>{songsCollapsed ? "展开歌曲" : "收起歌曲"}</button>
 						</div>
+						{#if !songsCollapsed}
+							<div class="music-song-list" aria-label="歌曲列表">
+								{#if songsLoading}
+									<p class="music-muted">正在读取歌单…</p>
+								{:else if songsMessage}
+									<div class="music-list-status"><p class="music-muted">{songsMessage}</p><button class="music-quiet" type="button" on:click={() => void retryMusicLibrary()}>{playlists.length ? "重新加载歌曲" : "重新加载歌单"}</button></div>
+								{/if}
+								{#each songs as song}
+									<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
+										<span class="music-song-index">{currentSongLoading === song.hash ? "…" : String(songs.indexOf(song) + 1).padStart(2, "0")}</span>
+										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
+										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span><Icon icon={currentSongLoading === song.hash ? "material-symbols:more-horiz-rounded" : currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
+									</button>
+								{/each}
+							</div>
+						{/if}
 					{/if}
 					{#if addTargetSong}
 						<div class="music-add-song-card"><div><span class="music-section-label">ADD TO PLAYLIST</span><strong>{addTargetSong.name}</strong></div><select bind:value={addTargetPlaylistId} aria-label="选择目标歌单">{#each playlists as playlist}<option value={String(playlist.listid)}>{playlist.name}</option>{/each}</select><div class="music-actions"><button class="music-quiet" type="button" on:click={() => (addTargetSong = null)}>取消</button><button class="music-primary music-primary--small" type="button" disabled={addBusy} on:click={() => void addSongToPlaylist()}>{addBusy ? "添加中…" : "确认添加"}</button></div></div>
@@ -1166,6 +1174,7 @@
 	.music-recommend-box { max-height: 14rem; margin-top: 0.45rem; padding: 0.35rem; overflow: auto; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 80%, transparent); border-radius: 0.8rem; background: color-mix(in oklch, var(--page-bg, #f8fafc) 72%, transparent); }
 	.music-recommend-list { display: grid; gap: 0.2rem; }
 	.music-playlist-field { margin-top: 0.65rem; }
+	.music-list-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.65rem; }
 	.music-search-box { display: grid; gap: 0.25rem; margin-top: 0.75rem; }
 	.music-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.35rem; align-items: center; }
 	.music-search-row input, .music-search-row select, .music-add-song-card select { min-width: 0; min-height: 2rem; padding: 0.35rem 0.5rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.55rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.68rem; }
