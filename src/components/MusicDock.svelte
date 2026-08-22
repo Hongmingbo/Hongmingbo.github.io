@@ -4,6 +4,7 @@
 	import MusicRiskVerify from "./MusicRiskVerify.svelte";
 	import {
 		getShanghaiDateKey,
+		isCurrentLyricsRequest,
 		MusicApiClient,
 		MusicApiError,
 		MusicRiskVerifyError,
@@ -80,6 +81,9 @@
 	let lyricsLines: Array<{ time: number | null; text: string }> = [];
 	let activeLyricIndex = -1;
 	let lyricsMessage = "点击“歌词”加载当前歌曲歌词";
+	let lyricsRequestGeneration = 0;
+	const lyricsCache = new Map<string, Array<{ time: number | null; text: string }>>();
+	const lyricsPending = new Map<string, Promise<Array<{ time: number | null; text: string }>>>();
 	let vipState: VipState = "idle";
 	let vipMessage = "登录后自动检查今日权益";
 	let notice = "";
@@ -352,12 +356,20 @@
 			const audioUrl = await client.getStreamUrl(song.hash);
 			if (!audioUrl) throw new MusicApiError("BFF 播放流不可用");
 			currentSong = song;
+			lyricsRequestGeneration = generation;
+			lyricsLines = [];
+			activeLyricIndex = -1;
+			if (lyricsOpen) {
+				lyricsLoading = true;
+				lyricsMessage = "正在加载歌词…";
+			}
 			audio.src = audioUrl;
 			audio.currentTime = 0;
 			await audio.play();
 			if (generation !== playGeneration) return;
 			updateMediaSession();
 			scrollActiveTrackIntoView();
+			void prefetchLyrics(song, generation);
 			void claimDailyVip();
 		} catch (error) {
 			if (error instanceof MusicRiskVerifyError) {
@@ -526,20 +538,63 @@
 		});
 	};
 
-	const loadLyrics = async () => {
-		if (!client || !currentSong) return;
-			lyricsOpen = true;
-			lyricsLoading = true;
-			activeLyricIndex = -1;
-			lyricsMessage = "正在加载歌词…";
+	const requestLyricsForSong = (song: MusicSong): Promise<Array<{ time: number | null; text: string }>> => {
+		if (!client) return Promise.reject(new MusicApiError("音乐服务尚未配置"));
+		const cached = lyricsCache.get(song.hash);
+		if (cached) return Promise.resolve(cached);
+		const pending = lyricsPending.get(song.hash);
+		if (pending) return pending;
+
+		const requestClient = client;
+		const pendingRequest = requestClient.getLyrics(song.hash)
+			.then(parseLyrics)
+			.then((lines) => {
+				lyricsCache.set(song.hash, lines);
+				if (lyricsCache.size > 48) lyricsCache.delete(lyricsCache.keys().next().value ?? "");
+				return lines;
+			})
+			.finally(() => lyricsPending.delete(song.hash));
+		lyricsPending.set(song.hash, pendingRequest);
+		return pendingRequest;
+	};
+
+	const prefetchLyrics = async (song: MusicSong, generation: number) => {
 		try {
-			lyricsLines = parseLyrics(await client.getLyrics(currentSong.hash));
-			lyricsMessage = lyricsLines.length > 0 ? "" : "没有返回可显示的歌词";
+			const lines = await requestLyricsForSong(song);
+			if (!isCurrentLyricsRequest(song.hash, currentSong?.hash, generation, lyricsRequestGeneration)) return;
+			if (lyricsOpen) {
+				lyricsLines = lines;
+				lyricsMessage = lines.length > 0 ? "" : "没有返回可显示的歌词";
+				lyricsLoading = false;
+				updateActiveLyric();
+			}
 		} catch (error) {
+			if (!isCurrentLyricsRequest(song.hash, currentSong?.hash, generation, lyricsRequestGeneration) || !lyricsOpen) return;
+			lyricsLines = [];
+			lyricsMessage = errorMessage(error, "歌词加载失败");
+			lyricsLoading = false;
+		}
+	};
+
+	const loadLyrics = async () => {
+		const song = currentSong;
+		const generation = lyricsRequestGeneration;
+		if (!song || !client) return;
+		lyricsOpen = true;
+		lyricsLoading = true;
+		lyricsMessage = "正在加载歌词…";
+		try {
+			const lines = await requestLyricsForSong(song);
+			if (!isCurrentLyricsRequest(song.hash, currentSong?.hash, generation, lyricsRequestGeneration)) return;
+			lyricsLines = lines;
+			lyricsMessage = lines.length > 0 ? "" : "没有返回可显示的歌词";
+			updateActiveLyric();
+		} catch (error) {
+			if (!isCurrentLyricsRequest(song.hash, currentSong?.hash, generation, lyricsRequestGeneration)) return;
 			lyricsLines = [];
 			lyricsMessage = errorMessage(error, "歌词加载失败");
 		} finally {
-			lyricsLoading = false;
+			if (isCurrentLyricsRequest(song.hash, currentSong?.hash, generation, lyricsRequestGeneration)) lyricsLoading = false;
 		}
 	};
 
@@ -1141,7 +1196,8 @@
 	.music-song-info small { color: var(--text-50, rgb(100 116 139)); font-size: 0.64rem; }
 	.music-song > :global(svg) { color: var(--primary); font-size: 1.1rem; }
 	.music-secondary-actions { justify-content: flex-end; margin-top: 0.5rem; }
-	.music-lyrics { max-height: 15rem; margin-top: 0.55rem; padding: 3.2rem 0.45rem; overflow: auto; scroll-padding-block: 5.5rem; scroll-behavior: smooth; border: 1px solid color-mix(in oklch, var(--primary) 10%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: linear-gradient(180deg, color-mix(in oklch, var(--primary) 4%, var(--page-bg, #f8fafc)), color-mix(in oklch, var(--page-bg, #f8fafc) 90%, transparent)); }
+	.music-lyrics { max-height: 15rem; margin-top: 0.55rem; padding: 3.2rem 0.45rem; overflow: auto; scroll-padding-block: 5.5rem; scroll-behavior: smooth; scrollbar-width: none; border: 1px solid color-mix(in oklch, var(--primary) 10%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: linear-gradient(180deg, color-mix(in oklch, var(--primary) 4%, var(--page-bg, #f8fafc)), color-mix(in oklch, var(--page-bg, #f8fafc) 90%, transparent)); }
+	.music-lyrics::-webkit-scrollbar { display: none; }
 	.music-lyrics ul { display: grid; gap: 0.22rem; margin: 0; padding: 0; list-style: none; }
 	.music-lyric { display: block; width: 100%; padding: 0.42rem 0.72rem; border: 0; border-radius: 0.55rem; color: var(--text-40, rgb(148 163 184)); background: transparent; font: inherit; font-size: 0.76rem; line-height: 1.75; opacity: 0.52; transform: scale(0.98); text-align: center; cursor: pointer; transition: color 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), background 220ms ease, opacity 220ms ease, transform 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-lyric:disabled { cursor: default; }

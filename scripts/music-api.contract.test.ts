@@ -10,6 +10,7 @@ import {
 	normalizePlaylists,
 	normalizeSongs,
 	parseLyricsText,
+	isCurrentLyricsRequest,
 	shuffleSongs,
 	isSongInPlaylist,
 	responseData,
@@ -59,6 +60,9 @@ assert.deepEqual(parsedKrc, [
 	{ time: 39.674, text: "北风" },
 	{ time: 62.5, text: "普通歌词" },
 ]);
+assert.equal(isCurrentLyricsRequest("A", "A", 3, 3), true);
+assert.equal(isCurrentLyricsRequest("A", "B", 3, 3), false);
+assert.equal(isCurrentLyricsRequest("A", "A", 2, 3), false);
 const shuffleSource = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const shuffledOnce = shuffleSongs(shuffleSource);
 const shuffledTwice = shuffleSongs(shuffleSource);

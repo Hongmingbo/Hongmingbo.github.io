@@ -276,6 +276,10 @@ const parseLrcSeconds = (minutes: string, seconds: string, fraction = ""): numbe
 	return Number(minutes) * 60 + Number(seconds) + fractionValue;
 };
 
+export const isCurrentLyricsRequest = (requestedHash: string, currentHash: string | undefined, requestGeneration: number, currentGeneration: number): boolean => (
+	requestedHash === currentHash && requestGeneration === currentGeneration
+);
+
 /** Convert LRC/KRC text into clean line-level timestamps for the player UI. */
 export const parseLyricsText = (raw: string): MusicLyricLine[] => {
 	const lines: MusicLyricLine[] = [];
