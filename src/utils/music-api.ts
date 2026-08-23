@@ -244,6 +244,22 @@ export const normalizeSongs = (payload: unknown): MusicSong[] => {
 		});
 };
 
+export type PlayMode = "order" | "list" | "one" | "shuffle";
+
+export const PLAY_MODE_ORDER: PlayMode[] = ["order", "list", "one", "shuffle"];
+
+export const nextPlayMode = (mode: PlayMode): PlayMode => {
+	const index = PLAY_MODE_ORDER.indexOf(mode);
+	return PLAY_MODE_ORDER[(index + 1) % PLAY_MODE_ORDER.length];
+};
+
+/** 迁移旧播放器独立的 shuffle/repeat 状态为统一播放模式。 */
+export const normalizePlayMode = (shuffle: boolean, repeat: "list" | "one" | "off"): PlayMode => {
+	if (shuffle) return "shuffle";
+	if (repeat === "one") return "one";
+	return "list";
+};
+
 export const isSongInPlaylist = (hash: string, songs: MusicSong[]): boolean => songs.some((song) => song.hash === hash);
 
 /** Deterministic Fisher–Yates shuffle with optional seed. Never mutates the input. */

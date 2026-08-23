@@ -11,6 +11,8 @@ import {
 	normalizeSongs,
 	parseLyricsText,
 	isCurrentLyricsRequest,
+	nextPlayMode,
+	normalizePlayMode,
 	shuffleSongs,
 	isSongInPlaylist,
 	responseData,
@@ -63,6 +65,14 @@ assert.deepEqual(parsedKrc, [
 assert.equal(isCurrentLyricsRequest("A", "A", 3, 3), true);
 assert.equal(isCurrentLyricsRequest("A", "B", 3, 3), false);
 assert.equal(isCurrentLyricsRequest("A", "A", 2, 3), false);
+assert.equal(nextPlayMode("order"), "list");
+assert.equal(nextPlayMode("list"), "one");
+assert.equal(nextPlayMode("one"), "shuffle");
+assert.equal(nextPlayMode("shuffle"), "order");
+assert.equal(normalizePlayMode(true, "list"), "shuffle");
+assert.equal(normalizePlayMode(false, "one"), "one");
+assert.equal(normalizePlayMode(false, "off"), "list");
+assert.equal(normalizePlayMode(false, "list"), "list");
 const shuffleSource = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const shuffledOnce = shuffleSongs(shuffleSource);
 const shuffledTwice = shuffleSongs(shuffleSource);

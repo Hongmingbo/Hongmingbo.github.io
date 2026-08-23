@@ -11,6 +11,8 @@
 		MUSIC_BFF_ORIGIN,
 		isSongInPlaylist,
 		musicErrorMessage,
+		nextPlayMode,
+		normalizePlayMode,
 		normalizeApiBaseUrl,
 		parseLyricsText,
 		runDailyVipFlow,
@@ -18,12 +20,14 @@
 		type MusicSession,
 		type MusicPlaylist,
 		type MusicSong,
+		type PlayMode,
 	} from "@utils/music-api";
 
 	type ApiStatus = "idle" | "connecting" | "ready" | "error";
 	type LoginMode = "qr" | "phone" | "password";
 	type VipState = "idle" | "checking" | "claimed" | "risk" | "error";
 	type SearchScope = "all" | "playlist";
+	type PanelTab = "songs" | "discover" | "lyrics";
 
 	const VIP_DATE_PREFIX = "hengduo-music-vip-date:";
 	const SHUFFLE_KEY = "hengduo-music-shuffle";
@@ -79,6 +83,8 @@
 	let volume = 0.7;
 	let lyricsOpen = false;
 	let lyricsLoading = false;
+	let panelTab: PanelTab = "songs";
+	let fullscreen = false;
 	let lyricsLines: Array<{ time: number | null; text: string }> = [];
 	let activeLyricIndex = -1;
 	let lyricsMessage = "点击“歌词”加载当前歌曲歌词";
@@ -91,8 +97,7 @@
 	let riskChallenge: import("@utils/music-api").MusicRiskChallenge | null = null;
 	let riskSong: MusicSong | null = null;
 	let pendingRiskSong: MusicSong | null = null;
-	let shuffleEnabled = false;
-	let repeatMode: "list" | "one" | "off" = "list";
+	let playMode: PlayMode = "list";
 	let playGeneration = 0;
 	let qrTimer: ReturnType<typeof setInterval> | null = null;
 	let qrBusy = false;
@@ -432,7 +437,7 @@
 
 	const playNext = async () => {
 		if (!currentSong || songs.length === 0) return;
-		if (shuffleEnabled && songs.length > 1) {
+		if (playMode === "shuffle" && songs.length > 1) {
 			let nextIndex = Math.floor(Math.random() * songs.length);
 			const currentIndexNow = songs.findIndex((song) => song.hash === currentSong?.hash);
 			if (nextIndex === currentIndexNow) nextIndex = (nextIndex + 1) % songs.length;
@@ -448,16 +453,11 @@
 		openAddSong(currentSong);
 	};
 
-	const toggleShuffle = () => {
-		shuffleEnabled = !shuffleEnabled;
-		localStorage.setItem(SHUFFLE_KEY, shuffleEnabled ? "1" : "0");
-		setNotice(shuffleEnabled ? "随机播放已开启" : "随机播放已关闭");
-	};
-
 	const cycleRepeat = () => {
-		repeatMode = repeatMode === "list" ? "one" : repeatMode === "one" ? "off" : "list";
-		localStorage.setItem(REPEAT_KEY, repeatMode);
-		setNotice(repeatMode === "list" ? "列表循环" : repeatMode === "one" ? "单曲循环" : "顺序播放");
+		playMode = nextPlayMode(playMode);
+		localStorage.setItem(REPEAT_KEY, playMode);
+		const label = playMode === "list" ? "列表循环" : playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : "顺序播放";
+		setNotice(label);
 	};
 
 	const scrollActiveTrackIntoView = () => {
@@ -533,7 +533,7 @@
 		if (idx === activeLyricIndex) return;
 		activeLyricIndex = idx;
 		requestAnimationFrame(() => {
-			const container = document.querySelector<HTMLElement>(".music-lyrics");
+			const container = document.querySelector<HTMLElement>(".music-lyrics, .music-fullscreen__lyrics");
 			const active = container?.querySelector<HTMLElement>(".music-lyric--active");
 			active?.scrollIntoView({ block: "center", behavior: "smooth" });
 		});
@@ -575,6 +575,16 @@
 			lyricsMessage = errorMessage(error, "歌词加载失败");
 			lyricsLoading = false;
 		}
+	};
+
+	const switchPanelTab = (tab: PanelTab) => {
+		panelTab = tab;
+		if (tab === "lyrics" && currentSong && !lyricsOpen && !lyricsLoading) void loadLyrics();
+	};
+
+	const toggleFullscreen = () => {
+		fullscreen = !fullscreen;
+		if (fullscreen && currentSong && !lyricsOpen && !lyricsLoading) void loadLyrics();
 	};
 
 	const loadLyrics = async () => {
@@ -757,12 +767,23 @@
 	};
 
 	onMount(() => {
+		const onKeydown = (event: KeyboardEvent) => {
+			if (event.key === "Escape" && fullscreen) fullscreen = false;
+		};
+		window.addEventListener("keydown", onKeydown);
+		return () => window.removeEventListener("keydown", onKeydown);
+	});
+
+	onMount(() => {
 		apiUrl = normalizeApiBaseUrl(isDev && devApiUrl ? devApiUrl : MUSIC_BFF_ORIGIN);
 		const savedVolume = Number(localStorage.getItem("hengduo-music-volume"));
 		if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) volume = savedVolume;
-		shuffleEnabled = localStorage.getItem(SHUFFLE_KEY) === "1";
+		const savedShuffle = localStorage.getItem(SHUFFLE_KEY) === "1";
 		const savedRepeat = localStorage.getItem(REPEAT_KEY);
-		repeatMode = savedRepeat === "one" || savedRepeat === "off" ? savedRepeat : "list";
+		const savedRepeatMode = savedRepeat === "one" || savedRepeat === "off" ? savedRepeat : "list";
+		playMode = normalizePlayMode(savedShuffle, savedRepeatMode);
+		localStorage.setItem(REPEAT_KEY, playMode);
+		localStorage.removeItem(SHUFFLE_KEY);
 		audio = new Audio();
 		audio.crossOrigin = "use-credentials";
 		audio.preload = "metadata";
@@ -775,12 +796,12 @@
 		audio.addEventListener("play", () => (isPlaying = true));
 		audio.addEventListener("pause", () => (isPlaying = false));
 		audio.addEventListener("ended", () => {
-			if (repeatMode === "one" && currentSong) {
+			if (playMode === "one" && currentSong) {
 				audio.currentTime = 0;
 				void audio.play();
 				return;
 			}
-			if (repeatMode === "off") {
+			if (playMode === "order") {
 				const index = songs.findIndex((song) => song.hash === currentSong?.hash);
 				if (index === songs.length - 1) return;
 			}
@@ -813,13 +834,26 @@
 	{#if expanded}
 		<section class="music-panel" aria-label="音乐播放器">
 			<header class="music-panel__header">
-				<div>
+				<div class="music-panel-title">
 					<p class="music-kicker">PERSONAL RADIO</p>
 					<h2>音乐空间</h2>
+					<span class="music-title-status">{apiStatus === "ready" ? "SERVICE ONLINE" : "SERVICE OFFLINE"}</span>
 				</div>
-				<button class="music-icon-button" type="button" aria-label="关闭音乐面板" on:click={() => (expanded = false)}>
-					<Icon icon="material-symbols:close-rounded" />
-				</button>
+				<div class="music-panel-actions">
+					<span class="music-header-account">{auth ? (auth.nickname ?? `酷狗用户 ${auth.userid}`) : "未登录"}</span>
+					{#if currentSong}
+						<button class="music-icon-button" type="button" aria-label="全屏播放" title="全屏播放" on:click={toggleFullscreen}><Icon icon="material-symbols:fullscreen-rounded" /></button>
+					{/if}
+					{#if auth}
+						<button class="music-icon-button" type="button" aria-label="退出登录" title="退出登录" on:click={logout}><Icon icon="material-symbols:logout-rounded" /></button>
+					{:else}
+						<button class="music-quiet music-quiet--tiny" type="button" on:click={() => (showLogin = true)}>登录</button>
+					{/if}
+					<button class="music-icon-button" type="button" aria-label="音乐服务设置" on:click={() => (showSettings = true)}><Icon icon="material-symbols:tune-rounded" /></button>
+					<button class="music-icon-button" type="button" aria-label="关闭音乐面板" on:click={() => (expanded = false)}>
+						<Icon icon="material-symbols:close-rounded" />
+					</button>
+				</div>
 			</header>
 
 			{#if notice}
@@ -872,14 +906,13 @@
 						<span>{formatTime(duration)}</span>
 					</div>
 					<div class="music-controls">
-						<button class:music-mode-button--active={shuffleEnabled} class="music-icon-button music-mode-button" type="button" aria-label={shuffleEnabled ? "关闭随机播放" : "开启随机播放"} title="随机播放" on:click={toggleShuffle}><Icon icon="material-symbols:shuffle-rounded" /></button>
 						<button class="music-icon-button" type="button" aria-label="上一首" on:click={playPrevious}><Icon icon="material-symbols:skip-previous-rounded" /></button>
 						<button class:music-play-button--playing={isPlaying} class="music-play-button" type="button" aria-label={isPlaying ? "暂停" : "播放"} on:click={togglePlay}>
 							<Icon icon={isPlaying ? "material-symbols:pause-rounded" : "material-symbols:play-arrow-rounded"} />
 						</button>
 						<button class="music-icon-button" type="button" aria-label="下一首" on:click={playNext}><Icon icon="material-symbols:skip-next-rounded" /></button>
-						<button class:music-mode-button--active={repeatMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label={repeatMode === "list" ? "切换到单曲循环" : repeatMode === "one" ? "切换到顺序播放" : "切换到列表循环"} title={repeatMode === "one" ? "单曲循环" : repeatMode === "off" ? "顺序播放" : "列表循环"} on:click={cycleRepeat}>
-							<Icon icon={repeatMode === "one" ? "material-symbols:repeat-one-rounded" : "material-symbols:repeat-rounded"} />
+						<button class:music-mode-button--active={playMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label="切换播放模式" title={playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : playMode === "order" ? "顺序播放" : "列表循环"} on:click={cycleRepeat}>
+							<Icon icon={playMode === "one" ? "material-symbols:repeat-one-rounded" : playMode === "shuffle" ? "material-symbols:shuffle-rounded" : playMode === "order" ? "material-symbols:format-list-numbered-rounded" : "material-symbols:repeat-rounded"} />
 						</button>
 					</div>
 					<div class="music-volume-row">
@@ -891,25 +924,17 @@
 					</div>
 				</div>
 
-				<div class="music-account-row">
-					<div>
-						<span class="music-section-label">ACCOUNT / ACCESS</span>
-						<strong>{auth ? (auth.nickname ?? `酷狗用户 ${auth.userid}`) : "未登录"}</strong>
-					</div>
-					<div class="music-actions">
-						{#if auth}
-							<button class="music-quiet" type="button" on:click={() => void claimDailyVip()}>{vipState === "checking" ? "检查中…" : "检查今日 VIP"}</button>
-							<button class="music-quiet" type="button" on:click={logout}>退出</button>
-						{:else}
-							<button class="music-primary music-primary--small" type="button" on:click={() => (showLogin = true)}>登录酷狗</button>
-						{/if}
-						<button class="music-icon-button" type="button" aria-label="音乐服务设置" on:click={() => (showSettings = true)}><Icon icon="material-symbols:tune-rounded" /></button>
-					</div>
-				</div>
 				<div class="music-vip-state" class:music-vip-state--ok={vipState === "claimed"} class:music-vip-state--risk={vipState === "risk"}>
 					<span class="music-state-dot"></span>
 					<span>{vipMessage}</span>
 				</div>
+				<div class="music-tabs" role="tablist" aria-label="面板分区">
+					<button class:music-tab--active={panelTab === "songs"} class="music-tab" type="button" role="tab" aria-selected={panelTab === "songs"} on:click={() => (panelTab = "songs")}>歌单</button>
+					<button class:music-tab--active={panelTab === "discover"} class="music-tab" type="button" role="tab" aria-selected={panelTab === "discover"} on:click={() => (panelTab = "discover")}>每日推荐</button>
+					<button class:music-tab--active={panelTab === "lyrics"} class="music-tab" type="button" role="tab" aria-selected={panelTab === "lyrics"} on:click={() => switchPanelTab("lyrics")}>歌词</button>
+				</div>
+
+				{#if panelTab === "discover"}
 				<div class="music-recommend-bar">
 					<div><span class="music-section-label">DISCOVER / TODAY</span><strong>每日推荐</strong></div>
 					<div class="music-actions">
@@ -933,6 +958,25 @@
 						{:else if dailyMessage}<p class="music-muted">{dailyMessage}</p>{/if}
 					</div>
 				{/if}
+				{:else if panelTab === "lyrics"}
+					<div class="music-lyrics-tab">
+						<div class="music-secondary-actions">
+							<button class="music-quiet" type="button" disabled={!currentSong || lyricsLoading} on:click={() => void loadLyrics()}>{lyricsLoading ? "歌词加载中…" : "重新加载歌词"}</button>
+							{#if lyricsLines.length > 0}<span class="music-muted">点击歌词行可跳转播放位置</span>{/if}
+						</div>
+						<div class="music-lyrics" aria-live="polite">
+							{#if lyricsLines.length > 0}
+								<ul>
+									{#each lyricsLines as line, i (i)}
+										<button class:music-lyric--active={i === activeLyricIndex} class:music-lyric--past={activeLyricIndex >= 0 && i < activeLyricIndex} class:music-lyric--next={i === activeLyricIndex + 1} class="music-lyric" type="button" disabled={line.time === null} on:click={() => seekToLyric(line.time)}>{line.text}</button>
+									{/each}
+								</ul>
+							{:else}
+								<p class="music-muted">{lyricsMessage}</p>
+							{/if}
+						</div>
+					</div>
+				{:else}
 
 				{#if auth}
 					<label class="music-field music-playlist-field">
@@ -988,30 +1032,61 @@
 					{#if addTargetSong}
 						<div class="music-add-song-card"><div><span class="music-section-label">ADD TO PLAYLIST</span><strong>{addTargetSong.name}</strong></div><select bind:value={addTargetPlaylistId} aria-label="选择目标歌单">{#each playlists as playlist}<option value={String(playlist.listid)}>{playlist.name}</option>{/each}</select><div class="music-actions"><button class="music-quiet" type="button" on:click={() => (addTargetSong = null)}>取消</button><button class="music-primary music-primary--small" type="button" disabled={addBusy} on:click={() => void addSongToPlaylist()}>{addBusy ? "添加中…" : "确认添加"}</button></div></div>
 					{/if}
-
-					<div class="music-secondary-actions">
-						<button class="music-quiet" type="button" disabled={!currentSong || lyricsLoading} on:click={() => void loadLyrics()}>{lyricsLoading ? "歌词加载中…" : "歌词"}</button>
-						{#if lyricsOpen}
-							<button class="music-quiet" type="button" on:click={() => (lyricsOpen = false)}>收起歌词</button>
-						{/if}
-					</div>
-					{#if lyricsOpen}
-						<div class="music-lyrics" aria-live="polite">
-							{#if lyricsLines.length > 0}
-								<ul>
-									{#each lyricsLines as line, i (i)}
-										<button class:music-lyric--active={i === activeLyricIndex} class:music-lyric--past={activeLyricIndex >= 0 && i < activeLyricIndex} class:music-lyric--next={i === activeLyricIndex + 1} class="music-lyric" type="button" disabled={line.time === null} on:click={() => seekToLyric(line.time)}>{line.text}</button>
-									{/each}
-								</ul>
-							{:else}
-								<p class="music-muted">{lyricsMessage}</p>
-							{/if}
-						</div>
-					{/if}
 				{/if}
+			{/if}
 			{/if}
 
 		</section>
+	{/if}
+
+	{#if fullscreen && currentSong}
+		<div class="music-fullscreen" role="dialog" aria-modal="true" aria-label="全屏播放">
+			{#if currentSong.img}<div class="music-fullscreen__bg" style={`background-image:url(${currentSong.img})`} aria-hidden="true"></div>{/if}
+			<div class="music-fullscreen__scrim" aria-hidden="true"></div>
+			<button class="music-fullscreen__close" type="button" aria-label="退出全屏" title="退出全屏 (Esc)" on:click={() => (fullscreen = false)}><Icon icon="material-symbols:fullscreen-exit-rounded" /></button>
+			<div class="music-fullscreen__content">
+				<div class="music-fullscreen__left">
+					{#if currentSong.img}
+						<img class="music-fullscreen__cover" src={currentSong.img} alt="当前歌曲封面" />
+					{:else}
+						<div class="music-fullscreen__cover music-fullscreen__cover--empty"><Icon icon="material-symbols:radio-outline-rounded" /></div>
+					{/if}
+					<div class="music-fullscreen__copy">
+						<strong>{currentSong.name}</strong>
+						<span>{currentSong.author}</span>
+					</div>
+					<div class="music-progress-row">
+						<span>{formatTime(currentTime)}</span>
+						<input aria-label="播放进度" type="range" min="0" max="100" value={progressPercent} on:input={seek} />
+						<span>{formatTime(duration)}</span>
+					</div>
+					<div class="music-controls">
+						<button class="music-icon-button" type="button" aria-label="收藏" title={isFavorite ? "已在当前歌单" : "添加到歌单"} on:click={toggleFavorite}><Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+						<button class="music-icon-button" type="button" aria-label="上一首" on:click={playPrevious}><Icon icon="material-symbols:skip-previous-rounded" /></button>
+						<button class:music-play-button--playing={isPlaying} class="music-play-button" type="button" aria-label={isPlaying ? "暂停" : "播放"} on:click={togglePlay}>
+							<Icon icon={isPlaying ? "material-symbols:pause-rounded" : "material-symbols:play-arrow-rounded"} />
+						</button>
+						<button class="music-icon-button" type="button" aria-label="下一首" on:click={playNext}><Icon icon="material-symbols:skip-next-rounded" /></button>
+						<button class:music-mode-button--active={playMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label="切换播放模式" title={playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : playMode === "order" ? "顺序播放" : "列表循环"} on:click={cycleRepeat}>
+							<Icon icon={playMode === "one" ? "material-symbols:repeat-one-rounded" : playMode === "shuffle" ? "material-symbols:shuffle-rounded" : playMode === "order" ? "material-symbols:format-list-numbered-rounded" : "material-symbols:repeat-rounded"} />
+						</button>
+					</div>
+				</div>
+				<div class="music-fullscreen__right">
+					<div class="music-fullscreen__lyrics" aria-live="polite">
+						{#if lyricsLines.length > 0}
+							<ul>
+								{#each lyricsLines as line, i (i)}
+									<button class:music-lyric--active={i === activeLyricIndex} class:music-lyric--past={activeLyricIndex >= 0 && i < activeLyricIndex} class:music-lyric--next={i === activeLyricIndex + 1} class="music-lyric music-lyric--fullscreen" type="button" disabled={line.time === null} on:click={() => seekToLyric(line.time)}>{line.text}</button>
+								{/each}
+							</ul>
+						{:else}
+							<p class="music-fullscreen__empty">{lyricsMessage || "还没有歌词"}</p>
+						{/if}
+					</div>
+				</div>
+			</div>
+		</div>
 	{/if}
 	{#if showLogin && apiStatus === "ready"}
 		<div class="music-login-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (showLogin = false)}>
@@ -1097,7 +1172,7 @@
 		transition: transform var(--ds-motion-base, 320ms) var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), box-shadow var(--ds-motion-base, 320ms) var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
 	}
 
-	.music-dock--open { width: min(28rem, calc(100vw - 2rem)); }
+	.music-dock--open { width: min(32rem, calc(100vw - 2rem)); }
 	.music-dock-trigger:hover { transform: translateY(-2px); box-shadow: 0 22px 48px -25px rgb(15 23 42 / 0.62), 0 0 0 1px color-mix(in oklch, var(--primary) 36%, transparent) inset; }
 	.music-trigger-icon { position: relative; display: grid; place-items: center; width: 3.4rem; height: 3.4rem; overflow: hidden; border-radius: 50%; color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 1.35rem; }
 	.music-trigger-icon:has(img)::before { position: absolute; inset: 0; z-index: 1; border-radius: 50%; background: linear-gradient(135deg, rgb(255 255 255 / 0.22), transparent 46%); pointer-events: none; content: ""; }
@@ -1110,8 +1185,52 @@
 	.music-trigger-copy small { overflow: hidden; color: var(--text-50, rgb(100 116 139)); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
 	:global(.music-trigger-chevron) { display: none; color: var(--primary); font-size: 1.25rem; }
 
-	.music-panel { position: relative; max-height: min(44rem, calc(100vh - 2rem)); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	.music-panel { position: relative; max-height: min(46rem, calc(100vh - 2rem)); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; }
+	.music-panel-title { display: grid; gap: 0.1rem; }
+	.music-panel-title .music-kicker { margin-bottom: 0; }
+	.music-title-status { color: var(--text-40, rgb(148 163 184)); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; }
+	.music-panel-actions { display: flex; align-items: center; gap: 0.3rem; }
+	.music-header-account { max-width: 7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-50, rgb(100 116 139)); font-size: 0.66rem; }
+	.music-quiet--tiny { min-height: 1.8rem; padding: 0.2rem 0.55rem; font-size: 0.66rem; }
+	.music-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; margin-top: 0.75rem; padding: 0.22rem; border-radius: 0.8rem; background: color-mix(in oklch, var(--primary) 7%, var(--card-border, #dce5e5)); }
+	.music-tab { min-height: 2rem; padding: 0.3rem 0.4rem; border: 0; border-radius: 0.6rem; color: var(--text-50, rgb(100 116 139)); background: transparent; font: inherit; font-size: 0.72rem; cursor: pointer; transition: color 200ms ease, background 200ms ease, box-shadow 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-tab:hover { color: var(--primary); }
+	.music-tab--active { color: var(--primary); background: var(--card-bg, #fff); box-shadow: 0 2px 8px -4px rgb(15 23 42 / 0.35); }
+	.music-lyrics-tab { margin-top: 0.65rem; }
+	.music-fullscreen { position: fixed; inset: 0; z-index: 990; display: flex; align-items: stretch; justify-content: center; overflow: hidden; }
+	.music-fullscreen__bg { position: absolute; inset: -3rem; background-size: cover; background-position: center; filter: blur(30px) saturate(1.2); opacity: 0.5; transform: scale(1.06); }
+	.music-fullscreen__scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgb(10 15 24 / 0.6), rgb(8 12 20 / 0.92)); }
+	.music-fullscreen__close { position: absolute; top: 1.1rem; right: 1.1rem; z-index: 2; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border: 0; border-radius: 50%; color: var(--text-90, #e2e8f0); background: rgb(255 255 255 / 0.1); cursor: pointer; font-size: 1.3rem; backdrop-filter: blur(8px); transition: background 200ms ease, transform 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-fullscreen__close:hover { background: rgb(255 255 255 / 0.22); transform: scale(1.06); }
+	.music-fullscreen__content { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(20rem, 34rem); gap: clamp(1.5rem, 4vw, 4rem); align-items: center; width: min(72rem, 100%); padding: clamp(1.5rem, 4vw, 3.5rem); }
+	.music-fullscreen__left { display: grid; gap: 1.1rem; justify-items: center; }
+	.music-fullscreen__cover { width: min(22rem, 52vw); aspect-ratio: 1; border-radius: 1.3rem; object-fit: cover; box-shadow: 0 30px 70px -28px rgb(0 0 0 / 0.75); }
+	.music-fullscreen__cover--empty { display: grid; place-items: center; color: var(--primary); background: color-mix(in oklch, var(--primary) 16%, transparent); font-size: 4.5rem; }
+	.music-fullscreen__copy { display: grid; gap: 0.3rem; text-align: center; }
+	.music-fullscreen__copy strong { max-width: 24rem; overflow: hidden; color: #f8fafc; font-size: 1.15rem; text-overflow: ellipsis; white-space: nowrap; }
+	.music-fullscreen__copy span { color: rgb(203 213 225); font-size: 0.85rem; }
+	.music-fullscreen__left .music-progress-row { width: 100%; max-width: 22rem; }
+	.music-fullscreen__left .music-controls { margin-top: 0.2rem; }
+	.music-fullscreen__left .music-icon-button { width: 2.6rem; height: 2.6rem; color: var(--text-90, #e2e8f0); background: rgb(255 255 255 / 0.08); font-size: 1.25rem; backdrop-filter: blur(8px); }
+	.music-fullscreen__left .music-play-button { width: 3.6rem; height: 3.6rem; font-size: 1.8rem; }
+	.music-fullscreen__right { min-height: 0; display: flex; justify-content: center; }
+	.music-fullscreen__lyrics { width: 100%; max-width: 34rem; max-height: 100%; overflow-y: auto; scrollbar-width: none; scroll-behavior: smooth; padding: 2.6rem 0.6rem; }
+	.music-fullscreen__lyrics::-webkit-scrollbar { display: none; }
+	.music-fullscreen__lyrics ul { display: grid; gap: 0.7rem; margin: 0; padding: 0; list-style: none; }
+	.music-lyric--fullscreen { padding: 0.5rem 0.9rem; font-size: 1.05rem; line-height: 1.8; opacity: 0.42; }
+	.music-fullscreen .music-lyric { color: rgb(226 232 240); }
+	.music-fullscreen .music-lyric--active { color: var(--primary); opacity: 1; }
+	.music-fullscreen .music-progress-row span { color: rgb(203 213 225); }
+	.music-fullscreen .music-progress-row input { accent-color: var(--primary); }
+	.music-fullscreen__empty { color: var(--text-50, rgb(148 163 184)); font-size: 0.9rem; text-align: center; }
+	@media (max-width: 860px) {
+		.music-fullscreen__content { grid-template-columns: 1fr; gap: 1.4rem; align-content: start; align-items: center; overflow-y: auto; text-align: center; }
+		.music-fullscreen__cover { width: min(14rem, 60vw); }
+		.music-fullscreen__right { width: 100%; }
+		.music-fullscreen__lyrics { max-height: 40vh; padding: 1.2rem 0.4rem; }
+		.music-lyric--fullscreen { font-size: 0.92rem; }
+	}
 	.music-panel__header h2 { margin: 0.15rem 0 0; font-size: 1.25rem; line-height: 1.2; }
 	.music-kicker, .music-section-label { margin: 0; color: var(--primary); font-family: var(--font-mono, monospace); font-size: 0.62rem; letter-spacing: 0.13em; }
 	.music-section-label { display: block; margin-bottom: 0.35rem; color: var(--text-50, rgb(100 116 139)); }
