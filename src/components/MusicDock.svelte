@@ -32,6 +32,7 @@
 	type SearchScope = "all" | "playlist";
 	type PanelTab = "songs" | "discover";
 	type LibrarySort = "default" | "title" | "artist";
+	type LibraryView = "library" | "daily";
 
 	const VIP_DATE_PREFIX = "hengduo-music-vip-date:";
 	const SHUFFLE_KEY = "hengduo-music-shuffle";
@@ -72,7 +73,6 @@
 	let searchResults: MusicSong[] = [];
 	let dailySongs: MusicSong[] = [];
 	let dailyLoading = false;
-	let dailyOpen = false;
 	let dailyMessage = "点击加载今日推荐";
 	let addTargetSong: MusicSong | null = null;
 	let addTargetPlaylistId = "";
@@ -91,6 +91,7 @@
 	let libraryOpen = false;
 	let libraryPage = 1;
 	let librarySort: LibrarySort = "default";
+	let libraryView: LibraryView = "library";
 	let lyricsLines: Array<{ time: number | null; text: string }> = [];
 	let activeLyricIndex = -1;
 	let lyricsMessage = "点击“歌词”加载当前歌曲歌词";
@@ -119,6 +120,9 @@
 	$: librarySortedSongs = sortSongs(librarySourceSongs, librarySort);
 	$: libraryTotalPages = Math.max(1, Math.ceil(librarySortedSongs.length / 10));
 	$: libraryPageSongs = paginateSongs(librarySortedSongs, Math.min(libraryPage, libraryTotalPages), 10);
+	$: dailySortedSongs = sortSongs(dailySongs, librarySort);
+	$: dailyTotalPages = Math.max(1, Math.ceil(dailySortedSongs.length / 10));
+	$: dailyPageSongs = paginateSongs(dailySortedSongs, Math.min(libraryPage, dailyTotalPages), 10);
 
 	const isAllowedApiOrigin = (value: string): boolean => {
 		const normalized = normalizeApiBaseUrl(value);
@@ -327,11 +331,19 @@
 
 	const openLibrary = () => {
 		libraryOpen = true;
+		libraryView = "library";
 		libraryPage = 1;
 		searchQuery = "";
 		searchScope = "playlist";
 		searchResults = [];
 		searchMessage = "搜索全网歌曲，结果不会自动加入歌单";
+	};
+
+	const openDailyModal = () => {
+		libraryOpen = true;
+		libraryView = "daily";
+		libraryPage = 1;
+		if (dailySongs.length === 0 && !dailyLoading) void loadDailyRecommendations();
 	};
 
 	const closeLibrary = () => {
@@ -524,7 +536,6 @@
 
 	const loadDailyRecommendations = async () => {
 		if (!client || dailyLoading) return;
-		dailyOpen = true;
 		dailyLoading = true;
 		dailyMessage = "正在读取今日推荐…";
 		try {
@@ -979,55 +990,33 @@
 					</div>
 				</div>
 
-				<div class="music-tabs" role="tablist" aria-label="面板分区">
-					<button class:music-tab--active={panelTab === "songs"} class="music-tab" type="button" role="tab" aria-selected={panelTab === "songs"} on:click={() => (panelTab = "songs")}>歌单</button>
-					<button class:music-tab--active={panelTab === "discover"} class="music-tab" type="button" role="tab" aria-selected={panelTab === "discover"} on:click={() => (panelTab = "discover")}>每日推荐</button>
-				</div>
-
-				{#if panelTab === "discover"}
-				<div class="music-recommend-bar">
-					<div><span class="music-section-label">DISCOVER / TODAY</span><strong>每日推荐</strong></div>
-					<div class="music-actions">
-						{#if dailyOpen}<button class="music-quiet" type="button" on:click={() => (dailyOpen = false)}>收起推荐</button>{/if}
-						<button class="music-quiet" type="button" disabled={dailyLoading || dailySongs.length === 0} on:click={reshuffleDailyRecommendations}>{dailyLoading ? "加载中…" : "换一批"}</button>
-						<button class="music-quiet" type="button" disabled={dailyLoading} on:click={() => void loadDailyRecommendations()}>{dailyLoading ? "加载中…" : dailyOpen ? "刷新推荐" : "打开推荐"}</button>
-					</div>
-				</div>
-				{#if dailyOpen}
-					<div class="music-recommend-box" aria-label="每日推荐歌曲">
-						{#if dailySongs.length > 0}
-							<div class="music-recommend-list">
-								{#each dailySongs as song, i}
-									<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
-										<span class="music-song-index">{String(i + 1).padStart(2, "0")}</span>
-										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
-										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span><Icon icon="material-symbols:play-arrow-rounded" />
-									</button>
-								{/each}
+				<div class="music-entry-grid">
+					<div class="music-entry-card">
+						<div><span class="music-section-label">LIBRARY</span><strong>我的歌单</strong><small class="music-muted">{songsLoading ? "正在读取…" : `${songs.length} 首歌曲`}</small></div>
+						{#if auth}
+							<div class="music-entry-card__body">
+								<select bind:value={selectedPlaylistId} on:change={onPlaylistChange} aria-label="选择当前歌单">
+									{#each playlists as playlist}
+										<option value={String(playlist.listid)}>{playlist.name}</option>
+									{/each}
+								</select>
+								<button class="music-primary music-primary--small" type="button" on:click={openLibrary}>歌曲库</button>
 							</div>
-						{:else if dailyMessage}<p class="music-muted">{dailyMessage}</p>{/if}
+						{:else}
+							<div class="music-entry-card__body">
+								<span class="music-muted">登录后管理歌单</span>
+								<button class="music-primary music-primary--small" type="button" on:click={() => (showLogin = true)}>登录酷狗</button>
+							</div>
+						{/if}
 					</div>
-				{/if}
-				{:else}
-					{#if auth}
-					<div class="music-library-summary">
-						<label class="music-field music-playlist-field">
-							<span>当前歌单</span>
-							<select bind:value={selectedPlaylistId} on:change={onPlaylistChange}>
-								{#each playlists as playlist}
-									<option value={String(playlist.listid)}>{playlist.name}</option>
-								{/each}
-							</select>
-						</label>
-						<div class="music-library-summary__footer">
-							<span class="music-muted">{songsLoading ? "正在读取…" : `${songs.length} 首歌曲`}</span>
-							<button class="music-primary music-primary--small" type="button" on:click={openLibrary}>打开歌曲库</button>
+					<div class="music-entry-card">
+						<div><span class="music-section-label">DISCOVER / TODAY</span><strong>每日推荐</strong><small class="music-muted">{dailySongs.length > 0 ? `${dailySongs.length} 首今日推荐` : "每天 30 首新歌"}</small></div>
+						<div class="music-entry-card__body">
+							<span class="music-muted">{dailyLoading ? "正在读取…" : "为你挑选的每日新歌"}</span>
+							<button class="music-primary music-primary--small" type="button" disabled={dailyLoading} on:click={openDailyModal}>{dailyLoading ? "加载中…" : "打开推荐"}</button>
 						</div>
 					</div>
-				{:else}
-					<div class="music-list-status"><p class="music-muted">登录后管理你的歌单和歌曲</p><button class="music-primary music-primary--small" type="button" on:click={() => (showLogin = true)}>登录酷狗</button></div>
-				{/if}
-			{/if}
+				</div>
 			{/if}
 
 		</section>
@@ -1035,11 +1024,48 @@
 
 	{#if libraryOpen}
 		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && closeLibrary()}>
-			<section class="music-library-modal" role="dialog" aria-modal="true" aria-label="歌曲库">
-				<header class="music-library-header">
-					<div><p class="music-kicker">LIBRARY / SEARCH</p><h2>歌曲库</h2><span class="music-muted">{selectedPlaylistId ? playlists.find((playlist) => String(playlist.listid) === selectedPlaylistId)?.name : "我的音乐"}</span></div>
-					<button class="music-icon-button" type="button" aria-label="关闭歌曲库" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
-				</header>
+			<section class="music-library-modal" role="dialog" aria-modal="true" aria-label={libraryView === "daily" ? "每日推荐" : "歌曲库"}>
+				{#if libraryView === "daily"}
+					<header class="music-library-header">
+						<div><p class="music-kicker">DISCOVER / TODAY</p><h2>每日推荐</h2><span class="music-muted">{dailySongs.length > 0 ? `${dailySortedSongs.length} 首今日推荐` : "每天为你挑选 30 首新歌"}</span></div>
+						<button class="music-icon-button" type="button" aria-label="关闭每日推荐" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
+					</header>
+					<div class="music-library-toolbar">
+						<span class="music-muted">{dailyLoading ? "正在读取今日推荐…" : dailyMessage || `第 ${Math.min(libraryPage, dailyTotalPages)} / ${dailyTotalPages} 页`}</span>
+						<select value={librarySort} aria-label="推荐排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
+					</div>
+					<div class="music-library-list" aria-label="每日推荐列表">
+						{#if dailyLoading}
+							<p class="music-muted music-library-empty">正在加载今日推荐…</p>
+						{:else if dailyPageSongs.length > 0}
+							{#each dailyPageSongs as song, i}
+								<div class="music-library-row">
+									<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
+										<span class="music-song-index">{String((libraryPage - 1) * 10 + i + 1).padStart(2, "0")}</span>
+										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
+										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
+									</button>
+									<button class:music-search-favorite--active={isSongInPlaylist(song.hash, songs)} class="music-search-favorite" type="button" aria-label={isSongInPlaylist(song.hash, songs) ? `${song.name} 已在当前歌单` : `添加 ${song.name} 到歌单`} title={isSongInPlaylist(song.hash, songs) ? "已在当前歌单，可选择其他歌单" : "添加到歌单"} on:click={() => openAddSong(song)}><Icon icon={isSongInPlaylist(song.hash, songs) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+								</div>
+							{/each}
+						{:else}
+							<p class="music-muted music-library-empty">{dailyMessage || "今天暂时没有推荐歌曲"}</p>
+						{/if}
+					</div>
+					<div class="music-library-footer">
+						<span class="music-muted">第 {Math.min(libraryPage, dailyTotalPages)} / {dailyTotalPages} 页</span>
+						<div class="music-actions">
+							<button class="music-quiet" type="button" disabled={libraryPage <= 1} on:click={() => (libraryPage -= 1)}>上一页</button>
+							<button class="music-quiet" type="button" disabled={dailyLoading || dailySortedSongs.length === 0} on:click={() => { reshuffleDailyRecommendations(); libraryPage = 1; }}>{dailyLoading ? "加载中…" : "换一批"}</button>
+							<button class="music-quiet" type="button" disabled={dailyLoading} on:click={() => { libraryPage = 1; void loadDailyRecommendations(); }}>刷新</button>
+							<button class="music-quiet" type="button" disabled={libraryPage >= dailyTotalPages} on:click={() => (libraryPage += 1)}>下一页</button>
+						</div>
+					</div>
+				{:else}
+					<header class="music-library-header">
+						<div><p class="music-kicker">LIBRARY / SEARCH</p><h2>歌曲库</h2><span class="music-muted">{selectedPlaylistId ? playlists.find((playlist) => String(playlist.listid) === selectedPlaylistId)?.name : "我的音乐"}</span></div>
+						<button class="music-icon-button" type="button" aria-label="关闭歌曲库" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
+					</header>
 				<div class="music-library-search">
 					<input bind:value={searchQuery} aria-label="搜索歌曲库" placeholder="搜索歌曲名或歌手" on:keydown={(event) => event.key === "Enter" && void searchLibrary()} />
 					<select bind:value={searchScope} aria-label="搜索范围"><option value="playlist">当前歌单</option><option value="all">全网歌曲</option></select>
@@ -1076,6 +1102,7 @@
 				</div>
 				{#if addTargetSong}
 					<div class="music-add-song-card"><div><span class="music-section-label">ADD TO PLAYLIST</span><strong>{addTargetSong.name}</strong></div><select bind:value={addTargetPlaylistId} aria-label="选择目标歌单">{#each playlists as playlist}<option value={String(playlist.listid)}>{playlist.name}</option>{/each}</select><div class="music-actions"><button class="music-quiet" type="button" on:click={() => (addTargetSong = null)}>取消</button><button class="music-primary music-primary--small" type="button" disabled={addBusy} on:click={() => void addSongToPlaylist()}>{addBusy ? "添加中…" : "确认添加"}</button></div></div>
+				{/if}
 				{/if}
 			</section>
 		</div>
@@ -1243,6 +1270,13 @@
 	.music-tab:hover { color: var(--primary); }
 	.music-tab--active { color: var(--primary); background: var(--card-bg, #fff); box-shadow: 0 2px 8px -4px rgb(15 23 42 / 0.35); }
 	.music-lyrics-tab { margin-top: 0.65rem; }
+	.music-entry-grid { display: grid; gap: 0.6rem; margin-top: 0.8rem; }
+	.music-entry-card { display: grid; gap: 0.55rem; padding: 0.85rem; border: 1px solid color-mix(in oklch, var(--primary) 14%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: color-mix(in oklch, var(--primary) 5%, var(--card-bg, #fff)); }
+	.music-entry-card > div:first-child { display: grid; gap: 0.1rem; }
+	.music-entry-card strong { font-size: 0.86rem; }
+	.music-entry-card small { font-size: 0.66rem; }
+	.music-entry-card__body { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+	.music-entry-card__body select { min-width: 0; flex: 1; min-height: 2.25rem; padding: 0.4rem 0.55rem; border: 1px solid color-mix(in oklch, var(--primary) 26%, var(--card-border, #dce5e5)); border-radius: 0.6rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.72rem; }
 	.music-library-summary { display: grid; gap: 0.7rem; margin-top: 0.75rem; padding: 0.85rem; border: 1px solid color-mix(in oklch, var(--primary) 12%, var(--card-border, #dce5e5)); border-radius: 0.85rem; background: color-mix(in oklch, var(--primary) 4%, transparent); }
 	.music-library-summary__footer { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
 	.music-library-backdrop { position: fixed; inset: 0; z-index: 850; display: grid; place-items: center; padding: 1rem; background: rgb(8 12 20 / 0.42); backdrop-filter: blur(8px); animation: music-fade-in 180ms ease both; }
