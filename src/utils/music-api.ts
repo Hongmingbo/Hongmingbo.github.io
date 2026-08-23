@@ -244,6 +244,18 @@ export const normalizeSongs = (payload: unknown): MusicSong[] => {
 		});
 };
 
+export const paginateSongs = <T,>(items: T[], page: number, pageSize: number): T[] => {
+	const safePage = Math.max(1, Math.floor(page));
+	const safePageSize = Math.max(1, Math.floor(pageSize));
+	return items.slice((safePage - 1) * safePageSize, safePage * safePageSize);
+};
+
+export const sortSongs = (songs: MusicSong[], sort: "default" | "title" | "artist"): MusicSong[] => [...songs].sort((a, b) => {
+	if (sort === "title") return a.name.localeCompare(b.name, "zh-CN");
+	if (sort === "artist") return a.author.localeCompare(b.author, "zh-CN");
+	return 0;
+});
+
 export type PlayMode = "order" | "list" | "one" | "shuffle";
 
 export const PLAY_MODE_ORDER: PlayMode[] = ["order", "list", "one", "shuffle"];
@@ -295,6 +307,11 @@ const parseLrcSeconds = (minutes: string, seconds: string, fraction = ""): numbe
 export const isCurrentLyricsRequest = (requestedHash: string, currentHash: string | undefined, requestGeneration: number, currentGeneration: number): boolean => (
 	requestedHash === currentHash && requestGeneration === currentGeneration
 );
+
+export const centeredLyricScrollTop = (lineOffsetTop: number, lineHeight: number, containerHeight: number, scrollHeight: number): number => {
+	const target = lineOffsetTop - Math.max(0, (containerHeight - lineHeight) / 2);
+	return Math.max(0, Math.min(target, Math.max(0, scrollHeight - containerHeight)));
+};
 
 /** Convert LRC/KRC text into clean line-level timestamps for the player UI. */
 export const parseLyricsText = (raw: string): MusicLyricLine[] => {

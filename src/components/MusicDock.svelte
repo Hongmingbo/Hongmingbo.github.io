@@ -3,6 +3,7 @@
 	import Icon from "@iconify/svelte";
 	import MusicRiskVerify from "./MusicRiskVerify.svelte";
 	import {
+		centeredLyricScrollTop,
 		getShanghaiDateKey,
 		isCurrentLyricsRequest,
 		MusicApiClient,
@@ -15,7 +16,9 @@
 		normalizePlayMode,
 		normalizeApiBaseUrl,
 		parseLyricsText,
+		paginateSongs,
 		runDailyVipFlow,
+		sortSongs,
 		shuffleSongs,
 		type MusicSession,
 		type MusicPlaylist,
@@ -27,7 +30,8 @@
 	type LoginMode = "qr" | "phone" | "password";
 	type VipState = "idle" | "checking" | "claimed" | "risk" | "error";
 	type SearchScope = "all" | "playlist";
-	type PanelTab = "songs" | "discover" | "lyrics";
+	type PanelTab = "songs" | "discover";
+	type LibrarySort = "default" | "title" | "artist";
 
 	const VIP_DATE_PREFIX = "hengduo-music-vip-date:";
 	const SHUFFLE_KEY = "hengduo-music-shuffle";
@@ -60,7 +64,6 @@
 	let selectedPlaylistId = "";
 	let songs: MusicSong[] = [];
 	let songsLoading = false;
-	let songsCollapsed = false;
 	let songsMessage = "登录后加载你的歌单";
 	let searchQuery = "";
 	let searchScope: SearchScope = "all";
@@ -85,10 +88,14 @@
 	let lyricsLoading = false;
 	let panelTab: PanelTab = "songs";
 	let fullscreen = false;
+	let libraryOpen = false;
+	let libraryPage = 1;
+	let librarySort: LibrarySort = "default";
 	let lyricsLines: Array<{ time: number | null; text: string }> = [];
 	let activeLyricIndex = -1;
 	let lyricsMessage = "点击“歌词”加载当前歌曲歌词";
 	let lyricsRequestGeneration = 0;
+	let fullscreenLyricsElement: HTMLElement | null = null;
 	const lyricsCache = new Map<string, Array<{ time: number | null; text: string }>>();
 	const lyricsPending = new Map<string, Promise<Array<{ time: number | null; text: string }>>>();
 	let vipState: VipState = "idle";
@@ -108,6 +115,10 @@
 	$: dockLabel = currentSong ? `${currentSong.name} · ${currentSong.author}` : "连接你的音乐平台";
 	$: currentIndex = songs.findIndex((song) => song.hash === currentSong?.hash);
 	$: isFavorite = currentSong ? isSongInPlaylist(currentSong.hash, songs) : false;
+	$: librarySourceSongs = searchQuery.trim() ? searchResults : songs;
+	$: librarySortedSongs = sortSongs(librarySourceSongs, librarySort);
+	$: libraryTotalPages = Math.max(1, Math.ceil(librarySortedSongs.length / 10));
+	$: libraryPageSongs = paginateSongs(librarySortedSongs, Math.min(libraryPage, libraryTotalPages), 10);
 
 	const isAllowedApiOrigin = (value: string): boolean => {
 		const normalized = normalizeApiBaseUrl(value);
@@ -312,6 +323,30 @@
 		} finally {
 			searchBusy = false;
 		}
+	};
+
+	const openLibrary = () => {
+		libraryOpen = true;
+		libraryPage = 1;
+		searchQuery = "";
+		searchScope = "playlist";
+		searchResults = [];
+		searchMessage = "搜索全网歌曲，结果不会自动加入歌单";
+	};
+
+	const closeLibrary = () => {
+		libraryOpen = false;
+		addTargetSong = null;
+	};
+
+	const searchLibrary = async () => {
+		libraryPage = 1;
+		await searchMusic();
+	};
+
+	const setLibrarySort = (event: Event) => {
+		librarySort = (event.currentTarget as HTMLSelectElement).value as LibrarySort;
+		libraryPage = 1;
 	};
 
 	const searchSongAddData = (song: MusicSong) => {
@@ -521,6 +556,21 @@
 
 	const parseLyrics = parseLyricsText;
 
+	const syncLyricScroll = () => {
+		requestAnimationFrame(() => {
+			for (const container of [fullscreenLyricsElement]) {
+				if (!container) continue;
+				const active = container.querySelector<HTMLElement>(".music-lyric--active");
+				if (!active) continue;
+				const lineTop = active.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+				container.scrollTo({
+					top: centeredLyricScrollTop(lineTop, active.offsetHeight, container.clientHeight, container.scrollHeight),
+					behavior: "smooth",
+				});
+			}
+		});
+	};
+
 	const updateActiveLyric = () => {
 		const t = audio?.currentTime ?? 0;
 		let idx = -1;
@@ -530,13 +580,12 @@
 			if (t >= line.time) idx = i;
 			else break;
 		}
-		if (idx === activeLyricIndex) return;
+		if (idx === activeLyricIndex) {
+			syncLyricScroll();
+			return;
+		}
 		activeLyricIndex = idx;
-		requestAnimationFrame(() => {
-			const container = document.querySelector<HTMLElement>(".music-lyrics, .music-fullscreen__lyrics");
-			const active = container?.querySelector<HTMLElement>(".music-lyric--active");
-			active?.scrollIntoView({ block: "center", behavior: "smooth" });
-		});
+		syncLyricScroll();
 	};
 
 	const requestLyricsForSong = (song: MusicSong): Promise<Array<{ time: number | null; text: string }>> => {
@@ -577,14 +626,12 @@
 		}
 	};
 
-	const switchPanelTab = (tab: PanelTab) => {
-		panelTab = tab;
-		if (tab === "lyrics" && currentSong && !lyricsOpen && !lyricsLoading) void loadLyrics();
-	};
-
 	const toggleFullscreen = () => {
 		fullscreen = !fullscreen;
-		if (fullscreen && currentSong && !lyricsOpen && !lyricsLoading) void loadLyrics();
+		if (fullscreen) {
+			if (currentSong && !lyricsOpen && !lyricsLoading) void loadLyrics();
+			requestAnimationFrame(syncLyricScroll);
+		}
 	};
 
 	const loadLyrics = async () => {
@@ -768,7 +815,12 @@
 
 	onMount(() => {
 		const onKeydown = (event: KeyboardEvent) => {
-			if (event.key === "Escape" && fullscreen) fullscreen = false;
+			if (event.key !== "Escape") return;
+			if (libraryOpen) {
+				closeLibrary();
+				return;
+			}
+			if (fullscreen) fullscreen = false;
 		};
 		window.addEventListener("keydown", onKeydown);
 		return () => window.removeEventListener("keydown", onKeydown);
@@ -841,6 +893,9 @@
 				</div>
 				<div class="music-panel-actions">
 					<span class="music-header-account">{auth ? (auth.nickname ?? `酷狗用户 ${auth.userid}`) : "未登录"}</span>
+					{#if vipState !== "idle"}
+						<span class:music-vip-badge--ok={vipState === "claimed"} class:music-vip-badge--risk={vipState === "risk" || vipState === "error"} class="music-vip-badge" title={vipMessage}>{vipState === "checking" ? "VIP…" : vipState === "claimed" ? "VIP OK" : "需验证"}</span>
+					{/if}
 					{#if currentSong}
 						<button class="music-icon-button" type="button" aria-label="全屏播放" title="全屏播放" on:click={toggleFullscreen}><Icon icon="material-symbols:fullscreen-rounded" /></button>
 					{/if}
@@ -924,14 +979,9 @@
 					</div>
 				</div>
 
-				<div class="music-vip-state" class:music-vip-state--ok={vipState === "claimed"} class:music-vip-state--risk={vipState === "risk"}>
-					<span class="music-state-dot"></span>
-					<span>{vipMessage}</span>
-				</div>
 				<div class="music-tabs" role="tablist" aria-label="面板分区">
 					<button class:music-tab--active={panelTab === "songs"} class="music-tab" type="button" role="tab" aria-selected={panelTab === "songs"} on:click={() => (panelTab = "songs")}>歌单</button>
 					<button class:music-tab--active={panelTab === "discover"} class="music-tab" type="button" role="tab" aria-selected={panelTab === "discover"} on:click={() => (panelTab = "discover")}>每日推荐</button>
-					<button class:music-tab--active={panelTab === "lyrics"} class="music-tab" type="button" role="tab" aria-selected={panelTab === "lyrics"} on:click={() => switchPanelTab("lyrics")}>歌词</button>
 				</div>
 
 				{#if panelTab === "discover"}
@@ -958,85 +1008,77 @@
 						{:else if dailyMessage}<p class="music-muted">{dailyMessage}</p>{/if}
 					</div>
 				{/if}
-				{:else if panelTab === "lyrics"}
-					<div class="music-lyrics-tab">
-						<div class="music-secondary-actions">
-							<button class="music-quiet" type="button" disabled={!currentSong || lyricsLoading} on:click={() => void loadLyrics()}>{lyricsLoading ? "歌词加载中…" : "重新加载歌词"}</button>
-							{#if lyricsLines.length > 0}<span class="music-muted">点击歌词行可跳转播放位置</span>{/if}
-						</div>
-						<div class="music-lyrics" aria-live="polite">
-							{#if lyricsLines.length > 0}
-								<ul>
-									{#each lyricsLines as line, i (i)}
-										<button class:music-lyric--active={i === activeLyricIndex} class:music-lyric--past={activeLyricIndex >= 0 && i < activeLyricIndex} class:music-lyric--next={i === activeLyricIndex + 1} class="music-lyric" type="button" disabled={line.time === null} on:click={() => seekToLyric(line.time)}>{line.text}</button>
-									{/each}
-								</ul>
-							{:else}
-								<p class="music-muted">{lyricsMessage}</p>
-							{/if}
+				{:else}
+					{#if auth}
+					<div class="music-library-summary">
+						<label class="music-field music-playlist-field">
+							<span>当前歌单</span>
+							<select bind:value={selectedPlaylistId} on:change={onPlaylistChange}>
+								{#each playlists as playlist}
+									<option value={String(playlist.listid)}>{playlist.name}</option>
+								{/each}
+							</select>
+						</label>
+						<div class="music-library-summary__footer">
+							<span class="music-muted">{songsLoading ? "正在读取…" : `${songs.length} 首歌曲`}</span>
+							<button class="music-primary music-primary--small" type="button" on:click={openLibrary}>打开歌曲库</button>
 						</div>
 					</div>
 				{:else}
-
-				{#if auth}
-					<label class="music-field music-playlist-field">
-						<span>我的歌单</span>
-						<select bind:value={selectedPlaylistId} on:change={onPlaylistChange}>
-							{#each playlists as playlist}
-								<option value={String(playlist.listid)}>{playlist.name}</option>
-							{/each}
-						</select>
-					</label>
-					<div class="music-search-box">
-						<div class="music-search-row">
-							<input bind:value={searchQuery} aria-label="搜索歌曲" placeholder="搜索全网歌曲或当前歌单" on:keydown={(event) => event.key === "Enter" && void searchMusic()} />
-							<select bind:value={searchScope} aria-label="搜索范围"><option value="all">全网歌曲</option><option value="playlist">当前歌单</option></select>
-							<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchMusic()}>{searchBusy ? "搜索中…" : "搜索"}</button>
-						</div>
-						<p class="music-search-message">{searchMessage}</p>
-					</div>
-					{#if searchQuery.trim()}
-						<div class="music-song-list music-search-results" aria-label="搜索结果">
-							{#each searchResults as song, i}
-								<div class="music-search-result">
-									<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
-										<span class="music-song-index">{String(i + 1).padStart(2, "0")}</span><span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span><span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span><Icon icon="material-symbols:play-arrow-rounded" />
-									</button>
-									<button class:music-search-favorite--active={isSongInPlaylist(song.hash, songs)} class="music-search-favorite" type="button" aria-label={isSongInPlaylist(song.hash, songs) ? `${song.name} 已在当前歌单` : `添加 ${song.name} 到歌单`} title={isSongInPlaylist(song.hash, songs) ? "已在当前歌单，可选择其他歌单" : "添加到歌单"} on:click={() => openAddSong(song)}><Icon icon={isSongInPlaylist(song.hash, songs) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
-								</div>
-							{/each}
-							{#if !searchBusy && searchResults.length === 0}<p class="music-muted">{searchMessage}</p>{/if}
-						</div>
-					{:else}
-						<div class="music-list-bar">
-							<span class="music-section-label">SONGS / PLAYLIST</span>
-							<button class="music-quiet" type="button" on:click={() => (songsCollapsed = !songsCollapsed)}>{songsCollapsed ? "展开歌曲" : "收起歌曲"}</button>
-						</div>
-						{#if !songsCollapsed}
-							<div class="music-song-list" aria-label="歌曲列表">
-								{#if songsLoading}
-									<p class="music-muted">正在读取歌单…</p>
-								{:else if songsMessage}
-									<div class="music-list-status"><p class="music-muted">{songsMessage}</p><button class="music-quiet" type="button" on:click={() => void retryMusicLibrary()}>{playlists.length ? "重新加载歌曲" : "重新加载歌单"}</button></div>
-								{/if}
-								{#each songs as song}
-									<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
-										<span class="music-song-index">{currentSongLoading === song.hash ? "…" : String(songs.indexOf(song) + 1).padStart(2, "0")}</span>
-										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
-										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span><Icon icon={currentSongLoading === song.hash ? "material-symbols:more-horiz-rounded" : currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
-									</button>
-								{/each}
-							</div>
-						{/if}
-					{/if}
-					{#if addTargetSong}
-						<div class="music-add-song-card"><div><span class="music-section-label">ADD TO PLAYLIST</span><strong>{addTargetSong.name}</strong></div><select bind:value={addTargetPlaylistId} aria-label="选择目标歌单">{#each playlists as playlist}<option value={String(playlist.listid)}>{playlist.name}</option>{/each}</select><div class="music-actions"><button class="music-quiet" type="button" on:click={() => (addTargetSong = null)}>取消</button><button class="music-primary music-primary--small" type="button" disabled={addBusy} on:click={() => void addSongToPlaylist()}>{addBusy ? "添加中…" : "确认添加"}</button></div></div>
-					{/if}
+					<div class="music-list-status"><p class="music-muted">登录后管理你的歌单和歌曲</p><button class="music-primary music-primary--small" type="button" on:click={() => (showLogin = true)}>登录酷狗</button></div>
 				{/if}
 			{/if}
 			{/if}
 
 		</section>
+	{/if}
+
+	{#if libraryOpen}
+		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && closeLibrary()}>
+			<section class="music-library-modal" role="dialog" aria-modal="true" aria-label="歌曲库">
+				<header class="music-library-header">
+					<div><p class="music-kicker">LIBRARY / SEARCH</p><h2>歌曲库</h2><span class="music-muted">{selectedPlaylistId ? playlists.find((playlist) => String(playlist.listid) === selectedPlaylistId)?.name : "我的音乐"}</span></div>
+					<button class="music-icon-button" type="button" aria-label="关闭歌曲库" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
+				</header>
+				<div class="music-library-search">
+					<input bind:value={searchQuery} aria-label="搜索歌曲库" placeholder="搜索歌曲名或歌手" on:keydown={(event) => event.key === "Enter" && void searchLibrary()} />
+					<select bind:value={searchScope} aria-label="搜索范围"><option value="playlist">当前歌单</option><option value="all">全网歌曲</option></select>
+					<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
+				</div>
+				<div class="music-library-toolbar">
+					<span class="music-muted">{searchQuery.trim() ? searchMessage : `${songs.length} 首歌曲`}</span>
+					<select value={librarySort} aria-label="歌曲排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
+				</div>
+				<div class="music-library-list" aria-label="歌曲库列表">
+					{#if searchBusy}
+						<p class="music-muted music-library-empty">正在搜索歌曲…</p>
+					{:else if libraryPageSongs.length > 0}
+						{#each libraryPageSongs as song, i}
+							<div class="music-library-row">
+								<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
+									<span class="music-song-index">{String((libraryPage - 1) * 10 + i + 1).padStart(2, "0")}</span>
+									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
+									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
+								</button>
+								<button class:music-search-favorite--active={isSongInPlaylist(song.hash, songs)} class="music-search-favorite" type="button" aria-label={isSongInPlaylist(song.hash, songs) ? `${song.name} 已在当前歌单` : `添加 ${song.name} 到歌单`} title={isSongInPlaylist(song.hash, songs) ? "已在当前歌单，可选择其他歌单" : "添加到歌单"} on:click={() => openAddSong(song)}><Icon icon={isSongInPlaylist(song.hash, songs) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+							</div>
+						{/each}
+					{:else}
+						<p class="music-muted music-library-empty">{searchQuery.trim() ? searchMessage : songsMessage}</p>
+					{/if}
+				</div>
+				<div class="music-library-footer">
+					<span class="music-muted">第 {Math.min(libraryPage, libraryTotalPages)} / {libraryTotalPages} 页</span>
+					<div class="music-actions">
+						<button class="music-quiet" type="button" disabled={libraryPage <= 1} on:click={() => (libraryPage -= 1)}>上一页</button>
+						<button class="music-quiet" type="button" disabled={libraryPage >= libraryTotalPages} on:click={() => (libraryPage += 1)}>下一页</button>
+					</div>
+				</div>
+				{#if addTargetSong}
+					<div class="music-add-song-card"><div><span class="music-section-label">ADD TO PLAYLIST</span><strong>{addTargetSong.name}</strong></div><select bind:value={addTargetPlaylistId} aria-label="选择目标歌单">{#each playlists as playlist}<option value={String(playlist.listid)}>{playlist.name}</option>{/each}</select><div class="music-actions"><button class="music-quiet" type="button" on:click={() => (addTargetSong = null)}>取消</button><button class="music-primary music-primary--small" type="button" disabled={addBusy} on:click={() => void addSongToPlaylist()}>{addBusy ? "添加中…" : "确认添加"}</button></div></div>
+				{/if}
+			</section>
+		</div>
 	{/if}
 
 	{#if fullscreen && currentSong}
@@ -1073,7 +1115,7 @@
 					</div>
 				</div>
 				<div class="music-fullscreen__right">
-					<div class="music-fullscreen__lyrics" aria-live="polite">
+					<div class="music-fullscreen__lyrics" bind:this={fullscreenLyricsElement} aria-live="polite">
 						{#if lyricsLines.length > 0}
 							<ul>
 								{#each lyricsLines as line, i (i)}
@@ -1192,15 +1234,36 @@
 	.music-title-status { color: var(--text-40, rgb(148 163 184)); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; }
 	.music-panel-actions { display: flex; align-items: center; gap: 0.3rem; }
 	.music-header-account { max-width: 7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-50, rgb(100 116 139)); font-size: 0.66rem; }
+	.music-vip-badge { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0.1rem 0.38rem; border: 1px solid color-mix(in oklch, var(--text-40, #94a3b8) 30%, transparent); border-radius: 999px; color: var(--text-50, #64748b); font-size: 0.56rem; letter-spacing: 0.02em; white-space: nowrap; }
+	.music-vip-badge--ok { border-color: color-mix(in oklch, #2f9e72 36%, transparent); color: #2f9e72; background: color-mix(in oklch, #2f9e72 8%, transparent); }
+	.music-vip-badge--risk { border-color: color-mix(in oklch, #c05640 36%, transparent); color: #c05640; background: color-mix(in oklch, #c05640 8%, transparent); }
 	.music-quiet--tiny { min-height: 1.8rem; padding: 0.2rem 0.55rem; font-size: 0.66rem; }
 	.music-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; margin-top: 0.75rem; padding: 0.22rem; border-radius: 0.8rem; background: color-mix(in oklch, var(--primary) 7%, var(--card-border, #dce5e5)); }
 	.music-tab { min-height: 2rem; padding: 0.3rem 0.4rem; border: 0; border-radius: 0.6rem; color: var(--text-50, rgb(100 116 139)); background: transparent; font: inherit; font-size: 0.72rem; cursor: pointer; transition: color 200ms ease, background 200ms ease, box-shadow 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-tab:hover { color: var(--primary); }
 	.music-tab--active { color: var(--primary); background: var(--card-bg, #fff); box-shadow: 0 2px 8px -4px rgb(15 23 42 / 0.35); }
 	.music-lyrics-tab { margin-top: 0.65rem; }
-	.music-fullscreen { position: fixed; inset: 0; z-index: 990; display: flex; align-items: stretch; justify-content: center; overflow: hidden; }
-	.music-fullscreen__bg { position: absolute; inset: -3rem; background-size: cover; background-position: center; filter: blur(30px) saturate(1.2); opacity: 0.5; transform: scale(1.06); }
-	.music-fullscreen__scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgb(10 15 24 / 0.6), rgb(8 12 20 / 0.92)); }
+	.music-library-summary { display: grid; gap: 0.7rem; margin-top: 0.75rem; padding: 0.85rem; border: 1px solid color-mix(in oklch, var(--primary) 12%, var(--card-border, #dce5e5)); border-radius: 0.85rem; background: color-mix(in oklch, var(--primary) 4%, transparent); }
+	.music-library-summary__footer { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+	.music-library-backdrop { position: fixed; inset: 0; z-index: 850; display: grid; place-items: center; padding: 1rem; background: rgb(8 12 20 / 0.42); backdrop-filter: blur(8px); animation: music-fade-in 180ms ease both; }
+	.music-library-modal { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto auto; width: min(42rem, 100%); max-height: min(42rem, calc(100vh - 2rem)); padding: 1.1rem; overflow: hidden; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 1.2rem; color: inherit; background: var(--card-bg, #fff); box-shadow: 0 28px 80px -30px rgb(15 23 42 / 0.62); animation: music-modal-in 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	.music-library-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+	.music-library-header h2 { margin: 0.15rem 0 0.1rem; font-size: 1.15rem; }
+	.music-library-search { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.4rem; margin-top: 0.9rem; }
+	.music-library-search input, .music-library-search select, .music-library-toolbar select { min-width: 0; min-height: 2.25rem; padding: 0.4rem 0.55rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.6rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.72rem; }
+	.music-library-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-top: 0.65rem; }
+	.music-library-toolbar select { min-height: 1.9rem; padding-block: 0.25rem; }
+	.music-library-list { min-height: 12rem; margin-top: 0.55rem; overflow-y: auto; scrollbar-width: thin; }
+	.music-library-row { display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
+	.music-library-row > .music-song { min-width: 0; flex: 1; }
+	.music-library-row .music-search-favorite { flex: 0 0 2.1rem; }
+	.music-library-empty { display: grid; min-height: 12rem; place-items: center; padding: 1rem; text-align: center; }
+	.music-library-footer { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 75%, transparent); }
+	@keyframes music-modal-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+	@keyframes music-fade-in { from { opacity: 0; } to { opacity: 1; } }
+	.music-fullscreen { position: fixed; inset: 0; z-index: 990; display: flex; align-items: stretch; justify-content: center; overflow: hidden; overscroll-behavior: none; isolation: isolate; }
+	.music-fullscreen__bg { position: absolute; inset: -3rem; background-size: cover; background-position: center; filter: blur(30px) saturate(1.2); opacity: 0.5; transform: scale(1.06); pointer-events: none; }
+	.music-fullscreen__scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgb(10 15 24 / 0.6), rgb(8 12 20 / 0.92)); pointer-events: none; }
 	.music-fullscreen__close { position: absolute; top: 1.1rem; right: 1.1rem; z-index: 2; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border: 0; border-radius: 50%; color: var(--text-90, #e2e8f0); background: rgb(255 255 255 / 0.1); cursor: pointer; font-size: 1.3rem; backdrop-filter: blur(8px); transition: background 200ms ease, transform 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-fullscreen__close:hover { background: rgb(255 255 255 / 0.22); transform: scale(1.06); }
 	.music-fullscreen__content { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(20rem, 34rem); gap: clamp(1.5rem, 4vw, 4rem); align-items: center; width: min(72rem, 100%); padding: clamp(1.5rem, 4vw, 3.5rem); }
@@ -1214,8 +1277,8 @@
 	.music-fullscreen__left .music-controls { margin-top: 0.2rem; }
 	.music-fullscreen__left .music-icon-button { width: 2.6rem; height: 2.6rem; color: var(--text-90, #e2e8f0); background: rgb(255 255 255 / 0.08); font-size: 1.25rem; backdrop-filter: blur(8px); }
 	.music-fullscreen__left .music-play-button { width: 3.6rem; height: 3.6rem; font-size: 1.8rem; }
-	.music-fullscreen__right { min-height: 0; display: flex; justify-content: center; }
-	.music-fullscreen__lyrics { width: 100%; max-width: 34rem; max-height: 100%; overflow-y: auto; scrollbar-width: none; scroll-behavior: smooth; padding: 2.6rem 0.6rem; }
+	.music-fullscreen__right { width: 100%; height: min(42rem, calc(100vh - 6rem)); min-height: 0; display: flex; justify-content: center; }
+	.music-fullscreen__lyrics { box-sizing: border-box; width: 100%; height: 100%; max-width: 34rem; max-height: none; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; scroll-behavior: smooth; padding: 2.6rem 0.6rem; }
 	.music-fullscreen__lyrics::-webkit-scrollbar { display: none; }
 	.music-fullscreen__lyrics ul { display: grid; gap: 0.7rem; margin: 0; padding: 0; list-style: none; }
 	.music-lyric--fullscreen { padding: 0.5rem 0.9rem; font-size: 1.05rem; line-height: 1.8; opacity: 0.42; }
@@ -1227,8 +1290,8 @@
 	@media (max-width: 860px) {
 		.music-fullscreen__content { grid-template-columns: 1fr; gap: 1.4rem; align-content: start; align-items: center; overflow-y: auto; text-align: center; }
 		.music-fullscreen__cover { width: min(14rem, 60vw); }
-		.music-fullscreen__right { width: 100%; }
-		.music-fullscreen__lyrics { max-height: 40vh; padding: 1.2rem 0.4rem; }
+		.music-fullscreen__right { width: 100%; height: min(40vh, 20rem); }
+		.music-fullscreen__lyrics { max-height: none; padding: 1.2rem 0.4rem; }
 		.music-lyric--fullscreen { font-size: 0.92rem; }
 	}
 	.music-panel__header h2 { margin: 0.15rem 0 0; font-size: 1.25rem; line-height: 1.2; }
@@ -1293,7 +1356,6 @@
 	.music-recommend-box { max-height: 14rem; margin-top: 0.45rem; padding: 0.35rem; overflow: auto; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 80%, transparent); border-radius: 0.8rem; background: color-mix(in oklch, var(--page-bg, #f8fafc) 72%, transparent); }
 	.music-recommend-list { display: grid; gap: 0.2rem; }
 	.music-playlist-field { margin-top: 0.65rem; }
-	.music-list-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.65rem; }
 	.music-search-box { display: grid; gap: 0.25rem; margin-top: 0.75rem; }
 	.music-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.35rem; align-items: center; }
 	.music-search-row input, .music-search-row select, .music-add-song-card select { min-width: 0; min-height: 2rem; padding: 0.35rem 0.5rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.55rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.68rem; }

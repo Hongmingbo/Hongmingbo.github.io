@@ -10,6 +10,9 @@ import {
 	normalizePlaylists,
 	normalizeSongs,
 	parseLyricsText,
+	paginateSongs,
+	sortSongs,
+	centeredLyricScrollTop,
 	isCurrentLyricsRequest,
 	nextPlayMode,
 	normalizePlayMode,
@@ -65,6 +68,14 @@ assert.deepEqual(parsedKrc, [
 assert.equal(isCurrentLyricsRequest("A", "A", 3, 3), true);
 assert.equal(isCurrentLyricsRequest("A", "B", 3, 3), false);
 assert.equal(isCurrentLyricsRequest("A", "A", 2, 3), false);
+assert.equal(centeredLyricScrollTop(500, 40, 300, 1200), 370);
+assert.equal(centeredLyricScrollTop(20, 40, 300, 1200), 0);
+assert.equal(centeredLyricScrollTop(1100, 40, 300, 1200), 900);
+assert.deepEqual(paginateSongs([1, 2, 3, 4, 5], 2, 2), [3, 4]);
+assert.deepEqual(paginateSongs([1, 2, 3], 0, 2), [1, 2]);
+const librarySongs = [{ name: "Z", author: "B" }, { name: "A", author: "C" }] as any;
+assert.deepEqual(sortSongs(librarySongs, "title").map((song) => song.name), ["A", "Z"]);
+assert.deepEqual(sortSongs(librarySongs, "artist").map((song) => song.author), ["B", "C"]);
 assert.equal(nextPlayMode("order"), "list");
 assert.equal(nextPlayMode("list"), "one");
 assert.equal(nextPlayMode("one"), "shuffle");
