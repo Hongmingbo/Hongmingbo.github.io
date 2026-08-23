@@ -60,7 +60,7 @@ assert.equal(cleanedFilenameTracks[1].name, "江南");
 assert.equal(cleanedFilenameTracks[1].author, "林俊杰");
 assert.equal(isSongInPlaylist("ABC", normalizeSongs(tracks)), true);
 assert.equal(isSongInPlaylist("NOT_IN_PLAYLIST", normalizeSongs(tracks)), false);
-const parsedKrc = parseLyricsText("[ti:测试歌]\n[39674,6040]<0,460,0>北<460,430,0>风\n[01:02.50]普通歌词");
+const parsedKrc = parseLyricsText("[ti:测试歌]\n[39674,6040]<0,460,0>北<460,430,0>风\n[01:02.50]普通歌词\n[qq:123456]\n[total:261773]\n[language:eyJjb250ZW50IjpbXSwidmVyc2lvbiI6MX0=\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
 assert.deepEqual(parsedKrc, [
 	{ time: 39.674, text: "北风" },
 	{ time: 62.5, text: "普通歌词" },

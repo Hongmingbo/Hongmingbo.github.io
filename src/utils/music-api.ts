@@ -295,6 +295,9 @@ export interface MusicLyricLine {
 }
 
 const LYRIC_META_RE = /^\[(?:ti|ar|al|by|offset|re|ve|sign|id|hash):/i;
+// 酷狗部分歌曲歌词尾部带非标准元数据行（如 [qq:...]、[total:...]、base64 串），统一过滤。
+const LYRIC_JUNK_LINE_RE = /^\[(?:qq|total|kana|language|trans|roman|karakera|version):/i;
+const LYRIC_BASE64ISH_RE = /^[A-Za-z0-9+/=]{40,}$/;
 const KRC_CHAR_TAG_RE = /<\d+(?:,\d+)+>/g;
 const LRC_TIME_RE = /^\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]\s*/;
 const KRC_TIME_RE = /^\[(\d+),(\d+)\]\s*/;
@@ -318,7 +321,8 @@ export const parseLyricsText = (raw: string): MusicLyricLine[] => {
 	const lines: MusicLyricLine[] = [];
 	for (const original of String(raw || "").replace(/^\uFEFF/, "").split(/\r?\n/)) {
 		let line = original.trim();
-		if (!line || LYRIC_META_RE.test(line)) continue;
+		if (!line || LYRIC_META_RE.test(line) || LYRIC_JUNK_LINE_RE.test(line)) continue;
+		if (LYRIC_BASE64ISH_RE.test(line)) continue;
 
 		const krcMatch = line.match(KRC_TIME_RE);
 		if (krcMatch) {

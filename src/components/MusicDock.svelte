@@ -33,6 +33,7 @@
 	type PanelTab = "songs" | "discover";
 	type LibrarySort = "default" | "title" | "artist";
 	type LibraryView = "library" | "daily";
+	type PageSizeOption = 10 | 25 | 50;
 
 	const VIP_DATE_PREFIX = "hengduo-music-vip-date:";
 	const SHUFFLE_KEY = "hengduo-music-shuffle";
@@ -92,11 +93,15 @@
 	let libraryPage = 1;
 	let librarySort: LibrarySort = "default";
 	let libraryView: LibraryView = "library";
+	let libraryPageSize: PageSizeOption = 10;
+	let dailyPage = 1;
+	let libraryPageJump = "";
 	let lyricsLines: Array<{ time: number | null; text: string }> = [];
 	let activeLyricIndex = -1;
 	let lyricsMessage = "点击“歌词”加载当前歌曲歌词";
 	let lyricsRequestGeneration = 0;
 	let fullscreenLyricsElement: HTMLElement | null = null;
+	let lyricScrollGraceUntil = 0;
 	const lyricsCache = new Map<string, Array<{ time: number | null; text: string }>>();
 	const lyricsPending = new Map<string, Promise<Array<{ time: number | null; text: string }>>>();
 	let vipState: VipState = "idle";
@@ -118,11 +123,11 @@
 	$: isFavorite = currentSong ? isSongInPlaylist(currentSong.hash, songs) : false;
 	$: librarySourceSongs = searchQuery.trim() ? searchResults : songs;
 	$: librarySortedSongs = sortSongs(librarySourceSongs, librarySort);
-	$: libraryTotalPages = Math.max(1, Math.ceil(librarySortedSongs.length / 10));
-	$: libraryPageSongs = paginateSongs(librarySortedSongs, Math.min(libraryPage, libraryTotalPages), 10);
+	$: libraryTotalPages = Math.max(1, Math.ceil(librarySortedSongs.length / libraryPageSize));
+	$: libraryPageSongs = paginateSongs(librarySortedSongs, Math.min(libraryPage, libraryTotalPages), libraryPageSize);
 	$: dailySortedSongs = sortSongs(dailySongs, librarySort);
-	$: dailyTotalPages = Math.max(1, Math.ceil(dailySortedSongs.length / 10));
-	$: dailyPageSongs = paginateSongs(dailySortedSongs, Math.min(libraryPage, dailyTotalPages), 10);
+	$: dailyTotalPages = Math.max(1, Math.ceil(dailySortedSongs.length / libraryPageSize));
+	$: dailyPageSongs = paginateSongs(dailySortedSongs, Math.min(dailyPage, dailyTotalPages), libraryPageSize);
 
 	const isAllowedApiOrigin = (value: string): boolean => {
 		const normalized = normalizeApiBaseUrl(value);
@@ -333,6 +338,8 @@
 		libraryOpen = true;
 		libraryView = "library";
 		libraryPage = 1;
+		dailyPage = 1;
+		libraryPageJump = "";
 		searchQuery = "";
 		searchScope = "playlist";
 		searchResults = [];
@@ -343,7 +350,24 @@
 		libraryOpen = true;
 		libraryView = "daily";
 		libraryPage = 1;
+		dailyPage = 1;
+		libraryPageJump = "";
 		if (dailySongs.length === 0 && !dailyLoading) void loadDailyRecommendations();
+	};
+
+	const setLibraryPageSize = (event: Event) => {
+		libraryPageSize = Number((event.currentTarget as HTMLSelectElement).value) as PageSizeOption;
+		libraryPage = 1;
+		dailyPage = 1;
+	};
+
+	const jumpToLibraryPage = (event: Event) => {
+		event.preventDefault();
+		const target = Number(libraryPageJump);
+		if (!Number.isFinite(target)) return;
+		if (libraryView === "daily") dailyPage = Math.max(1, Math.min(Math.floor(target), dailyTotalPages));
+		else libraryPage = Math.max(1, Math.min(Math.floor(target), libraryTotalPages));
+		libraryPageJump = "";
 	};
 
 	const closeLibrary = () => {
@@ -497,6 +521,7 @@
 
 	const toggleFavorite = () => {
 		if (!currentSong) return;
+		setNotice(isFavorite ? "这首歌已在当前歌单中" : "已加入收藏歌单");
 		openAddSong(currentSong);
 	};
 
@@ -567,7 +592,8 @@
 
 	const parseLyrics = parseLyricsText;
 
-	const syncLyricScroll = () => {
+	const syncLyricScroll = (force = false) => {
+		if (!force && Date.now() < lyricScrollGraceUntil) return;
 		requestAnimationFrame(() => {
 			for (const container of [fullscreenLyricsElement]) {
 				if (!container) continue;
@@ -580,6 +606,11 @@
 				});
 			}
 		});
+	};
+
+	const markManualLyricsScroll = () => {
+		// 用户手动滚动歌词后暂停自动跟随，4 秒后恢复。
+		lyricScrollGraceUntil = Date.now() + 4000;
 	};
 
 	const updateActiveLyric = () => {
@@ -641,8 +672,13 @@
 		fullscreen = !fullscreen;
 		if (fullscreen) {
 			if (currentSong && !lyricsOpen && !lyricsLoading) void loadLyrics();
-			requestAnimationFrame(syncLyricScroll);
+			requestAnimationFrame(() => syncLyricScroll(true));
 		}
+	};
+
+	const toggleSettings = () => {
+		if (apiStatus !== "ready" || showSettings) showSettings = false;
+		else showSettings = true;
 	};
 
 	const loadLyrics = async () => {
@@ -837,6 +873,10 @@
 		return () => window.removeEventListener("keydown", onKeydown);
 	});
 
+	// 弹窗/全屏打开时锁定页面背景滚动，滑动手势只作用于面板自身。
+	$: bodyScrollLocked = libraryOpen || fullscreen;
+	$: if (isBrowser()) document.documentElement.style.overflow = bodyScrollLocked ? "hidden" : "";
+
 	onMount(() => {
 		apiUrl = normalizeApiBaseUrl(isDev && devApiUrl ? devApiUrl : MUSIC_BFF_ORIGIN);
 		const savedVolume = Number(localStorage.getItem("hengduo-music-volume"));
@@ -915,7 +955,7 @@
 					{:else}
 						<button class="music-quiet music-quiet--tiny" type="button" on:click={() => (showLogin = true)}>登录</button>
 					{/if}
-					<button class="music-icon-button" type="button" aria-label="音乐服务设置" on:click={() => (showSettings = true)}><Icon icon="material-symbols:tune-rounded" /></button>
+					<button class="music-icon-button" type="button" aria-label={apiStatus !== "ready" || showSettings ? "返回播放器" : "音乐服务设置"} title={apiStatus !== "ready" || showSettings ? "返回播放器" : "音乐服务设置"} on:click={toggleSettings}><Icon icon="material-symbols:tune-rounded" /></button>
 					<button class="music-icon-button" type="button" aria-label="关闭音乐面板" on:click={() => (expanded = false)}>
 						<Icon icon="material-symbols:close-rounded" />
 					</button>
@@ -927,7 +967,7 @@
 			{/if}
 
 			{#if apiStatus !== "ready" || showSettings}
-				<div class="music-config-block">
+				<div class="music-config-block music-config-block--full">
 					<div class="music-section-label">SERVICE CONNECTION</div>
 					<p class="music-muted">音乐登录只通过已配置的受信 HTTPS BFF 进行。BFF 保管酷狗账号令牌、设备标识和上游 Cookie；此页面不会保存它们。</p>
 					{#if isDev}
@@ -1030,9 +1070,12 @@
 						<div><p class="music-kicker">DISCOVER / TODAY</p><h2>每日推荐</h2><span class="music-muted">{dailySongs.length > 0 ? `${dailySortedSongs.length} 首今日推荐` : "每天为你挑选 30 首新歌"}</span></div>
 						<button class="music-icon-button" type="button" aria-label="关闭每日推荐" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
 					</header>
-					<div class="music-library-toolbar">
-						<span class="music-muted">{dailyLoading ? "正在读取今日推荐…" : dailyMessage || `第 ${Math.min(libraryPage, dailyTotalPages)} / ${dailyTotalPages} 页`}</span>
-						<select value={librarySort} aria-label="推荐排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
+				<div class="music-library-toolbar">
+						<span class="music-muted">{dailyLoading ? "正在读取今日推荐…" : dailyMessage || `${dailySortedSongs.length} 首推荐`}</span>
+						<div class="music-library-toolbar__controls">
+							<select value={librarySort} aria-label="推荐排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
+							<select value={libraryPageSize} aria-label="每页显示数量" on:change={setLibraryPageSize}><option value={10}>10 首/页</option><option value={25}>25 首/页</option><option value={50}>50 首/页</option></select>
+						</div>
 					</div>
 					<div class="music-library-list" aria-label="每日推荐列表">
 						{#if dailyLoading}
@@ -1053,12 +1096,16 @@
 						{/if}
 					</div>
 					<div class="music-library-footer">
-						<span class="music-muted">第 {Math.min(libraryPage, dailyTotalPages)} / {dailyTotalPages} 页</span>
+						<span class="music-muted">第 {Math.min(dailyPage, dailyTotalPages)} / {dailyTotalPages} 页</span>
+						<form class="music-library-jump" on:submit={jumpToLibraryPage}>
+							<input bind:value={libraryPageJump} aria-label="跳转到指定页" placeholder="页码" inputmode="numeric" />
+							<button class="music-quiet" type="submit">跳转</button>
+						</form>
 						<div class="music-actions">
-							<button class="music-quiet" type="button" disabled={libraryPage <= 1} on:click={() => (libraryPage -= 1)}>上一页</button>
-							<button class="music-quiet" type="button" disabled={dailyLoading || dailySortedSongs.length === 0} on:click={() => { reshuffleDailyRecommendations(); libraryPage = 1; }}>{dailyLoading ? "加载中…" : "换一批"}</button>
-							<button class="music-quiet" type="button" disabled={dailyLoading} on:click={() => { libraryPage = 1; void loadDailyRecommendations(); }}>刷新</button>
-							<button class="music-quiet" type="button" disabled={libraryPage >= dailyTotalPages} on:click={() => (libraryPage += 1)}>下一页</button>
+							<button class="music-quiet" type="button" disabled={dailyPage <= 1} on:click={() => (dailyPage -= 1)}>上一页</button>
+							<button class="music-quiet" type="button" disabled={dailyLoading || dailySortedSongs.length === 0} on:click={() => { reshuffleDailyRecommendations(); dailyPage = 1; }}>{dailyLoading ? "加载中…" : "换一批"}</button>
+							<button class="music-quiet" type="button" disabled={dailyLoading} on:click={() => { dailyPage = 1; void loadDailyRecommendations(); }}>刷新</button>
+							<button class="music-quiet" type="button" disabled={dailyPage >= dailyTotalPages} on:click={() => (dailyPage += 1)}>下一页</button>
 						</div>
 					</div>
 				{:else}
@@ -1072,9 +1119,12 @@
 					<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
 				</div>
 				<div class="music-library-toolbar">
-					<span class="music-muted">{searchQuery.trim() ? searchMessage : `${songs.length} 首歌曲`}</span>
-					<select value={librarySort} aria-label="歌曲排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
-				</div>
+						<span class="music-muted">{searchQuery.trim() ? searchMessage : `${songs.length} 首歌曲`}</span>
+						<div class="music-library-toolbar__controls">
+							<select value={librarySort} aria-label="歌曲排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
+							<select value={libraryPageSize} aria-label="每页显示数量" on:change={setLibraryPageSize}><option value={10}>10 首/页</option><option value={25}>25 首/页</option><option value={50}>50 首/页</option></select>
+						</div>
+					</div>
 				<div class="music-library-list" aria-label="歌曲库列表">
 					{#if searchBusy}
 						<p class="music-muted music-library-empty">正在搜索歌曲…</p>
@@ -1095,6 +1145,10 @@
 				</div>
 				<div class="music-library-footer">
 					<span class="music-muted">第 {Math.min(libraryPage, libraryTotalPages)} / {libraryTotalPages} 页</span>
+					<form class="music-library-jump" on:submit={jumpToLibraryPage}>
+						<input bind:value={libraryPageJump} aria-label="跳转到指定页" placeholder="页码" inputmode="numeric" />
+						<button class="music-quiet" type="submit">跳转</button>
+					</form>
 					<div class="music-actions">
 						<button class="music-quiet" type="button" disabled={libraryPage <= 1} on:click={() => (libraryPage -= 1)}>上一页</button>
 						<button class="music-quiet" type="button" disabled={libraryPage >= libraryTotalPages} on:click={() => (libraryPage += 1)}>下一页</button>
@@ -1142,7 +1196,7 @@
 					</div>
 				</div>
 				<div class="music-fullscreen__right">
-					<div class="music-fullscreen__lyrics" bind:this={fullscreenLyricsElement} aria-live="polite">
+					<div class="music-fullscreen__lyrics" bind:this={fullscreenLyricsElement} on:wheel={markManualLyricsScroll} on:touchstart|passive={markManualLyricsScroll} aria-live="polite">
 						{#if lyricsLines.length > 0}
 							<ul>
 								{#each lyricsLines as line, i (i)}
@@ -1284,8 +1338,12 @@
 	.music-library-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 	.music-library-header h2 { margin: 0.15rem 0 0.1rem; font-size: 1.15rem; }
 	.music-library-search { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.4rem; margin-top: 0.9rem; }
-	.music-library-search input, .music-library-search select, .music-library-toolbar select { min-width: 0; min-height: 2.25rem; padding: 0.4rem 0.55rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.6rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.72rem; }
+	.music-library-search input, .music-library-search select, .music-library-toolbar select { min-width: 0; min-height: 2.25rem; padding: 0.4rem 0.9rem 0.4rem 0.55rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.6rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.72rem; }
+	select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath fill='%2364748b' d='M7.41 8.58 12 13.17l4.59-4.59L18 10l-6 6-6-6z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.45rem center; padding-right: 1.5rem; }
 	.music-library-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-top: 0.65rem; }
+	.music-library-toolbar__controls { display: flex; align-items: center; gap: 0.4rem; }
+	.music-library-jump { display: flex; align-items: center; gap: 0.3rem; }
+	.music-library-jump input { width: 4.2rem; min-height: 1.9rem; padding: 0.25rem 0.45rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.55rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.68rem; text-align: center; }
 	.music-library-toolbar select { min-height: 1.9rem; padding-block: 0.25rem; }
 	.music-library-list { min-height: 12rem; margin-top: 0.55rem; overflow-y: auto; scrollbar-width: thin; }
 	.music-library-row { display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
@@ -1309,13 +1367,14 @@
 	.music-fullscreen__copy span { color: rgb(203 213 225); font-size: 0.85rem; }
 	.music-fullscreen__left .music-progress-row { width: 100%; max-width: 22rem; }
 	.music-fullscreen__left .music-controls { margin-top: 0.2rem; }
-	.music-fullscreen__left .music-icon-button { width: 2.6rem; height: 2.6rem; color: var(--text-90, #e2e8f0); background: rgb(255 255 255 / 0.08); font-size: 1.25rem; backdrop-filter: blur(8px); }
+	.music-fullscreen__left .music-icon-button { width: 2.6rem; height: 2.6rem; color: #fff; background: rgb(255 255 255 / 0.08); font-size: 1.25rem; backdrop-filter: blur(8px); }
+	.music-fullscreen__left .music-icon-button.music-favorite--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 18%, transparent); animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-fullscreen__left .music-play-button { width: 3.6rem; height: 3.6rem; font-size: 1.8rem; }
 	.music-fullscreen__right { width: 100%; height: min(42rem, calc(100vh - 6rem)); min-height: 0; display: flex; justify-content: center; }
 	.music-fullscreen__lyrics { box-sizing: border-box; width: 100%; height: 100%; max-width: 34rem; max-height: none; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; scroll-behavior: smooth; padding: 2.6rem 0.6rem; }
 	.music-fullscreen__lyrics::-webkit-scrollbar { display: none; }
 	.music-fullscreen__lyrics ul { display: grid; gap: 0.7rem; margin: 0; padding: 0; list-style: none; }
-	.music-lyric--fullscreen { padding: 0.5rem 0.9rem; font-size: 1.05rem; line-height: 1.8; opacity: 0.42; }
+	.music-lyric--fullscreen { padding: 0.55rem 1rem; font-size: 1.3rem; line-height: 1.85; opacity: 0.42; }
 	.music-fullscreen .music-lyric { color: rgb(226 232 240); }
 	.music-fullscreen .music-lyric--active { color: var(--primary); opacity: 1; }
 	.music-fullscreen .music-progress-row span { color: rgb(203 213 225); }
@@ -1326,7 +1385,7 @@
 		.music-fullscreen__cover { width: min(14rem, 60vw); }
 		.music-fullscreen__right { width: 100%; height: min(40vh, 20rem); }
 		.music-fullscreen__lyrics { max-height: none; padding: 1.2rem 0.4rem; }
-		.music-lyric--fullscreen { font-size: 0.92rem; }
+		.music-lyric--fullscreen { font-size: 1.08rem; }
 	}
 	.music-panel__header h2 { margin: 0.15rem 0 0; font-size: 1.25rem; line-height: 1.2; }
 	.music-kicker, .music-section-label { margin: 0; color: var(--primary); font-family: var(--font-mono, monospace); font-size: 0.62rem; letter-spacing: 0.13em; }
@@ -1335,6 +1394,7 @@
 	.music-icon-button:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: translateY(-1px); }
 	.music-notice { margin-bottom: 0.75rem; padding: 0.55rem 0.7rem; border-radius: 0.65rem; color: var(--primary); background: color-mix(in oklch, var(--primary) 9%, transparent); font-size: 0.72rem; }
 	.music-config-block, .music-player-core, .music-account-row, .music-vip-state { padding: 0.8rem; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 80%, transparent); border-radius: 0.9rem; background: color-mix(in oklch, var(--card-bg, #fff) 70%, transparent); }
+	.music-config-block--full { min-height: 26rem; align-content: start; }
 	.music-config-block, .music-login-form { display: grid; gap: 0.7rem; }
 	.music-muted, .music-status-line, .music-login-note { margin: 0; color: var(--text-50, rgb(100 116 139)); font-size: 0.72rem; line-height: 1.55; }
 	.music-error { color: #c05640; }
@@ -1357,9 +1417,10 @@
 	.music-track-copy strong { font-size: 0.85rem; }
 	.music-track-copy span:last-child { color: var(--text-50, rgb(100 116 139)); font-size: 0.72rem; }
 	.music-track-status { display: inline-flex; align-items: center; gap: 0.35rem; }
-	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 0; border-radius: 0.65rem; color: var(--text-45, rgb(148 163 184)); background: transparent; cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 0; border-radius: 0.65rem; color: #fff; background: transparent; cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-favorite:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: scale(1.06); }
-	.music-favorite--active { color: var(--primary); }
+	.music-favorite--active { color: var(--primary); animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	@keyframes music-heart-pop { 0% { transform: scale(0.7); } 45% { transform: scale(1.28); } 70% { transform: scale(0.92); } 100% { transform: scale(1); } }
 	.music-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 0.7rem; }
 	.music-eq i { display: block; width: 2.5px; border-radius: 2px; background: var(--primary); transform-origin: bottom; animation: music-eq-bounce 900ms ease-in-out infinite alternate; }
 	.music-eq i:nth-child(2) { animation-delay: -300ms; }
@@ -1368,7 +1429,8 @@
 	.music-progress-row { margin-top: 0.85rem; color: var(--text-50, rgb(100 116 139)); font-family: var(--font-mono, monospace); font-size: 0.6rem; }
 	.music-progress-row span:last-child { text-align: right; }
 	input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer; }
-	.music-controls { margin-top: 0.55rem; justify-content: center; }
+	.music-fullscreen__left .music-controls { margin-top: 0.9rem; gap: 0.7rem; }
+	.music-controls { margin-top: 0.55rem; justify-content: center; gap: 0.35rem; }
 	.music-play-button { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border: 0; border-radius: 50%; color: #fff; background: var(--primary); cursor: pointer; font-size: 1.5rem; transition: transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), box-shadow 180ms ease; }
 	.music-play-button:hover { transform: scale(1.05); }
 	.music-play-button:active { transform: scale(0.94); }
