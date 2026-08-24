@@ -69,7 +69,7 @@ const isNew = (new Date().getTime() - published.getTime()) < 7 * 24 * 60 * 60 * 
         </div>
 
         <!-- word count and read time  -->
-        <div class="post-card__metrics text-sm text-black/30 dark:text-white/30 flex gap-4 transition">
+        <div class="post-card__metrics text-sm text-black/45 dark:text-white/45 flex gap-4 transition">
             <div>
                 {remarkPluginFrontmatter.words} {" " + i18n(remarkPluginFrontmatter.words === 1 ? I18nKey.wordCount : I18nKey.wordsCount)}
             </div>

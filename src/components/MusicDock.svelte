@@ -80,8 +80,17 @@
 	let addTargetPlaylistId = "";
 	let addBusy = false;
 	let batchMode = false;
+	let batchSelectedVersion = 0;
 	const batchSelected = new Map<string, MusicSong>();
 	let batchBusy = false;
+	// 待删除缓冲区：UI 立即变白但接口延迟执行，退出重进/点刷新才真正删除。
+	const pendingRemovals = new Map<string, MusicSong>();
+	let pendingRemovalsVersion = 0;
+	// 居中卡片微弹窗（收藏反馈等）
+	let toastVisible = false;
+	let toastKind: "fav" | "unfav" | "info" | "error" = "info";
+	let toastText = "";
+	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 	let currentSong: MusicSong | null = null;
 	let currentSongLoading = "";
 	let audio: HTMLAudioElement | null = null;
@@ -128,7 +137,10 @@
 	$: progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 	$: dockLabel = currentSong ? `${currentSong.name} · ${currentSong.author}` : "连接你的音乐平台";
 	$: currentIndex = songs.findIndex((song) => song.hash === currentSong?.hash);
-	$: isFavorite = currentSong ? isSongInPlaylist(currentSong.hash, songs) : false;
+	$: isFavorite = currentSong ? (isSongInPlaylist(currentSong.hash, songs) && !pendingRemovals.has(currentSong.hash)) : false;
+	// 响应式版本号：Map 原地变更后递增触发视图更新
+	$: batchTick = batchSelectedVersion;
+	$: pendingTick = pendingRemovalsVersion;
 	$: librarySourceSongs = searchQuery.trim() ? searchResults : songs;
 	$: librarySortedSongs = sortSongs(librarySourceSongs, librarySort);
 	$: libraryTotalPages = Math.max(1, Math.ceil(librarySortedSongs.length / libraryPageSize));
@@ -168,13 +180,6 @@
 	const clearCountdown = () => {
 		if (countdownTimer) clearInterval(countdownTimer);
 		countdownTimer = null;
-	};
-
-	const setNotice = (message: string) => {
-		notice = message;
-		window.setTimeout(() => {
-			if (notice === message) notice = "";
-		}, 4200);
 	};
 
 	const setSession = async (nextAuth: MusicSession) => {
@@ -348,6 +353,8 @@
 		libraryPage = 1;
 		dailyPage = 1;
 		libraryPageJump = "";
+		pendingRemovals.clear();
+		pendingRemovalsVersion += 1;
 		searchQuery = "";
 		searchScope = "playlist";
 		searchResults = [];
@@ -436,7 +443,6 @@
 		}
 		const generation = ++playGeneration;
 		currentSongLoading = song.hash;
-		setNotice(`正在连接播放流…`);
 		try {
 			const audioUrl = await client.getStreamUrl(song.hash);
 			if (!audioUrl) throw new MusicApiError("BFF 播放流不可用");
@@ -534,42 +540,123 @@
 		await playSong(songs[(index + 1) % songs.length]);
 	};
 
+	const showToast = (kind: "fav" | "unfav" | "info" | "error", text: string) => {
+		toastKind = kind;
+		toastText = text;
+		toastVisible = true;
+		if (toastTimer) clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => (toastVisible = false), 2200);
+	};
+
+	const setNotice = (message: string) => {
+		showToast("info", message);
+	};
+
 	const toggleFavorite = () => {
 		if (!currentSong) return;
 		if (isFavorite) {
-			// 已在当前歌单 → 直接移除（冷青变白）
-			void removeSongFromPlaylist(currentSong);
+			// 已收藏 → 进入待删除缓冲区：UI 立即变白，接口延迟到刷新/重进时执行
+			pendingRemovals.set(currentSong.hash, currentSong);
+			pendingRemovalsVersion += 1;
+			showToast("unfav", `取消收藏「${currentSong.name}」，刷新后生效`);
 			return;
 		}
-		// 未收藏 → 打开添加卡片选择目标歌单
+		if (pendingRemovals.has(currentSong.hash)) {
+			// 待删除期间反悔：本地恢复，不调接口
+			pendingRemovals.delete(currentSong.hash);
+			pendingRemovalsVersion += 1;
+			showToast("fav", `已恢复收藏「${currentSong.name}」`);
+			return;
+		}
+		// 未收藏 → 打开添加卡片选择目标歌单（立即调接口）
 		openAddSong(currentSong);
+	};
+
+	const flushPendingRemovals = async (): Promise<boolean> => {
+		if (!client || !selectedPlaylistId || pendingRemovals.size === 0) return true;
+		const entries = [...pendingRemovals.entries()].filter(([, song]) => songFileId(song));
+		if (entries.length === 0) {
+			pendingRemovals.clear();
+			pendingRemovalsVersion += 1;
+			return true;
+		}
+		try {
+			const fileids = entries.map(([, song]) => String(songFileId(song)));
+			await client.delPlaylistTracks(selectedPlaylistId, fileids);
+			for (const [hash] of entries) pendingRemovals.delete(hash);
+			pendingRemovalsVersion += 1;
+			showToast("unfav", `已移除 ${fileids.length} 首，列表已刷新`);
+			await loadSongs();
+			return true;
+		} catch (error) {
+			showToast("error", errorMessage(error, "移除执行失败，已恢复收藏状态"));
+			pendingRemovals.clear();
+			pendingRemovalsVersion += 1;
+			return false;
+		}
 	};
 
 	const removeSongFromPlaylist = async (song: MusicSong) => {
 		const fileid = songFileId(song);
 		if (!client || !selectedPlaylistId) return;
 		if (!fileid) {
-			setNotice("这首歌缺少移除标识，请在歌曲库中管理");
+			showToast("error", "这首歌缺少移除标识，请在歌曲库中管理");
 			return;
 		}
 		try {
 			await client.delPlaylistTracks(selectedPlaylistId, [fileid]);
-			setNotice(`已从当前歌单移除「${song.name}」`);
+			showToast("unfav", `已从当前歌单移除「${song.name}」`);
 			await loadSongs();
 		} catch (error) {
-			setNotice(errorMessage(error, "移除失败"));
+			showToast("error", errorMessage(error, "移除失败"));
+		}
+	};
+
+	const refreshLibrary = async () => {
+		libraryPage = 1;
+		dailyPage = 1;
+		await flushPendingRemovals();
+	};
+
+	const toggleFavoriteState = (song: MusicSong) => {
+		// 弹窗内单爱心切换：已收藏→待删除缓冲区；待删除→本地恢复。均不立即调接口。
+		if (pendingRemovals.has(song.hash)) {
+			pendingRemovals.delete(song.hash);
+			pendingRemovalsVersion += 1;
+			showToast("fav", `已恢复收藏「${song.name}」`);
+			return;
+		}
+		if (isSongInPlaylist(song.hash, songs)) {
+			pendingRemovals.set(song.hash, song);
+			pendingRemovalsVersion += 1;
+			showToast("unfav", `取消收藏「${song.name}」，刷新后生效`);
+			return;
+		}
+		addSongToCurrentPlaylist(song);
+	};
+
+	const addSongToCurrentPlaylist = async (song: MusicSong) => {
+		if (!client || !selectedPlaylistId) return;
+		try {
+			await client.addPlaylistTracks(selectedPlaylistId, searchSongAddData(song));
+			showToast("fav", `已收藏「${song.name}」到当前歌单`);
+			await loadSongs();
+		} catch (error) {
+			showToast("error", errorMessage(error, "收藏失败"));
 		}
 	};
 
 	const toggleBatchMode = () => {
 		batchMode = !batchMode;
 		batchSelected.clear();
+		batchSelectedVersion += 1;
 	};
 
 	const toggleBatchSong = (song: MusicSong) => {
 		const key = songFileId(song) ?? song.hash;
 		if (batchSelected.has(key)) batchSelected.delete(key);
 		else batchSelected.set(key, song);
+		batchSelectedVersion += 1;
 	};
 
 	const deleteBatchSelected = async () => {
@@ -577,19 +664,20 @@
 		const entries = [...batchSelected.entries()];
 		const missing = entries.filter(([, song]) => !songFileId(song));
 		if (missing.length === entries.length) {
-			setNotice("所选歌曲缺少移除标识");
+			showToast("error", "所选歌曲缺少移除标识");
 			return;
 		}
 		batchBusy = true;
 		try {
 			const fileids = entries.filter(([, song]) => songFileId(song)).map(([, song]) => String(songFileId(song)));
 			await client.delPlaylistTracks(selectedPlaylistId, fileids);
-			setNotice(`已从歌单移除 ${fileids.length} 首歌曲`);
+			showToast("unfav", `已从歌单移除 ${fileids.length} 首歌曲`);
 			batchSelected.clear();
+			batchSelectedVersion += 1;
 			batchMode = false;
 			await loadSongs();
 		} catch (error) {
-			setNotice(errorMessage(error, "批量移除失败"));
+			showToast("error", errorMessage(error, "批量移除失败"));
 		} finally {
 			batchBusy = false;
 		}
@@ -598,8 +686,7 @@
 	const cycleRepeat = () => {
 		playMode = nextPlayMode(playMode);
 		localStorage.setItem(REPEAT_KEY, playMode);
-		const label = playMode === "list" ? "列表循环" : playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : "顺序播放";
-		setNotice(label);
+		// 模式变化由图标+常驻标签直接体现，不再弹提示导致面板高度跳动。
 	};
 
 	const scrollActiveTrackIntoView = () => {
@@ -1056,10 +1143,6 @@
 				</div>
 			</header>
 
-			<div class="music-notice-slot" role="status">
-				{#if notice}<span class="music-notice">{notice}</span>{/if}
-			</div>
-
 			{#if apiStatus !== "ready" || showSettings}
 				<div class="music-config-block music-config-block--full">
 					<div class="music-section-label">SERVICE CONNECTION</div>
@@ -1127,9 +1210,12 @@
 							<Icon icon={isPlaying ? "material-symbols:pause-rounded" : "material-symbols:play-arrow-rounded"} />
 						</button>
 						<button class="music-icon-button" type="button" aria-label="下一首" on:click={playNext}><Icon icon="material-symbols:skip-next-rounded" /></button>
-						<button class:music-mode-button--active={playMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label="切换播放模式" title={playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : playMode === "order" ? "顺序播放" : "列表循环"} on:click={cycleRepeat}>
-							<Icon icon={playMode === "one" ? "material-symbols:repeat-one-rounded" : playMode === "shuffle" ? "material-symbols:shuffle-rounded" : playMode === "order" ? "material-symbols:format-list-numbered-rounded" : "material-symbols:repeat-rounded"} />
-						</button>
+						<span class="music-mode-wrap">
+							<button class:music-mode-button--active={playMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label="切换播放模式" title={playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : playMode === "order" ? "顺序播放" : "列表循环"} on:click={cycleRepeat}>
+								<Icon icon={playMode === "one" ? "material-symbols:repeat-one-rounded" : playMode === "shuffle" ? "material-symbols:shuffle-rounded" : playMode === "order" ? "material-symbols:format-list-numbered-rounded" : "material-symbols:repeat-rounded"} />
+							</button>
+							<small class="music-mode-label">{playMode === "one" ? "单曲" : playMode === "shuffle" ? "随机" : playMode === "order" ? "顺序" : "列表"}</small>
+						</span>
 					</div>
 					<div class="music-volume-row">
 						<label class="music-volume" aria-label="音量">
@@ -1198,7 +1284,7 @@
 										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 									</button>
-									<button class:music-search-favorite--active={isSongInPlaylist(song.hash, songs)} class="music-search-favorite" type="button" aria-label={isSongInPlaylist(song.hash, songs) ? `从当前歌单移除 ${song.name}` : `添加 ${song.name} 到歌单`} title={isSongInPlaylist(song.hash, songs) ? "点击移出当前歌单" : "添加到歌单"} on:click={() => (isSongInPlaylist(song.hash, songs) ? void removeSongFromPlaylist(song) : openAddSong(song))}><Icon icon={isSongInPlaylist(song.hash, songs) ? "material-symbols:heart-minus-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+									<button class:music-search-favorite--active={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash)} class="music-search-favorite" type="button" aria-label={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? "点击取消收藏（刷新后生效）" : pendingRemovals.has(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => (isSongInPlaylist(song.hash, songs) ? toggleFavoriteState(song) : addSongToCurrentPlaylist(song))}><Icon icon={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 								</div>
 							{/each}
 						{:else}
@@ -1232,8 +1318,10 @@
 						<div class="music-library-toolbar__left">
 							<span class="music-muted">{searchQuery.trim() ? searchMessage : `${songs.length} 首歌曲`}</span>
 							{#if batchMode}<span class="music-muted">已选 {batchSelected.size}</span>{/if}
+							{#if pendingRemovals.size > 0}<span class="music-pending-hint">待移除 {pendingRemovals.size} 首</span>{/if}
 						</div>
 						<div class="music-library-toolbar__controls">
+							<button class="music-quiet" type="button" disabled={songsLoading || dailyLoading} on:click={() => void refreshLibrary()}>刷新</button>
 							{#if batchMode}<button class:music-quiet--danger={batchSelected.size > 0} class="music-quiet" type="button" disabled={batchBusy || batchSelected.size === 0} on:click={() => void deleteBatchSelected()}>移除所选 ({batchSelected.size})</button>{/if}
 							<button class="music-quiet" type="button" on:click={toggleBatchMode}>{batchMode ? "退出批量" : "批量管理"}</button>
 							<select value={librarySort} aria-label="歌曲排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
@@ -1254,7 +1342,7 @@
 									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 								</button>
-								<button class:music-search-favorite--active={isSongInPlaylist(song.hash, songs)} class="music-search-favorite" type="button" aria-label={isSongInPlaylist(song.hash, songs) ? `从当前歌单移除 ${song.name}` : `添加 ${song.name} 到歌单`} title={isSongInPlaylist(song.hash, songs) ? "点击移出当前歌单" : "添加到歌单"} on:click={() => (isSongInPlaylist(song.hash, songs) ? void removeSongFromPlaylist(song) : openAddSong(song))}><Icon icon={isSongInPlaylist(song.hash, songs) ? "material-symbols:heart-minus-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+								<button class:music-search-favorite--active={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash)} class="music-search-favorite" type="button" aria-label={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? "点击取消收藏（刷新后生效）" : pendingRemovals.has(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => (isSongInPlaylist(song.hash, songs) ? toggleFavoriteState(song) : addSongToCurrentPlaylist(song))}><Icon icon={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 							</div>
 						{/each}
 					{:else}
@@ -1308,9 +1396,12 @@
 							<Icon icon={isPlaying ? "material-symbols:pause-rounded" : "material-symbols:play-arrow-rounded"} />
 						</button>
 						<button class="music-icon-button" type="button" aria-label="下一首" title="下一首" on:click={playNext}><Icon icon="material-symbols:skip-next-rounded" /></button>
-						<button class:music-mode-button--active={playMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label="切换播放模式" title={playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : playMode === "order" ? "顺序播放" : "列表循环"} on:click={cycleRepeat}>
-							<Icon icon={playMode === "one" ? "material-symbols:repeat-one-rounded" : playMode === "shuffle" ? "material-symbols:shuffle-rounded" : playMode === "order" ? "material-symbols:format-list-numbered-rounded" : "material-symbols:repeat-rounded"} />
-						</button>
+						<span class="music-mode-wrap">
+							<button class:music-mode-button--active={playMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label="切换播放模式" title={playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : playMode === "order" ? "顺序播放" : "列表循环"} on:click={cycleRepeat}>
+								<Icon icon={playMode === "one" ? "material-symbols:repeat-one-rounded" : playMode === "shuffle" ? "material-symbols:shuffle-rounded" : playMode === "order" ? "material-symbols:format-list-numbered-rounded" : "material-symbols:repeat-rounded"} />
+							</button>
+							<small class="music-mode-label">{playMode === "one" ? "单曲" : playMode === "shuffle" ? "随机" : playMode === "order" ? "顺序" : "列表"}</small>
+						</span>
 					</div>
 				</div>
 				<div class="music-fullscreen__right">
@@ -1326,6 +1417,17 @@
 						{/if}
 					</div>
 				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if toastVisible}
+		<div class="music-toast-backdrop" role="status" on:click={() => (toastVisible = false)}>
+			<div class="music-toast-card music-toast-card--{toastKind}">
+				<span class="music-toast-heart">
+					<Icon icon={toastKind === "unfav" ? "material-symbols:heart-minus-rounded" : toastKind === "error" ? "material-symbols:error-rounded" : "material-symbols:favorite-rounded"} />
+				</span>
+				<strong>{toastText}</strong>
 			</div>
 		</div>
 	{/if}
@@ -1426,7 +1528,7 @@
 	.music-trigger-copy small { overflow: hidden; color: var(--text-50, rgb(100 116 139)); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
 	:global(.music-trigger-chevron) { display: none; color: var(--primary); font-size: 1.25rem; }
 
-	.music-panel { position: relative; width: 100%; height: min(46rem, calc(100vh - 2rem)); max-height: min(46rem, calc(100vh - 2rem)); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	.music-panel { position: relative; width: 100%; min-height: min(38rem, calc(100vh - 2rem)); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; }
 	.music-panel-title { display: grid; gap: 0.1rem; }
 	.music-panel-title .music-kicker { margin-bottom: 0; }
@@ -1464,10 +1566,11 @@
 	.music-library-jump { display: flex; align-items: center; gap: 0.3rem; }
 	.music-library-jump input { width: 4.2rem; min-height: 1.9rem; padding: 0.25rem 0.45rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.55rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.68rem; text-align: center; }
 	.music-library-toolbar select { min-height: 1.9rem; padding-block: 0.25rem; }
-	.music-library-list { min-height: 12rem; margin-top: 0.55rem; overflow-y: auto; scrollbar-width: thin; }
-	.music-library-row { display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
+	.music-library-list { min-height: 12rem; margin-top: 0.55rem; overflow-y: auto; scrollbar-width: thin; padding-right: 0.5rem; }
+	.music-library-row { display: flex; align-items: center; gap: 0.25rem; min-width: 0; padding-right: 0.35rem; }
 	.music-library-row > .music-song { min-width: 0; flex: 1; }
-	.music-library-row .music-search-favorite { flex: 0 0 2.1rem; }
+	.music-library-row .music-search-favorite { flex: 0 0 2.1rem; margin-left: 0.45rem; }
+	.music-pending-hint { padding: 0.12rem 0.45rem; border-radius: 999px; color: #c05640; background: color-mix(in oklch, #c05640 9%, transparent); font-size: 0.6rem; white-space: nowrap; }
 	.music-library-empty { display: grid; min-height: 12rem; place-items: center; padding: 1rem; text-align: center; }
 	.music-quiet--danger { color: #c05640; border-color: color-mix(in oklch, #c05640 36%, transparent); }
 	.music-batch-check { display: grid; place-items: center; flex: 0 0 1.15rem; width: 1.15rem; height: 1.15rem; margin-right: 0.45rem; border: 1.5px solid var(--text-40, #94a3b8); border-radius: 50%; color: transparent; font-size: 0.7rem; line-height: 1; }
@@ -1523,10 +1626,18 @@
 	.music-section-label { display: block; margin-bottom: 0.35rem; color: var(--text-50, rgb(100 116 139)); }
 	.music-icon-button { display: inline-grid; place-items: center; width: 2.2rem; height: 2.2rem; padding: 0; border: 0; border-radius: 0.65rem; color: var(--text-60, rgb(71 85 105)); background: transparent; cursor: pointer; font-size: 1.25rem; transition: color 180ms ease, background 180ms ease, transform 180ms ease; }
 	.music-icon-button:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: translateY(-1px); }
-	.music-notice-slot { display: flex; justify-content: center; min-height: 0; }
-	.music-notice { margin-bottom: 0.75rem; padding: 0.55rem 0.7rem; border-radius: 0.65rem; color: var(--primary); background: color-mix(in oklch, var(--primary) 9%, transparent); font-size: 0.72rem; }
+	.music-toast-backdrop { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; background: rgb(8 12 20 / 0.32); animation: music-fade-in 150ms ease both; }
+	.music-toast-card { display: grid; justify-items: center; gap: 0.6rem; width: min(20rem, calc(100vw - 3rem)); padding: 1.4rem 1.2rem; border-radius: 1.1rem; color: inherit; background: var(--card-bg, #fff); box-shadow: 0 24px 60px -24px rgb(15 23 42 / 0.55); animation: music-toast-in 240ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; text-align: center; }
+	.music-toast-heart { display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 50%; font-size: 1.7rem; animation: music-toast-beat 900ms ease-in-out 2; }
+	.music-toast-card--fav .music-toast-heart { color: #fff; background: var(--primary); }
+	.music-toast-card--unfav .music-toast-heart { color: var(--text-45, rgb(148 163 184)); border: 1.5px dashed var(--text-40, #94a3b8); }
+	.music-toast-card--error .music-toast-heart { color: #c05640; background: color-mix(in oklch, #c05640 10%, transparent); }
+	.music-toast-card--info .music-toast-heart { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); }
+	.music-toast-card strong { max-width: 100%; overflow-wrap: anywhere; font-size: 0.8rem; line-height: 1.5; }
+	@keyframes music-toast-in { from { opacity: 0; transform: translateY(14px) scale(0.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
+	@keyframes music-toast-beat { 0%, 100% { transform: scale(1) rotate(0deg); } 25% { transform: scale(1.18) rotate(-6deg); } 55% { transform: scale(0.94) rotate(5deg); } 80% { transform: scale(1.08) rotate(-3deg); } }
 	.music-config-block, .music-player-core, .music-account-row, .music-vip-state { padding: 0.8rem; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 80%, transparent); border-radius: 0.9rem; background: color-mix(in oklch, var(--card-bg, #fff) 70%, transparent); }
-	.music-config-block--full { min-height: 26rem; align-content: start; }
+	.music-config-block--full { min-height: 38rem; align-content: start; }
 	.music-config-block, .music-login-form { display: grid; gap: 0.7rem; }
 	.music-muted, .music-status-line, .music-login-note { margin: 0; color: var(--text-50, rgb(100 116 139)); font-size: 0.72rem; line-height: 1.55; }
 	.music-error { color: #c05640; }
@@ -1564,6 +1675,8 @@
 	.music-progress-row span:last-child { text-align: right; }
 	input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer; }
 	.music-fullscreen__left .music-controls { margin-top: 0.9rem; gap: 0.7rem; }
+	.music-mode-wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 0.1rem; }
+	.music-mode-label { color: var(--text-50, rgb(100 116 139)); font-size: 0.56rem; line-height: 1; letter-spacing: 0.04em; }
 	.music-controls { margin-top: 0.55rem; justify-content: center; gap: 0.35rem; }
 	.music-play-button { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border: 0; border-radius: 50%; color: #fff; background: var(--primary); cursor: pointer; font-size: 1.5rem; transition: transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), box-shadow 180ms ease; }
 	.music-play-button:hover { transform: scale(1.05); }
@@ -1600,7 +1713,7 @@
 	.music-search-results { margin-top: 0.55rem; }
 	.music-search-result { display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
 	.music-search-result .music-song { min-width: 0; flex: 1; }
-	.music-search-favorite { display: grid; place-items: center; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 85%, transparent); border-radius: 0.6rem; color: var(--text-45, rgb(148 163 184)); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.1rem; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
+	.music-search-favorite { display: grid; place-items: center; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid color-mix(in oklch, var(--text-40, #94a3b8) 45%, transparent); border-radius: 0.6rem; color: var(--text-45, rgb(120 134 156)); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.1rem; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
 	.music-search-favorite:hover { border-color: color-mix(in oklch, var(--primary) 30%, transparent); color: var(--primary); background: color-mix(in oklch, var(--primary) 8%, transparent); }
 	.music-search-favorite--active { color: #fff; border-color: var(--primary); background: var(--primary); }
 	.music-add-song-card { display: grid; gap: 0.55rem; margin-top: 0.6rem; padding: 0.7rem; border: 1px solid color-mix(in oklch, var(--primary) 22%, var(--card-border, #dce5e5)); border-radius: 0.75rem; background: color-mix(in oklch, var(--primary) 5%, transparent); }
