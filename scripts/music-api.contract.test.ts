@@ -12,6 +12,7 @@ import {
 	parseLyricsText,
 	paginateSongs,
 	sortSongs,
+	songFileId,
 	centeredLyricScrollTop,
 	isCurrentLyricsRequest,
 	nextPlayMode,
@@ -76,6 +77,9 @@ assert.deepEqual(paginateSongs([1, 2, 3], 0, 2), [1, 2]);
 const librarySongs = [{ name: "Z", author: "B" }, { name: "A", author: "C" }] as any;
 assert.deepEqual(sortSongs(librarySongs, "title").map((song) => song.name), ["A", "Z"]);
 assert.deepEqual(sortSongs(librarySongs, "artist").map((song) => song.author), ["B", "C"]);
+assert.equal(songFileId({ id: 42 } as any), "42");
+assert.equal(songFileId({ fileid: "7" } as any), "7");
+assert.equal(songFileId({ hash: "X" } as any), null);
 assert.equal(nextPlayMode("order"), "list");
 assert.equal(nextPlayMode("list"), "one");
 assert.equal(nextPlayMode("one"), "shuffle");

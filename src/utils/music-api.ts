@@ -256,6 +256,13 @@ export const sortSongs = (songs: MusicSong[], sort: "default" | "title" | "artis
 	return 0;
 });
 
+/** 歌单内歌曲的 fileid（删除接口需要），仅歌单曲目接口返回该字段。 */
+export const songFileId = (song: MusicSong): string | null => {
+	const raw = song.id ?? song.fileid ?? song.song_id;
+	const value = Number(raw);
+	return Number.isFinite(value) && value > 0 ? String(value) : null;
+};
+
 export type PlayMode = "order" | "list" | "one" | "shuffle";
 
 export const PLAY_MODE_ORDER: PlayMode[] = ["order", "list", "one", "shuffle"];
@@ -497,6 +504,10 @@ export class MusicApiClient {
 
 	async addPlaylistTracks(listid: string | number, data: string): Promise<unknown> {
 		return this.request(`/playlists/${encodeURIComponent(String(listid))}/add`, { method: "POST", body: { data } });
+	}
+
+	async delPlaylistTracks(listid: string | number, fileids: Array<string | number>): Promise<unknown> {
+		return this.request(`/playlists/${encodeURIComponent(String(listid))}/tracks/delete`, { method: "POST", body: { fileids } });
 	}
 
 	async getStreamPreparation(hash: string): Promise<void> {
