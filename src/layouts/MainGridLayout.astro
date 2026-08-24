@@ -147,6 +147,8 @@ const isHomePage = pathsEqual(Astro.url.pathname, url("/"));
 </div>
 )}
 
-        <!-- #toc needs to exist for Swup to work normally -->
-        {!siteConfig.toc.enable && <div id="toc"></div>}
+        <!-- #toc must exist on EVERY page for Swup containers to resolve;
+             otherwise Swup init fails and navigation falls back to full reload,
+             which unmounts the music player and interrupts playback. -->
+        {!(headings.length > 0 && siteConfig.toc.enable) && <div id="toc"></div>}
 </Layout>
