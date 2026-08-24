@@ -568,8 +568,8 @@
 			showToast("fav", `已恢复收藏「${currentSong.name}」`);
 			return;
 		}
-		// 未收藏 → 打开添加卡片选择目标歌单（立即调接口）
-		openAddSong(currentSong);
+		// 未收藏 → 直接加入当前选中歌单（立即生效）
+		void addSongToCurrentPlaylist(currentSong);
 	};
 
 	const flushPendingRemovals = async (): Promise<boolean> => {
@@ -1193,7 +1193,7 @@
 							<span>{currentSong?.author ?? "登录后读取你的歌单"}{currentIndex >= 0 ? ` · ${currentIndex + 1}/${songs.length}` : ""}</span>
 							</div>
 							{#if currentSong}
-							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? "已在当前歌单，选择其他歌单" : "添加当前歌曲到云端歌单"} title={isFavorite ? "已在当前歌单，选择其他歌单" : "添加到云端歌单"} on:click={toggleFavorite}>
+							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? `取消收藏「${currentSong.name}」` : `收藏「${currentSong.name}」到当前歌单`} title={isFavorite ? "点击取消收藏（刷新后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}>
 								<Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} />
 							</button>
 							{/if}
@@ -1266,9 +1266,13 @@
 						<div><p class="music-kicker">DISCOVER / TODAY</p><h2>每日推荐</h2><span class="music-muted">{dailySongs.length > 0 ? `${dailySortedSongs.length} 首今日推荐` : "每天为你挑选 30 首新歌"}</span></div>
 						<button class="music-icon-button" type="button" aria-label="关闭每日推荐" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
 					</header>
-				<div class="music-library-toolbar">
-						<span class="music-muted">{dailyLoading ? "正在读取今日推荐…" : dailyMessage || `${dailySortedSongs.length} 首推荐`}</span>
+					<div class="music-library-toolbar">
+						<div class="music-library-toolbar__left">
+							<span class="music-muted">{dailyLoading ? "正在读取今日推荐…" : dailyMessage || `${dailySortedSongs.length} 首推荐`}</span>
+							{#if pendingRemovals.size > 0}<span class="music-pending-hint">待移除 {pendingRemovals.size} 首</span>{/if}
+						</div>
 						<div class="music-library-toolbar__controls">
+							<button class="music-quiet" type="button" disabled={songsLoading || dailyLoading} on:click={() => void refreshLibrary()}>刷新</button>
 							<select value={librarySort} aria-label="推荐排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
 							<select value={libraryPageSize} aria-label="每页显示数量" on:change={setLibraryPageSize}><option value={10}>10 首/页</option><option value={25}>25 首/页</option><option value={50}>50 首/页</option></select>
 						</div>
@@ -1309,12 +1313,12 @@
 						<div><p class="music-kicker">LIBRARY / SEARCH</p><h2>歌曲库</h2><span class="music-muted">{selectedPlaylistId ? playlists.find((playlist) => String(playlist.listid) === selectedPlaylistId)?.name : "我的音乐"}</span></div>
 						<button class="music-icon-button" type="button" aria-label="关闭歌曲库" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
 					</header>
-				<div class="music-library-search">
-					<input bind:value={searchQuery} aria-label="搜索歌曲库" placeholder="搜索歌曲名或歌手" on:keydown={(event) => event.key === "Enter" && void searchLibrary()} />
-					<select bind:value={searchScope} aria-label="搜索范围"><option value="playlist">当前歌单</option><option value="all">全网歌曲</option></select>
-					<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
-				</div>
-				<div class="music-library-toolbar">
+					<div class="music-library-search">
+						<input bind:value={searchQuery} aria-label="搜索歌曲库" placeholder="搜索歌曲名或歌手" on:keydown={(event) => event.key === "Enter" && void searchLibrary()} />
+						<select bind:value={searchScope} aria-label="搜索范围"><option value="playlist">当前歌单</option><option value="all">全网歌曲</option></select>
+						<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
+					</div>
+					<div class="music-library-toolbar">
 						<div class="music-library-toolbar__left">
 							<span class="music-muted">{searchQuery.trim() ? searchMessage : `${songs.length} 首歌曲`}</span>
 							{#if batchMode}<span class="music-muted">已选 {batchSelected.size}</span>{/if}
@@ -1328,7 +1332,7 @@
 							<select value={libraryPageSize} aria-label="每页显示数量" on:change={setLibraryPageSize}><option value={10}>10 首/页</option><option value={25}>25 首/页</option><option value={50}>50 首/页</option></select>
 						</div>
 					</div>
-					<div class="music-library-list" aria-label="歌曲库列表">
+						<div class="music-library-list" aria-label="歌曲库列表">
 						{#if searchBusy}
 							<p class="music-muted music-library-empty">正在搜索歌曲…</p>
 						{:else if libraryPageSongs.length > 0}
@@ -1349,20 +1353,20 @@
 						<p class="music-muted music-library-empty">{searchQuery.trim() ? searchMessage : songsMessage}</p>
 					{/if}
 				</div>
-				<div class="music-library-footer">
-					<span class="music-muted">第 {Math.min(libraryPage, libraryTotalPages)} / {libraryTotalPages} 页</span>
-					<form class="music-library-jump" on:submit={jumpToLibraryPage}>
-						<input bind:value={libraryPageJump} aria-label="跳转到指定页" placeholder="页码" inputmode="numeric" />
-						<button class="music-quiet" type="submit">跳转</button>
-					</form>
-					<div class="music-actions">
-						<button class="music-quiet" type="button" disabled={libraryPage <= 1} on:click={() => (libraryPage -= 1)}>上一页</button>
-						<button class="music-quiet" type="button" disabled={libraryPage >= libraryTotalPages} on:click={() => (libraryPage += 1)}>下一页</button>
+					<div class="music-library-footer">
+						<span class="music-muted">第 {Math.min(libraryPage, libraryTotalPages)} / {libraryTotalPages} 页</span>
+						<form class="music-library-jump" on:submit={jumpToLibraryPage}>
+							<input bind:value={libraryPageJump} aria-label="跳转到指定页" placeholder="页码" inputmode="numeric" />
+							<button class="music-quiet" type="submit">跳转</button>
+						</form>
+						<div class="music-actions">
+							<button class="music-quiet" type="button" disabled={libraryPage <= 1} on:click={() => (libraryPage -= 1)}>上一页</button>
+							<button class="music-quiet" type="button" disabled={libraryPage >= libraryTotalPages} on:click={() => (libraryPage += 1)}>下一页</button>
+						</div>
 					</div>
-				</div>
-				{#if addTargetSong}
-					<div class="music-add-song-card"><div><span class="music-section-label">ADD TO PLAYLIST</span><strong>{addTargetSong.name}</strong></div><select bind:value={addTargetPlaylistId} aria-label="选择目标歌单">{#each playlists as playlist}<option value={String(playlist.listid)}>{playlist.name}</option>{/each}</select><div class="music-actions"><button class="music-quiet" type="button" on:click={() => (addTargetSong = null)}>取消</button><button class="music-primary music-primary--small" type="button" disabled={addBusy} on:click={() => void addSongToPlaylist()}>{addBusy ? "添加中…" : "确认添加"}</button></div></div>
-				{/if}
+					{#if addTargetSong}
+						<div class="music-add-song-card"><div><span class="music-section-label">ADD TO PLAYLIST</span><strong>{addTargetSong.name}</strong></div><select bind:value={addTargetPlaylistId} aria-label="选择目标歌单">{#each playlists as playlist}<option value={String(playlist.listid)}>{playlist.name}</option>{/each}</select><div class="music-actions"><button class="music-quiet" type="button" on:click={() => (addTargetSong = null)}>取消</button><button class="music-primary music-primary--small" type="button" disabled={addBusy} on:click={() => void addSongToPlaylist()}>{addBusy ? "添加中…" : "确认添加"}</button></div></div>
+					{/if}
 				{/if}
 			</section>
 		</div>
@@ -1390,7 +1394,7 @@
 						<span>{formatTime(duration)}</span>
 					</div>
 					<div class="music-controls">
-						<button class="music-icon-button" type="button" aria-label={isFavorite ? "已在当前歌单" : "收藏到歌单"} title={isFavorite ? "已在当前歌单" : "收藏到歌单"} on:click={toggleFavorite}><Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+						<button class="music-icon-button" type="button" aria-label={isFavorite ? "取消收藏（刷新后生效）" : "收藏到当前歌单"} title={isFavorite ? "点击取消收藏（刷新后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}><Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 						<button class="music-icon-button" type="button" aria-label="上一首" title="上一首" on:click={playPrevious}><Icon icon="material-symbols:skip-previous-rounded" /></button>
 						<button class:music-play-button--playing={isPlaying} class="music-play-button" type="button" aria-label={isPlaying ? "暂停" : "播放"} title={isPlaying ? "暂停" : "播放"} on:click={togglePlay}>
 							<Icon icon={isPlaying ? "material-symbols:pause-rounded" : "material-symbols:play-arrow-rounded"} />
@@ -1585,9 +1589,9 @@
 	.music-setting-row input[type="checkbox"] { width: 1.15rem; height: 1.15rem; accent-color: var(--primary); }
 	@keyframes music-modal-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 	@keyframes music-fade-in { from { opacity: 0; } to { opacity: 1; } }
-	.music-fullscreen { position: fixed; inset: 0; z-index: 990; display: flex; align-items: stretch; justify-content: center; overflow: hidden; overscroll-behavior: none; isolation: isolate; }
-	.music-fullscreen__bg { position: absolute; inset: -3rem; background-size: cover; background-position: center; filter: blur(60px) saturate(1.35) brightness(0.85); opacity: 0.65; transform: scale(1.15); pointer-events: none; }
-	.music-fullscreen__scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgb(10 15 24 / 0.6), rgb(8 12 20 / 0.92)); pointer-events: none; }
+	.music-fullscreen { position: fixed; inset: 0; z-index: 990; display: flex; align-items: stretch; justify-content: center; overflow: hidden; overscroll-behavior: none; isolation: isolate; background: rgb(12 16 24); }
+	.music-fullscreen__bg { position: absolute; inset: -4rem; background-size: cover; background-position: center; filter: blur(72px) saturate(1.4) brightness(0.9); opacity: 0.85; transform: scale(1.2); pointer-events: none; }
+	.music-fullscreen__scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgb(10 15 24 / 0.42), rgb(8 12 20 / 0.78)); pointer-events: none; }
 	.music-fullscreen__close { position: absolute; top: 1.1rem; right: 1.1rem; z-index: 2; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border: 0; border-radius: 50%; color: var(--text-90, #e2e8f0); background: rgb(255 255 255 / 0.1); cursor: pointer; font-size: 1.3rem; backdrop-filter: blur(8px); transition: background 200ms ease, transform 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-fullscreen__close:hover { background: rgb(255 255 255 / 0.22); transform: scale(1.06); }
 	.music-fullscreen__content { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(20rem, 34rem); gap: clamp(1.5rem, 4vw, 4rem); align-items: center; width: min(72rem, 100%); padding: clamp(1.5rem, 4vw, 3.5rem); }
@@ -1602,7 +1606,7 @@
 	.music-fullscreen__left .music-icon-button { width: 2.6rem; height: 2.6rem; color: #fff; background: rgb(255 255 255 / 0.08); font-size: 1.25rem; backdrop-filter: blur(8px); }
 	.music-fullscreen__left .music-icon-button:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 22%, transparent); }
 	.music-fullscreen__left .music-icon-button.music-favorite--active,
-	.music-fullscreen__left .music-icon-button.music-favorite--active:hover { color: #4fd1c5; background: color-mix(in oklch, #4fd1c5 22%, transparent); animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-fullscreen__left .music-icon-button.music-favorite--active:hover { color: #fff; border-color: #4fd1c5; background: #4fd1c5; animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-fullscreen__left .music-play-button { width: 3.6rem; height: 3.6rem; font-size: 1.8rem; }
 	.music-fullscreen__right { width: 100%; height: min(42rem, calc(100vh - 6rem)); min-height: 0; display: flex; justify-content: center; }
 	.music-fullscreen__lyrics { box-sizing: border-box; width: 100%; height: 100%; max-width: 34rem; max-height: none; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; scroll-behavior: smooth; padding: 2.6rem 0.6rem; }
@@ -1639,7 +1643,7 @@
 	.music-config-block, .music-player-core, .music-account-row, .music-vip-state { padding: 0.8rem; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 80%, transparent); border-radius: 0.9rem; background: color-mix(in oklch, var(--card-bg, #fff) 70%, transparent); }
 	.music-config-block--full { min-height: 38rem; align-content: start; }
 	.music-config-block, .music-login-form { display: grid; gap: 0.7rem; }
-	.music-muted, .music-status-line, .music-login-note { margin: 0; color: var(--text-50, rgb(100 116 139)); font-size: 0.72rem; line-height: 1.55; }
+	.music-muted, .music-status-line, .music-login-note { margin: 0; color: rgb(71 85 105); font-size: 0.72rem; line-height: 1.55; }
 	.music-error { color: #c05640; }
 	.music-field { display: grid; gap: 0.3rem; color: var(--text-60, rgb(71 85 105)); font-size: 0.7rem; }
 	.music-field input, .music-field select { width: 100%; min-height: 2.25rem; padding: 0.45rem 0.65rem; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 88%, transparent); border-radius: 0.6rem; outline: 0; color: inherit; background: color-mix(in oklch, var(--page-bg, #f8fafc) 70%, transparent); font: inherit; }
@@ -1662,9 +1666,9 @@
 	.music-track-copy strong { font-size: 0.85rem; }
 	.music-track-copy span:last-child { color: var(--text-50, rgb(100 116 139)); font-size: 0.72rem; }
 	.music-track-status { display: inline-flex; align-items: center; gap: 0.35rem; }
-	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 0; border-radius: 0.65rem; color: #fff; background: transparent; cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
-	.music-favorite:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: scale(1.06); }
-	.music-favorite--active { color: var(--primary); animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 1px solid color-mix(in oklch, var(--text-40, #94a3b8) 45%, transparent); border-radius: 0.65rem; color: rgb(120 134 156); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), border-color 180ms ease; }
+	.music-favorite:hover { color: var(--primary); border-color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: scale(1.06); }
+	.music-favorite--active { color: #fff; border-color: var(--primary); background: var(--primary); animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	@keyframes music-heart-pop { 0% { transform: scale(0.7); } 45% { transform: scale(1.28); } 70% { transform: scale(0.92); } 100% { transform: scale(1); } }
 	.music-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 0.7rem; }
 	.music-eq i { display: block; width: 2.5px; border-radius: 2px; background: var(--primary); transform-origin: bottom; animation: music-eq-bounce 900ms ease-in-out infinite alternate; }
@@ -1753,9 +1757,10 @@
 	.music-login-note { margin: 1rem 0 0; padding: 0 0.35rem; text-align: center; line-height: 1.6; }
 
 	:global(.dark) .music-dock-trigger, :global(.dark) .music-panel { color: var(--text-90, rgb(226 232 240)); background: color-mix(in oklch, var(--card-bg, #172033) 90%, transparent); }
-	:global(.dark) .music-muted, :global(.dark) .music-status-line, :global(.dark) .music-login-note { color: rgb(160 174 192); }
-	:global(.dark) .music-title-status { color: rgb(148 163 184); }
-	:global(.dark) .music-song-info small { color: rgb(165 180 195); }
+	:global(.dark) .music-muted, :global(.dark) .music-status-line, :global(.dark) .music-login-note { color: rgb(203 213 225); }
+	:global(.dark) .music-title-status { color: rgb(203 213 225); }
+	:global(.dark) .music-song-info small { color: rgb(203 213 225); }
+	:global(.dark) .music-mode-label { color: rgb(203 213 225); }
 	:global(.dark) .music-login-card { background: var(--card-bg, #172033); }
 	:global(.dark) .music-field input, :global(.dark) .music-field select { background: rgb(255 255 255 / 0.05); }
 
