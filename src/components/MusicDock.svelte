@@ -80,12 +80,10 @@
 	let addTargetPlaylistId = "";
 	let addBusy = false;
 	let batchMode = false;
-	let batchSelectedVersion = 0;
-	const batchSelected = new Map<string, MusicSong>();
+	let batchSelected = new Map<string, MusicSong>();
 	let batchBusy = false;
 	// 待删除缓冲区：UI 立即变白但接口延迟执行，退出重进/点刷新才真正删除。
-	const pendingRemovals = new Map<string, MusicSong>();
-	let pendingRemovalsVersion = 0;
+	let pendingRemovals = new Map<string, MusicSong>();
 	// 居中卡片微弹窗（收藏反馈等）
 	let toastVisible = false;
 	let toastKind: "fav" | "unfav" | "info" | "error" = "info";
@@ -139,8 +137,6 @@
 	$: currentIndex = songs.findIndex((song) => song.hash === currentSong?.hash);
 	$: isFavorite = currentSong ? (isSongInPlaylist(currentSong.hash, songs) && !pendingRemovals.has(currentSong.hash)) : false;
 	// 响应式版本号：Map 原地变更后递增触发视图更新
-	$: batchTick = batchSelectedVersion;
-	$: pendingTick = pendingRemovalsVersion;
 	$: librarySourceSongs = searchQuery.trim() ? searchResults : songs;
 	$: librarySortedSongs = sortSongs(librarySourceSongs, librarySort);
 	$: libraryTotalPages = Math.max(1, Math.ceil(librarySortedSongs.length / libraryPageSize));
@@ -354,7 +350,6 @@
 		dailyPage = 1;
 		libraryPageJump = "";
 		pendingRemovals.clear();
-		pendingRemovalsVersion += 1;
 		searchQuery = "";
 		searchScope = "playlist";
 		searchResults = [];
@@ -556,15 +551,14 @@
 		if (!currentSong) return;
 		if (isFavorite) {
 			// 已收藏 → 进入待删除缓冲区：UI 立即变白，接口延迟到刷新/重进时执行
-			pendingRemovals.set(currentSong.hash, currentSong);
-			pendingRemovalsVersion += 1;
+			pendingRemovals = new Map(pendingRemovals).set(currentSong.hash, currentSong);
 			showToast("unfav", `取消收藏「${currentSong.name}」，刷新后生效`);
 			return;
 		}
 		if (pendingRemovals.has(currentSong.hash)) {
 			// 待删除期间反悔：本地恢复，不调接口
+			pendingRemovals = new Map(pendingRemovals);
 			pendingRemovals.delete(currentSong.hash);
-			pendingRemovalsVersion += 1;
 			showToast("fav", `已恢复收藏「${currentSong.name}」`);
 			return;
 		}
@@ -577,21 +571,19 @@
 		const entries = [...pendingRemovals.entries()].filter(([, song]) => songFileId(song));
 		if (entries.length === 0) {
 			pendingRemovals.clear();
-			pendingRemovalsVersion += 1;
 			return true;
 		}
 		try {
 			const fileids = entries.map(([, song]) => String(songFileId(song)));
 			await client.delPlaylistTracks(selectedPlaylistId, fileids);
 			for (const [hash] of entries) pendingRemovals.delete(hash);
-			pendingRemovalsVersion += 1;
+			pendingRemovals = new Map(pendingRemovals);
 			showToast("unfav", `已移除 ${fileids.length} 首，列表已刷新`);
 			await loadSongs();
 			return true;
 		} catch (error) {
 			showToast("error", errorMessage(error, "移除执行失败，已恢复收藏状态"));
 			pendingRemovals.clear();
-			pendingRemovalsVersion += 1;
 			return false;
 		}
 	};
@@ -622,13 +614,12 @@
 		// 弹窗内单爱心切换：已收藏→待删除缓冲区；待删除→本地恢复。均不立即调接口。
 		if (pendingRemovals.has(song.hash)) {
 			pendingRemovals.delete(song.hash);
-			pendingRemovalsVersion += 1;
+			pendingRemovals = new Map(pendingRemovals);
 			showToast("fav", `已恢复收藏「${song.name}」`);
 			return;
 		}
 		if (isSongInPlaylist(song.hash, songs)) {
-			pendingRemovals.set(song.hash, song);
-			pendingRemovalsVersion += 1;
+			pendingRemovals = new Map(pendingRemovals).set(song.hash, song);
 			showToast("unfav", `取消收藏「${song.name}」，刷新后生效`);
 			return;
 		}
@@ -649,14 +640,15 @@
 	const toggleBatchMode = () => {
 		batchMode = !batchMode;
 		batchSelected.clear();
-		batchSelectedVersion += 1;
+		batchSelected = new Map(batchSelected);
 	};
 
 	const toggleBatchSong = (song: MusicSong) => {
 		const key = songFileId(song) ?? song.hash;
 		if (batchSelected.has(key)) batchSelected.delete(key);
 		else batchSelected.set(key, song);
-		batchSelectedVersion += 1;
+		// Svelte 不追踪 Map 原地变更，必须整体重新赋值才能触发视图更新
+		batchSelected = new Map(batchSelected);
 	};
 
 	const deleteBatchSelected = async () => {
@@ -673,7 +665,6 @@
 			await client.delPlaylistTracks(selectedPlaylistId, fileids);
 			showToast("unfav", `已从歌单移除 ${fileids.length} 首歌曲`);
 			batchSelected.clear();
-			batchSelectedVersion += 1;
 			batchMode = false;
 			await loadSongs();
 		} catch (error) {
@@ -1558,7 +1549,7 @@
 	.music-library-summary { display: grid; gap: 0.7rem; margin-top: 0.75rem; padding: 0.85rem; border: 1px solid color-mix(in oklch, var(--primary) 12%, var(--card-border, #dce5e5)); border-radius: 0.85rem; background: color-mix(in oklch, var(--primary) 4%, transparent); }
 	.music-library-summary__footer { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
 	.music-library-backdrop { position: fixed; inset: 0; z-index: 850; display: grid; place-items: center; padding: 1rem; background: rgb(8 12 20 / 0.42); backdrop-filter: blur(8px); animation: music-fade-in 180ms ease both; }
-	.music-library-modal { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto auto; width: min(42rem, 100%); height: min(42rem, calc(100vh - 2rem)); max-height: calc(100vh - 2rem); padding: 1.1rem; overflow: hidden; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 1.2rem; color: inherit; background: var(--card-bg, #fff); box-shadow: 0 28px 80px -30px rgb(15 23 42 / 0.62); animation: music-modal-in 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	.music-library-modal { display: flex; flex-direction: column; width: min(42rem, 100%); height: min(42rem, calc(100vh - 2rem)); max-height: calc(100vh - 2rem); padding: 1.1rem; overflow: hidden; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 1.2rem; color: inherit; background: var(--card-bg, #fff); box-shadow: 0 28px 80px -30px rgb(15 23 42 / 0.62); animation: music-modal-in 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-library-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 	.music-library-header h2 { margin: 0.15rem 0 0.1rem; font-size: 1.15rem; }
 	.music-library-search { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.4rem; margin-top: 0.9rem; }
@@ -1570,7 +1561,7 @@
 	.music-library-jump { display: flex; align-items: center; gap: 0.3rem; }
 	.music-library-jump input { width: 4.2rem; min-height: 1.9rem; padding: 0.25rem 0.45rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.55rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.68rem; text-align: center; }
 	.music-library-toolbar select { min-height: 1.9rem; padding-block: 0.25rem; }
-	.music-library-list { min-height: 12rem; margin-top: 0.55rem; overflow-y: auto; scrollbar-width: thin; padding-right: 0.5rem; }
+	.music-library-list { min-height: 12rem; margin-top: 0.55rem; flex: 1 1 auto; overflow-y: auto; scrollbar-width: thin; padding-right: 0.5rem; }
 	.music-library-row { display: flex; align-items: center; gap: 0.25rem; min-width: 0; padding-right: 0.35rem; }
 	.music-library-row > .music-song { min-width: 0; flex: 1; }
 	.music-library-row .music-search-favorite { flex: 0 0 2.1rem; margin-left: 0.45rem; }
@@ -1580,7 +1571,10 @@
 	.music-batch-check { display: grid; place-items: center; flex: 0 0 1.15rem; width: 1.15rem; height: 1.15rem; margin-right: 0.45rem; border: 1.5px solid var(--text-40, #94a3b8); border-radius: 50%; color: transparent; font-size: 0.7rem; line-height: 1; }
 	.music-batch-check--on { border-color: var(--primary); color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); }
 	.music-song--selected { border-color: color-mix(in oklch, var(--primary) 35%, transparent); background: color-mix(in oklch, var(--primary) 10%, transparent); }
-	.music-library-footer { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 75%, transparent); flex-wrap: wrap; }
+	.music-library-footer { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 75%, transparent); flex-wrap: wrap; }
+	.music-library-search { flex: 0 0 auto; }
+	.music-library-toolbar { flex: 0 0 auto; }
+	.music-library-header { flex: 0 0 auto; }
 	.music-library-footer .music-actions { display: flex; align-items: center; gap: 0.4rem; flex-direction: row; }
 	.music-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; padding-top: 0.55rem; margin-top: 0.55rem; border-top: 1px dashed color-mix(in oklch, var(--card-border, #dce5e5) 70%, transparent); font-size: 0.74rem; }
 	.music-setting-row span { display: grid; gap: 0.1rem; }
@@ -1664,7 +1658,7 @@
 	.music-title-status { color: var(--text-40, rgb(148 163 184)); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.2rem; }
 	.music-track-copy strong, .music-track-copy span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.music-track-copy strong { font-size: 0.85rem; }
-	.music-track-copy span:last-child { color: var(--text-50, rgb(100 116 139)); font-size: 0.72rem; }
+	.music-track-copy span:last-child { color: rgb(71 85 105); font-size: 0.72rem; }
 	.music-track-status { display: inline-flex; align-items: center; gap: 0.35rem; }
 	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 1px solid color-mix(in oklch, var(--text-40, #94a3b8) 45%, transparent); border-radius: 0.65rem; color: rgb(120 134 156); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), border-color 180ms ease; }
 	.music-favorite:hover { color: var(--primary); border-color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: scale(1.06); }
@@ -1757,10 +1751,10 @@
 	.music-login-note { margin: 1rem 0 0; padding: 0 0.35rem; text-align: center; line-height: 1.6; }
 
 	:global(.dark) .music-dock-trigger, :global(.dark) .music-panel { color: var(--text-90, rgb(226 232 240)); background: color-mix(in oklch, var(--card-bg, #172033) 90%, transparent); }
-	:global(.dark) .music-muted, :global(.dark) .music-status-line, :global(.dark) .music-login-note { color: rgb(203 213 225); }
-	:global(.dark) .music-title-status { color: rgb(203 213 225); }
-	:global(.dark) .music-song-info small { color: rgb(203 213 225); }
-	:global(.dark) .music-mode-label { color: rgb(203 213 225); }
+	:global(.dark) .music-muted, :global(.dark) .music-status-line, :global(.dark) .music-login-note { color: rgb(226 232 240); }
+	:global(.dark) .music-title-status { color: rgb(226 232 240); }
+	:global(.dark) .music-song-info small { color: rgb(226 232 240); }
+	:global(.dark) .music-mode-label { color: rgb(226 232 240); }
 	:global(.dark) .music-login-card { background: var(--card-bg, #172033); }
 	:global(.dark) .music-field input, :global(.dark) .music-field select { background: rgb(255 255 255 / 0.05); }
 
