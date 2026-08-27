@@ -82,8 +82,9 @@
 	let batchMode = false;
 	let batchSelected = new Map<string, MusicSong>();
 	let batchBusy = false;
-	// 待删除缓冲区：UI 立即变白但接口延迟执行，退出重进/点刷新才真正删除。
-	let pendingRemovals = new Map<string, MusicSong>();
+	// 待删除缓冲区：key 为 `${playlistId}:${hash}`，切歌单时旧缓冲自动失效。
+	// UI 立即变白但接口延迟执行，退出重进/点刷新才真正删除。
+	let pendingRemovals = new Map<string, { playlistId: string; song: MusicSong }>();
 	// 居中卡片微弹窗（收藏反馈等）
 	let toastVisible = false;
 	let toastKind: "fav" | "unfav" | "info" | "error" = "info";
@@ -135,7 +136,11 @@
 	$: progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 	$: dockLabel = currentSong ? `${currentSong.name} · ${currentSong.author}` : "连接你的音乐平台";
 	$: currentIndex = songs.findIndex((song) => song.hash === currentSong?.hash);
-	$: isFavorite = currentSong ? (isSongInPlaylist(currentSong.hash, songs) && !pendingRemovals.has(currentSong.hash)) : false;
+	// ===== 收藏状态唯一判断源：所有位置（面板/全屏/歌曲库/每日推荐）统一调用 =====
+	const pendingKey = (hash: string) => `${selectedPlaylistId}:${hash}`;
+	const hasPendingRemoval = (hash: string) => pendingRemovals.has(pendingKey(hash));
+	const favoriteStateOf = (hash: string): boolean => isSongInPlaylist(hash, songs) && !hasPendingRemoval(hash);
+	$: isFavorite = currentSong ? favoriteStateOf(currentSong.hash) : false;
 	// 响应式版本号：Map 原地变更后递增触发视图更新
 	$: librarySourceSongs = searchQuery.trim() ? searchResults : songs;
 	$: librarySortedSongs = sortSongs(librarySourceSongs, librarySort);
@@ -300,6 +305,8 @@
 
 	const onPlaylistChange = (event: Event) => {
 		selectedPlaylistId = (event.currentTarget as HTMLSelectElement).value;
+		// 切歌单：旧歌单的待删除缓冲立即失效（避免用新歌单 id 删旧歌单的歌）
+		pendingRemovals = new Map();
 		void loadSongs();
 	};
 
@@ -344,16 +351,15 @@
 	};
 
 	const openLibrary = () => {
-		libraryOpen = true;
-		libraryView = "library";
-		libraryPage = 1;
-		dailyPage = 1;
-		libraryPageJump = "";
-		pendingRemovals.clear();
-		searchQuery = "";
-		searchScope = "playlist";
-		searchResults = [];
-		searchMessage = "搜索全网歌曲，结果不会自动加入歌单";
+		// 重进弹窗 = 执行上一会话遗留的待删除并重载列表（用户确认过的行为）。
+		void flushPendingRemovals().then(() => {
+			libraryOpen = true;
+			libraryView = "library";
+			libraryPage = 1;
+			dailyPage = 1;
+			libraryPageJump = "";
+			if (auth && selectedPlaylistId && pendingRemovals.size === 0) void loadSongs();
+		});
 	};
 
 	const openDailyModal = () => {
@@ -551,14 +557,14 @@
 		if (!currentSong) return;
 		if (isFavorite) {
 			// 已收藏 → 进入待删除缓冲区：UI 立即变白，接口延迟到刷新/重进时执行
-			pendingRemovals = new Map(pendingRemovals).set(currentSong.hash, currentSong);
+			pendingRemovals = new Map(pendingRemovals).set(pendingKey(currentSong.hash), { playlistId: selectedPlaylistId, song: currentSong });
 			showToast("unfav", `取消收藏「${currentSong.name}」，刷新后生效`);
 			return;
 		}
-		if (pendingRemovals.has(currentSong.hash)) {
+		if (hasPendingRemoval(currentSong.hash)) {
 			// 待删除期间反悔：本地恢复，不调接口
 			pendingRemovals = new Map(pendingRemovals);
-			pendingRemovals.delete(currentSong.hash);
+			pendingRemovals.delete(pendingKey(currentSong.hash));
 			showToast("fav", `已恢复收藏「${currentSong.name}」`);
 			return;
 		}
@@ -568,39 +574,29 @@
 
 	const flushPendingRemovals = async (): Promise<boolean> => {
 		if (!client || !selectedPlaylistId || pendingRemovals.size === 0) return true;
-		const entries = [...pendingRemovals.entries()].filter(([, song]) => songFileId(song));
+		// 只执行属于当前歌单的待删除项；切歌单遗留的旧缓冲直接作废。
+		const entries = [...pendingRemovals.entries()].filter(([key]) => key.startsWith(`${selectedPlaylistId}:`));
+		const removable = entries.filter(([, value]) => songFileId(value.song));
 		if (entries.length === 0) {
-			pendingRemovals.clear();
+			pendingRemovals = new Map();
+			return true;
+		}
+		if (removable.length === 0) {
+			pendingRemovals = new Map();
 			return true;
 		}
 		try {
-			const fileids = entries.map(([, song]) => String(songFileId(song)));
+			const fileids = removable.map(([, value]) => String(songFileId(value.song)));
 			await client.delPlaylistTracks(selectedPlaylistId, fileids);
-			for (const [hash] of entries) pendingRemovals.delete(hash);
+			for (const [key] of removable) pendingRemovals.delete(key);
 			pendingRemovals = new Map(pendingRemovals);
 			showToast("unfav", `已移除 ${fileids.length} 首，列表已刷新`);
 			await loadSongs();
 			return true;
 		} catch (error) {
 			showToast("error", errorMessage(error, "移除执行失败，已恢复收藏状态"));
-			pendingRemovals.clear();
+			pendingRemovals = new Map();
 			return false;
-		}
-	};
-
-	const removeSongFromPlaylist = async (song: MusicSong) => {
-		const fileid = songFileId(song);
-		if (!client || !selectedPlaylistId) return;
-		if (!fileid) {
-			showToast("error", "这首歌缺少移除标识，请在歌曲库中管理");
-			return;
-		}
-		try {
-			await client.delPlaylistTracks(selectedPlaylistId, [fileid]);
-			showToast("unfav", `已从当前歌单移除「${song.name}」`);
-			await loadSongs();
-		} catch (error) {
-			showToast("error", errorMessage(error, "移除失败"));
 		}
 	};
 
@@ -612,14 +608,14 @@
 
 	const toggleFavoriteState = (song: MusicSong) => {
 		// 弹窗内单爱心切换：已收藏→待删除缓冲区；待删除→本地恢复。均不立即调接口。
-		if (pendingRemovals.has(song.hash)) {
-			pendingRemovals.delete(song.hash);
+		if (hasPendingRemoval(song.hash)) {
 			pendingRemovals = new Map(pendingRemovals);
+			pendingRemovals.delete(pendingKey(song.hash));
 			showToast("fav", `已恢复收藏「${song.name}」`);
 			return;
 		}
 		if (isSongInPlaylist(song.hash, songs)) {
-			pendingRemovals = new Map(pendingRemovals).set(song.hash, song);
+			pendingRemovals = new Map(pendingRemovals).set(pendingKey(song.hash), { playlistId: selectedPlaylistId, song });
 			showToast("unfav", `取消收藏「${song.name}」，刷新后生效`);
 			return;
 		}
@@ -1279,7 +1275,7 @@
 										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 									</button>
-									<button class:music-search-favorite--active={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash)} class="music-search-favorite" type="button" aria-label={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? "点击取消收藏（刷新后生效）" : pendingRemovals.has(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => (isSongInPlaylist(song.hash, songs) ? toggleFavoriteState(song) : addSongToCurrentPlaylist(song))}><Icon icon={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+									<button class:music-search-favorite--active={favoriteStateOf(song.hash)} class="music-search-favorite" type="button" aria-label={favoriteStateOf(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={favoriteStateOf(song.hash) ? "点击取消收藏（刷新后生效）" : hasPendingRemoval(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={favoriteStateOf(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 								</div>
 							{/each}
 						{:else}
@@ -1337,7 +1333,7 @@
 									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 								</button>
-								<button class:music-search-favorite--active={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash)} class="music-search-favorite" type="button" aria-label={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? "点击取消收藏（刷新后生效）" : pendingRemovals.has(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => (isSongInPlaylist(song.hash, songs) ? toggleFavoriteState(song) : addSongToCurrentPlaylist(song))}><Icon icon={isSongInPlaylist(song.hash, songs) && !pendingRemovals.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+								<button class:music-search-favorite--active={favoriteStateOf(song.hash)} class="music-search-favorite" type="button" aria-label={favoriteStateOf(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={favoriteStateOf(song.hash) ? "点击取消收藏（刷新后生效）" : hasPendingRemoval(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={favoriteStateOf(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 							</div>
 						{/each}
 					{:else}
