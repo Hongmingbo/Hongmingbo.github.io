@@ -854,7 +854,7 @@
 			navigator.mediaSession.metadata = new MediaMetadata({
 				title: currentSong.name,
 				artist: currentSong.author,
-				album: currentSong.album ?? "衡堕音乐空间",
+				album: currentSong.album ?? "音乐空间", // 名称暂隐藏；恢复时填回："衡堕音乐空间"
 				artwork: currentSong.img ? [{ src: currentSong.img }] : [],
 			});
 		} catch {

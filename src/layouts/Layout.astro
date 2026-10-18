@@ -50,10 +50,15 @@ banner = siteConfig.banner.src;
 const enableBanner = siteConfig.banner.enable;
 
 let pageTitle: string;
-if (title) {
+// 名称暂隐藏时（siteConfig.title 为空）去掉多余分隔符；恢复名称后此逻辑自动失效
+if (title && siteConfig.title) {
 	pageTitle = `${title} - ${siteConfig.title}`;
-} else {
+} else if (title) {
+	pageTitle = title;
+} else if (siteConfig.title) {
 	pageTitle = `${siteConfig.title} - ${siteConfig.subtitle}`;
+} else {
+	pageTitle = siteConfig.subtitle;
 }
 
 const favicons: Favicon[] =

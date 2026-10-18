@@ -8,7 +8,8 @@ import type {
 import { LinkPreset } from "./types/config";
 
 export const siteConfig: SiteConfig = {
-	title: "衡堕",
+	// 名称暂隐藏；恢复时填回："衡堕"
+	title: "",
 	subtitle: "学习笔记与项目记录",
 	lang: "zh_CN",
 	themeColor: {
@@ -55,7 +56,8 @@ export const navBarConfig: NavBarConfig = {
 export const profileConfig: ProfileConfig = {
 	// Profile 头像：GitHub avatar 本地缓存
 	avatar: "/avatar.jpg",
-	name: "衡堕",
+	// 名称暂隐藏；恢复时填回："衡堕"
+	name: "",
 	bio: "学习笔记与项目记录。AI Agent、前端、自托管、知识管理。",
 	links: [
 		{

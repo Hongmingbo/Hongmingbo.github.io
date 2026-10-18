@@ -29,7 +29,7 @@ export const projectKindLabel: Record<ProjectKind, string> = {
 
 export const projects: Project[] = [
 	{
-		name: "衡堕 · 个人博客",
+		name: "个人博客", // 名称暂隐藏；恢复时填回："衡堕 · 个人博客"
 		kind: "site",
 		status: "production",
 		provenance: "original",
