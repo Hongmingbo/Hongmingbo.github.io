@@ -73,11 +73,18 @@ f_sub = font(yahei, 42)
 f_meta = font(mono_path, 26)
 f_url = font(mono_path, 22)
 
-d.text((96, 118), "\u276f notes --by", font=f_prompt, fill=NEON)
-d.text((92, 190), "衡堕", font=f_title, fill=TITLE)
+d.text((96, 118), "\u276f notes", font=f_prompt, fill=NEON)
+# 站点显示名暂隐藏（原为「衡堕」）。恢复时把下面一行换成 d.text((92, 190), "衡堕", ...) 并删除占位图形。
 d.text((96, 384), "学习笔记与项目记录", font=f_sub, fill=SUB)
 d.text((96, 470), "AI Agent · Frontend · Self-hosted · PKM", font=f_meta, fill=META)
-d.text((96, 522), "hongmingbo.github.io", font=f_url, fill=URL)
+d.text((96, 522), "hmb2011.dpdns.org", font=f_url, fill=URL)
+
+# 站点显示名隐藏期间的标题区占位：三根粗细递减的横向光条（纯视觉，无文字）
+bar_x, bar_y = 96, 214
+for i, (bw, bh, alpha) in enumerate([(430, 26, 235), (300, 20, 170), (188, 14, 110)]):
+    by = bar_y + i * 48
+    d.rounded_rectangle([bar_x, by, bar_x + bw, by + bh], radius=bh // 2,
+                        fill=(NEON[0], NEON[1], NEON[2], alpha))
 
 # 右侧小节点装饰
 import random
@@ -95,7 +102,10 @@ out = r"D:/tools/blog-redesign/Hongmingbo.github.io/public/og-cover.png"
 img.convert("RGB").save(out, "PNG", optimize=True)
 print("saved", out)
 
-# 自检：标题区方差
-import numpy as np
-arr = np.asarray(img.convert("L").crop((92, 190, 560, 360)), dtype=float)
-print("title stdev:", round(arr.std(), 2))
+# 自检：标题区方差（numpy 可选，缺失时跳过）
+try:
+    import numpy as np
+    arr = np.asarray(img.convert("L").crop((96, 200, 560, 350)), dtype=float)
+    print("title stdev:", round(arr.std(), 2))
+except ImportError:
+    print("skip stdev check (numpy not installed)")
