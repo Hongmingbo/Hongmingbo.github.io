@@ -1024,8 +1024,13 @@
 
 	onMount(() => {
 		apiUrl = normalizeApiBaseUrl(isDev && devApiUrl ? devApiUrl : MUSIC_BFF_ORIGIN);
-		const savedVolume = Number(localStorage.getItem("hengduo-music-volume"));
-		if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) volume = savedVolume;
+		// 注意：键缺失时 Number(null) === 0，会被误判为「合法音量 0」导致无声。
+		// 必须区分「从未设置过」（键为 null → 保留默认 0.7）与「用户主动设为 0」（键为 "0" → 尊重该值）。
+		const savedVolumeRaw = localStorage.getItem("hengduo-music-volume");
+		if (savedVolumeRaw !== null && savedVolumeRaw.trim() !== "") {
+			const savedVolume = Number(savedVolumeRaw);
+			if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) volume = savedVolume;
+		}
 		const savedShuffle = localStorage.getItem(SHUFFLE_KEY) === "1";
 		const savedRepeat = localStorage.getItem(REPEAT_KEY);
 		const savedRepeatMode = savedRepeat === "one" || savedRepeat === "off" ? savedRepeat : "list";
