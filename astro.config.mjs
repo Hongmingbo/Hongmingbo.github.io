@@ -26,7 +26,7 @@ import { pluginCustomCopyButton } from "./src/plugins/expressive-code/custom-cop
 
 // https://astro.build/config
 export default defineConfig({
-	site: "https://hmb2011.bond",
+	site: "https://hmb2011.dpdns.org",
 	base: "/",
 	trailingSlash: "always",
 	integrations: [

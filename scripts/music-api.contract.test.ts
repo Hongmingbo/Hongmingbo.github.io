@@ -98,7 +98,7 @@ assert.deepEqual(shuffleSongs(shuffleSource, 42), shuffleSongs(shuffleSource, 42
 assert.notDeepEqual(shuffleSongs(shuffleSource, 1), shuffleSongs(shuffleSource, 2));
 assert.equal(normalizeApiBaseUrl(" https://api.example.test/ "), "https://api.example.test");
 assert.equal(normalizeApiBaseUrl("javascript:alert(1)"), "");
-assert.equal(MUSIC_BFF_ORIGIN, "https://music.hmb2011.bond");
+assert.equal(MUSIC_BFF_ORIGIN, "https://music.hmb2011.dpdns.org");
 const bff = new MusicApiClient(MUSIC_BFF_ORIGIN);
 
 const originalFetch = globalThis.fetch;
@@ -185,9 +185,9 @@ await assert.rejects(
 	(error: unknown) => error instanceof MusicApiError && error.code === "INVALID_CREDENTIALS" && error.message === "账号或密码错误",
 );
 try {
-	assert.equal(await bff.getStreamUrl("abc123"), "https://music.hmb2011.bond/tracks/abc123/stream");
+	assert.equal(await bff.getStreamUrl("abc123"), "https://music.hmb2011.dpdns.org/tracks/abc123/stream");
 	assert.equal(prepareMethod, "GET");
-	assert.equal(prepareUrl, "https://music.hmb2011.bond/tracks/abc123/prepare");
+	assert.equal(prepareUrl, "https://music.hmb2011.dpdns.org/tracks/abc123/prepare");
 
 	await assert.rejects(
 		() => bff.getStreamUrl("risk"),
@@ -196,19 +196,19 @@ try {
 
 	const qr = await bff.createQr();
 	assert.equal(qrMethod, "POST");
-	assert.equal(qrUrl, "https://music.hmb2011.bond/auth/qr");
+	assert.equal(qrUrl, "https://music.hmb2011.dpdns.org/auth/qr");
 	assert.equal(qrContentType, "application/json");
 	assert.equal(qrBody, "{}");
 	assert.equal(qr.key, "opaque-test-key");
 	const qrPoll = await bff.checkQr(qr.key);
 	assert.equal(qrStatusMethod, "GET");
-	assert.equal(qrStatusUrl, "https://music.hmb2011.bond/auth/qr/status?key=opaque-test-key");
+	assert.equal(qrStatusUrl, "https://music.hmb2011.dpdns.org/auth/qr/status?key=opaque-test-key");
 	assert.equal(qrPoll.status, 4);
 	assert.equal(qrPoll.session?.userid, 7);
 	assert.equal(qrPoll.session?.nickname, "扫码用户");
 	const recommendations = await bff.getDailyRecommendations();
 	assert.equal(recommendationMethod, "GET");
-	assert.equal(recommendationUrl, "https://music.hmb2011.bond/recommendations/daily");
+	assert.equal(recommendationUrl, "https://music.hmb2011.dpdns.org/recommendations/daily");
 	assert.equal(recommendations[0].hash, "REC_HASH");
 	assert.equal(recommendations[0].author, "推荐歌手");
 	assert.equal(recommendations[0].img, "https://img/480.jpg");
@@ -216,18 +216,18 @@ try {
 
 	await bff.upgradeVip();
 	assert.equal(upgradeMethod, "POST");
-	assert.equal(upgradeUrl, "https://music.hmb2011.bond/vip/daily/upgrade");
+	assert.equal(upgradeUrl, "https://music.hmb2011.dpdns.org/vip/daily/upgrade");
 	assert.equal(upgradeContentType, "application/json");
 	assert.equal(upgradeBody, "{}");
 
 	await bff.searchSongs("未收藏歌曲", 2, 50);
 	assert.equal(searchMethod, "GET");
-	assert.equal(searchUrl, "https://music.hmb2011.bond/search/songs?keyword=%E6%9C%AA%E6%94%B6%E8%97%8F%E6%AD%8C%E6%9B%B2&page=2&pagesize=50");
+	assert.equal(searchUrl, "https://music.hmb2011.dpdns.org/search/songs?keyword=%E6%9C%AA%E6%94%B6%E8%97%8F%E6%AD%8C%E6%9B%B2&page=2&pagesize=50");
 	assert.equal(searchBody, "");
 
 	await bff.addPlaylistTracks("123", "歌曲名|HASH123|42|99");
 	assert.equal(addMethod, "POST");
-	assert.equal(addUrl, "https://music.hmb2011.bond/playlists/123/add");
+	assert.equal(addUrl, "https://music.hmb2011.dpdns.org/playlists/123/add");
 	assert.equal(addBody, JSON.stringify({ data: "歌曲名|HASH123|42|99" }));
 } finally {
 	globalThis.fetch = originalFetch;

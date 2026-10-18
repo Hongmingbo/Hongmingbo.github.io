@@ -44,8 +44,8 @@ export interface CommentListResult {
 	total: number;
 }
 
-/** 生产评论 API 源；云机就绪后改为 https://api.hmb2011.bond */
-export const COMMENT_API_ORIGIN = "https://api.hmb2011.bond";
+/** 生产评论 API 源（随站点域名，见 astro.config.mjs 的 site） */
+export const COMMENT_API_ORIGIN = "https://api.hmb2011.dpdns.org";
 
 export const responseStatus = (payload: unknown): number | undefined =>
 	payload && typeof payload === "object" && "status" in payload

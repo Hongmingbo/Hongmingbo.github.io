@@ -49,10 +49,10 @@ assert.equal(formatCommentDate("2026-08-13T10:00:00Z"), "2026-08-13");
 assert.equal(formatCommentDate("bad-date"), "");
 
 // —— 地址校验 ——
-assert.equal(normalizeCommentApiBaseUrl(" https://api.hmb2011.bond/ "), "https://api.hmb2011.bond");
+assert.equal(normalizeCommentApiBaseUrl(" https://api.hmb2011.dpdns.org/ "), "https://api.hmb2011.dpdns.org");
 assert.equal(normalizeCommentApiBaseUrl("javascript:alert(1)"), "");
 assert.equal(normalizeCommentApiBaseUrl("http://evil.example.com"), "");
-assert.equal(COMMENT_API_ORIGIN, "https://api.hmb2011.bond"); // 生产评论 API 已上线
+assert.equal(COMMENT_API_ORIGIN, "https://api.hmb2011.dpdns.org"); // 生产评论 API 已上线
 
 // —— 客户端请求形状（fetch stub）——
 let listUrl = "";
@@ -77,14 +77,14 @@ globalThis.fetch = async (input, init) => {
 	return new Response(JSON.stringify({ status: 1, data: { ready: true } }), { status: 200, headers: { "Content-Type": "application/json" } });
 };
 try {
-	const client = new CommentApiClient("https://api.hmb2011.bond");
+	const client = new CommentApiClient("https://api.hmb2011.dpdns.org");
 	await client.getComments("my-post");
-	assert.equal(listUrl, "https://api.hmb2011.bond/comments?post=my-post&page=1&pageSize=50");
+	assert.equal(listUrl, "https://api.hmb2011.dpdns.org/comments?post=my-post&page=1&pageSize=50");
 
 	const created = await client.createComment({ post: "my-post", name: "访客", email: "a@b.c", content: "内容", quote: "> 引用" });
 	assert.equal(created.id, 42);
 	assert.equal(createMethod, "POST");
-	assert.equal(createUrl, "https://api.hmb2011.bond/comments");
+	assert.equal(createUrl, "https://api.hmb2011.dpdns.org/comments");
 	assert.equal(createContentType, "application/json");
 	const parsedBody = JSON.parse(createBody);
 	assert.equal(parsedBody.post, "my-post");

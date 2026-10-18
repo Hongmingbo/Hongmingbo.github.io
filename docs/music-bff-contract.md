@@ -5,10 +5,10 @@
 
 ## Security invariants
 
-- Allow exactly the blog origin: `https://hmb2011.bond`.
-- The public MusicDock bundle uses the fixed production BFF origin `https://music.hmb2011.bond`; it does not accept a visitor-provided credentialed API origin. Only development builds may override the endpoint through `PUBLIC_MUSIC_DEV_API_URL`.
+- Allow exactly the blog origin: `https://hmb2011.dpdns.org`.
+- The public MusicDock bundle uses the fixed production BFF origin `https://music.hmb2011.dpdns.org`; it does not accept a visitor-provided credentialed API origin. Only development builds may override the endpoint through `PUBLIC_MUSIC_DEV_API_URL`.
 - No wildcard CORS when credentials are enabled.
-- Browser authentication is an opaque BFF session in a browser-managed **HttpOnly cookie**. The production frontend `hmb2011.bond` and BFF `music.hmb2011.bond` are same-site HTTPS origins, so production uses a host-only `__Host-music_session` cookie with `Secure; HttpOnly; SameSite=Lax; Path=/` and no `Domain` or `Partitioned` attribute. Local development uses a separate `music_session` cookie with `HttpOnly; SameSite=Lax` and must use the same loopback host (`127.0.0.1` or `localhost`) for both blog preview and BFF. The browser never receives or stores the session value, upstream token, `t1`, `vip_token`, raw cookie, or device identifier.
+- Browser authentication is an opaque BFF session in a browser-managed **HttpOnly cookie**. The production frontend `hmb2011.dpdns.org` and BFF `music.hmb2011.dpdns.org` are same-site HTTPS origins, so production uses a host-only `__Host-music_session` cookie with `Secure; HttpOnly; SameSite=Lax; Path=/` and no `Domain` or `Partitioned` attribute. Local development uses a separate `music_session` cookie with `HttpOnly; SameSite=Lax` and must use the same loopback host (`127.0.0.1` or `localhost`) for both blog preview and BFF. The browser never receives or stores the session value, upstream token, `t1`, `vip_token`, raw cookie, or device identifier.
 - The audio element uses a credentialed BFF-hosted stream route; the BFF proxies media bytes and never exposes the upstream media URL to page state.
 - Never return upstream `token`, `t1`, `vip_token`, raw cookies, device IDs, or signature material to the browser.
 - Set `Cache-Control: private, no-store` on every route below except a public health check.

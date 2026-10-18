@@ -39,7 +39,7 @@ export interface MusicSong {
 }
 
 // Fixed production endpoint. Browser code never receives an arbitrary credentialed API origin.
-export const MUSIC_BFF_ORIGIN = "https://music.hmb2011.bond";
+export const MUSIC_BFF_ORIGIN = "https://music.hmb2011.dpdns.org";
 
 export class MusicApiError extends Error {
 	readonly code?: number | string;
