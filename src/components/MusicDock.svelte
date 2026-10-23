@@ -1183,6 +1183,7 @@
 						<button class="music-icon-button" type="button" aria-label="全屏播放" title="全屏播放" on:click={toggleFullscreen}><Icon icon="material-symbols:fullscreen-rounded" /></button>
 					{/if}
 					{#if auth}
+						{#if adminConfigured}<button class="music-quiet music-quiet--tiny" type="button" aria-label="保存当前登录凭据" title="保存当前登录，供管理员口令快速登录" on:click={() => { loginMode = "admin"; showLogin = true; }}>保存登录</button>{/if}
 						<button class="music-icon-button" type="button" aria-label="退出登录" title="退出登录" on:click={logout}><Icon icon="material-symbols:logout-rounded" /></button>
 					{:else}
 						<button class="music-quiet music-quiet--tiny" type="button" on:click={() => (showLogin = true)}>登录</button>
