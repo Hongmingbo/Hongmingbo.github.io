@@ -55,7 +55,8 @@ export const navBarConfig: NavBarConfig = {
 
 export const profileConfig: ProfileConfig = {
 	// Profile 头像：GitHub avatar 本地缓存
-	avatar: "/avatar.jpg",
+	// 头像暂隐藏（同站点名）；恢复时填回："/avatar.jpg"
+	avatar: "",
 	// 名称暂隐藏；恢复时填回："衡堕"
 	name: "",
 	bio: "学习笔记与项目记录。AI Agent、前端、自托管、知识管理。",
