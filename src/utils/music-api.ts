@@ -93,6 +93,11 @@ export const musicErrorMessage = (error: unknown, fallback: string): string => {
 	if (status === 429 || String(code) === "RATE_LIMITED") return "请求过于频繁，请稍后再试";
 	if (String(code) === "131001") return "今日已经领取过 VIP";
 	if (String(code) === "20028") return "当前账号需要在酷狗官方客户端完成验证";
+	// 上游对账号密码登录返回 502 时，BFF 只给得到一句通用拒绝；这类提示必须
+	// 引导用户换登录方式，否则会让人反复重试同一个失败路径。
+	if (String(code) === "UPSTREAM_REJECTED" || String(code) === "UPSTREAM_ERROR") {
+		return "账号密码登录未被酷狗接受，请改用扫码或手机验证码登录";
+	}
 	if (error instanceof MusicApiError && error.message) return error.message;
 	return fallback;
 };
