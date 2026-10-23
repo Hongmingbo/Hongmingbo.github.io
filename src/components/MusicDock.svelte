@@ -28,7 +28,7 @@
 	} from "@utils/music-api";
 
 	type ApiStatus = "idle" | "connecting" | "ready" | "error";
-	type LoginMode = "qr" | "phone" | "password";
+	type LoginMode = "qr" | "phone" | "password" | "admin";
 	type VipState = "idle" | "checking" | "claimed" | "risk" | "error";
 	type SearchScope = "all" | "playlist";
 	type PanelTab = "songs" | "discover";
@@ -59,6 +59,9 @@
 	let phoneCountdown = 0;
 	let username = "";
 	let password = "";
+	let adminPassphrase = "";
+	let adminConfigured = false;
+	let adminSaved = false;
 	let accountOptions: Array<{ userid: string | number; nickname?: string; pic?: string }> = [];
 	let selectedAccountId = "";
 	let auth: MusicSession | null = null;
@@ -221,6 +224,7 @@
 			apiStatus = "ready";
 			apiMessage = "音乐服务已连接";
 			showSettings = false;
+			await refreshAdminStatus();
 			auth = await client.getSession();
 			if (auth) await loadUserData();
 		} catch (error) {
@@ -996,6 +1000,61 @@
 		}
 	};
 
+	// 管理员快速登录：口令只发给自家 BFF，BFF 用服务器上保存的凭据恢复会话。
+	const adminLogin = async () => {
+		if (!client) return;
+		if (!adminPassphrase) {
+			loginMessage = "请输入管理员口令";
+			return;
+		}
+		loginBusy = true;
+		loginMessage = "正在恢复登录…";
+		try {
+			const nextAuth = await client.loginAdmin(adminPassphrase);
+			adminPassphrase = "";
+			await setSession(nextAuth);
+			await refreshAdminStatus();
+		} catch (error) {
+			adminPassphrase = "";
+			loginMessage = errorMessage(error, "管理员登录失败");
+			loginBusy = false;
+		}
+	};
+
+	const saveAdmin = async () => {
+		if (!client || !auth) return;
+		if (!adminPassphrase) {
+			loginMessage = "请输入管理员口令后再保存";
+			return;
+		}
+		loginBusy = true;
+		loginMessage = "正在保存当前登录…";
+		try {
+			await client.saveAdminCredentials(adminPassphrase);
+			adminPassphrase = "";
+			loginMessage = "";
+			setNotice("已保存登录凭据，之后可用管理员口令快速登录");
+			await refreshAdminStatus();
+			loginBusy = false;
+		} catch (error) {
+			adminPassphrase = "";
+			loginMessage = errorMessage(error, "保存登录凭据失败");
+			loginBusy = false;
+		}
+	};
+
+	const refreshAdminStatus = async () => {
+		if (!client) return;
+		try {
+			const status = await client.adminStatus();
+			adminConfigured = status.configured;
+			adminSaved = status.saved;
+		} catch {
+			adminConfigured = false;
+			adminSaved = false;
+		}
+	};
+
 	const selectLoginMode = (mode: LoginMode) => {
 		loginMode = mode;
 		loginMessage = "";
@@ -1435,6 +1494,7 @@
 					<button class:music-login-tab--active={loginMode === "qr"} type="button" on:click={() => selectLoginMode("qr")}>二维码</button>
 					<button class:music-login-tab--active={loginMode === "phone"} type="button" on:click={() => selectLoginMode("phone")}>手机验证码</button>
 					<button class:music-login-tab--active={loginMode === "password"} type="button" on:click={() => selectLoginMode("password")}>账号密码</button>
+					{#if adminConfigured}<button class:music-login-tab--active={loginMode === "admin"} type="button" on:click={() => selectLoginMode("admin")}>管理员</button>{/if}
 				</div>
 				{#if loginMode === "qr"}
 					<div class="music-qr-block">
@@ -1447,6 +1507,13 @@
 						<label class="music-field"><span>手机号</span><input bind:value={phone} inputmode="numeric" autocomplete="tel" placeholder="请输入手机号" /></label>
 						<div class="music-code-row"><label class="music-field"><span>验证码</span><input bind:value={phoneCode} inputmode="numeric" autocomplete="one-time-code" placeholder="短信验证码" /></label><button class="music-quiet" type="button" disabled={loginBusy || phoneCountdown > 0} on:click={() => void sendPhoneCode()}>{phoneCountdown ? `${phoneCountdown}s` : "发送验证码"}</button></div>
 						{#if accountOptions.length}<div class="music-account-options"><span class="music-muted">请选择账号</span>{#each accountOptions as account}<button class="music-song" type="button" on:click={() => void phoneLogin(account.userid)}><span class="music-song-info"><strong>{account.nickname ?? `账号 ${account.userid}`}</strong><small>选择此账号登录</small></span><Icon icon="material-symbols:chevron-right-rounded" /></button>{/each}</div>{:else}<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void phoneLogin()}>{loginBusy ? "登录中…" : "手机登录"}</button>{/if}
+					</div>
+				{:else if loginMode === "admin"}
+					<div class="music-login-form">
+						<p class="music-muted">{adminSaved ? "用管理员口令恢复已保存的登录，无需再次扫码。" : "尚未保存登录凭据：先扫码登录，登录成功后在此输入口令保存。"}</p>
+						<label class="music-field"><span>管理员口令</span><input bind:value={adminPassphrase} type="password" autocomplete="off" placeholder="自设口令" /></label>
+						{#if adminSaved}<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void adminLogin()}>{loginBusy ? "恢复中…" : "口令登录"}</button>{/if}
+						{#if auth}<button class="music-quiet" type="button" disabled={loginBusy} on:click={() => void saveAdmin()}>{loginBusy ? "保存中…" : "保存当前登录"}</button>{/if}
 					</div>
 				{:else}
 					<div class="music-login-form">

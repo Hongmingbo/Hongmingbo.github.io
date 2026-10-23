@@ -445,6 +445,24 @@ export class MusicApiClient {
 		return this.sessionFromLogin(payload);
 	}
 
+	/** 管理员口令快速登录：用服务器保存的凭据恢复会话（口令本身不落盘）。 */
+	async adminStatus(): Promise<{ configured: boolean; saved: boolean }> {
+		const payload = await this.request("/auth/admin/status");
+		const data = responseData<any>(payload);
+		return { configured: Boolean(data?.configured), saved: Boolean(data?.saved) };
+	}
+
+	async loginAdmin(passphrase: string): Promise<MusicSession> {
+		const payload = await this.request("/auth/admin", { body: { passphrase } });
+		if (!responseSucceeded(payload)) throw new MusicApiError("管理员登录失败", payload, undefined, responseErrorCode(payload));
+		return this.sessionFromLogin(payload);
+	}
+
+	async saveAdminCredentials(passphrase: string): Promise<void> {
+		const payload = await this.request("/auth/admin/save", { body: { passphrase } });
+		if (!responseSucceeded(payload)) throw new MusicApiError("保存登录凭据失败", payload, undefined, responseErrorCode(payload));
+	}
+
 	async createQr(): Promise<{ key: string; image: string }> {
 		const payload = await this.request("/auth/qr", { method: "POST", body: {} });
 		if (!responseSucceeded(payload)) throw new MusicApiError("二维码创建失败", payload, undefined, responseErrorCode(payload));
