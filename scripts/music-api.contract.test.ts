@@ -82,6 +82,13 @@ assert.deepEqual(sortSongs(librarySongs, "artist").map((song) => song.author), [
 assert.equal(songFileId({ id: 42 } as any), "42");
 assert.equal(songFileId({ fileid: "7" } as any), "7");
 assert.equal(songFileId({ hash: "X" } as any), null);
+// 搜索结果只有 audio_id / album_audio_id / sourceid，没有删除接口要的 fileid。
+// 契约明确：这些字段不能当 fileid 用（删除接口 playlist_tracks_del 只收 fileid），
+// 所以 songFileId 必须对它们返回 null，逼调用方去歌单里反查而不是瞎猜一个 id。
+assert.equal(songFileId({ audio_id: 20505418, album_audio_id: 32100650, sourceid: 0 } as any), null);
+assert.equal(songFileId({ id: 0, fileid: 0 } as any), null);
+assert.equal(songFileId({ id: -5 } as any), null);
+assert.equal(songFileId({} as any), null);
 // 播放模式合并为 3 种：列表循环 -> 单曲循环 -> 随机 -> 回到列表循环
 assert.equal(nextPlayMode("list"), "one");
 assert.equal(nextPlayMode("one"), "shuffle");

@@ -678,23 +678,49 @@
 	 * 取不到就让整个 flush 失败（保留缓冲区供重试），
 	 * 绝不再静默清空缓冲区后报告成功——那会让爱心刷新后又变回实心。
 	 */
-	const resolveFileId = (hash: string, playlistId: string): string | null => {
-		const fromPlaylist = songs.find((song) => song.hash === hash);
-		const fromPlaylistFileId = fromPlaylist ? songFileId(fromPlaylist) : null;
-		if (fromPlaylistFileId) return fromPlaylistFileId;
-		// 歌单还没加载时退回缓存对象自带的字段。
+	// 删除接口只认 fileid（playlist_tracks_del 发 {fileid:Number(s)}，不收 hash /
+	// audio_id / album_audio_id），而 fileid 只有歌单曲目接口才会返回。
+	// 搜索来的歌被加进歌单后，若用户没重开歌单，内存里的 songs 并不含它，
+	// 所以只能按需重新拉一次该歌单来反查。
+	const fileIdMaps = new Map<string, Map<string, string>>();
+	const resolveFileId = async (hash: string, playlistId: string): Promise<string | null> => {
+		const fromMemory = songs.find((song) => song.hash === hash);
+		const memoryId = fromMemory ? songFileId(fromMemory) : null;
+		if (memoryId) return memoryId;
+
 		const cached = pendingRemovals.get(hash);
-		if (cached && cached.playlistId === playlistId) return songFileId(cached.song);
-		return null;
+		if (cached && cached.playlistId === playlistId) {
+			const cachedId = songFileId(cached.song);
+			if (cachedId) return cachedId;
+		}
+
+		if (!client) return null;
+		let map = fileIdMaps.get(playlistId);
+		if (!map) {
+			try {
+				const fetched = await client.getPlaylistSongs(playlistId);
+				map = new Map();
+				for (const song of fetched) {
+					const id = songFileId(song);
+					if (id) map.set(song.hash, id);
+				}
+			} catch {
+				map = new Map();
+			}
+			fileIdMaps.set(playlistId, map);
+		}
+		return map.get(hash) ?? null;
 	};
 
 	const flushPendingRemovals = async (): Promise<boolean> => {
 		if (!client || pendingRemovals.size === 0) return true;
 		cancelRemovalCommit();
+		// 每次 flush 重新反查：歌单内容可能在两次操作之间变过，缓存不能跨次复用。
+		fileIdMaps.clear();
 		const byPlaylist = new Map<string, Array<{ hash: string; fileid: string }>>();
 		const unresolved: string[] = [];
 		for (const [hash, value] of pendingRemovals) {
-			const fileid = resolveFileId(hash, value.playlistId);
+			const fileid = await resolveFileId(hash, value.playlistId);
 			if (!value.playlistId || !fileid) {
 				unresolved.push(value.song?.name ?? hash);
 				continue;
@@ -733,15 +759,17 @@
 	};
 
 	/**
-	 * 手动重新加载。取消收藏已在 2.5 秒后自动提交，所以这里不再承担「提交待删除」
+	 * 手动重新加载。取消收藏已在 5 秒后自动提交，所以这里不再承担「提交待删除」
 	 * 的职责（原先它是唯一入口，自动提交上线后基本是空转）；改为真正重拉列表，
 	 * 用于网络恢复后、或歌单在别处被改动时手动同步。
 	 */
 	const refreshLibrary = async () => {
 		libraryPage = 1;
 		dailyPage = 1;
-		await flushPendingRemovals();
+		// 先重拉列表，再 flush：flush 内部反查 fileid 时可以直接用刚拿到的 songs，
+		// 避免同一歌单被请求两次。
 		if (auth && selectedPlaylistId) await loadSongs();
+		await flushPendingRemovals();
 	};
 
 	// 兼容旧调用点：与 toggleFavorite 完全同一实现，避免两套分支顺序再次分叉。
