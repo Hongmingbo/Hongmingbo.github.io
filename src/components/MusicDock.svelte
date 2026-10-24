@@ -28,7 +28,7 @@
 	} from "@utils/music-api";
 
 	type ApiStatus = "idle" | "connecting" | "ready" | "error";
-	type LoginMode = "qr" | "phone" | "password" | "admin";
+	type LoginMode = "qr" | "phone" | "admin";
 	type VipState = "idle" | "checking" | "claimed" | "risk" | "error";
 	type SearchScope = "all" | "playlist";
 	type PanelTab = "songs" | "discover";
@@ -57,8 +57,6 @@
 	let phone = "";
 	let phoneCode = "";
 	let phoneCountdown = 0;
-	let username = "";
-	let password = "";
 	let adminPassphrase = "";
 	let adminConfigured = false;
 	let adminSaved = false;
@@ -993,24 +991,6 @@
 		}
 	};
 
-	const passwordLogin = async () => {
-		if (!client || !username || !password) {
-			loginMessage = "请输入账号和密码";
-			return;
-		}
-		loginBusy = true;
-		loginMessage = "正在登录…";
-		try {
-			const nextAuth = await client.loginPassword(username, password);
-			password = "";
-			await setSession(nextAuth);
-		} catch (error) {
-			password = "";
-			loginMessage = errorMessage(error, "账号密码登录失败");
-			loginBusy = false;
-		}
-	};
-
 	// 管理员快速登录：口令只发给自家 BFF，BFF 用服务器上保存的凭据恢复会话。
 	const adminLogin = async () => {
 		if (!client) return;
@@ -1512,9 +1492,8 @@
 				<header class="music-panel__header"><div><p class="music-kicker">ACCOUNT ACCESS</p><h2>登录酷狗概念版</h2></div><button class="music-icon-button" type="button" aria-label="关闭登录窗口" on:click={() => (showLogin = false)}><Icon icon="material-symbols:close-rounded" /></button></header>
 				<div class="music-login-tabs">
 					<button class:music-login-tab--active={loginMode === "qr"} type="button" on:click={() => selectLoginMode("qr")}>二维码</button>
-					<button class:music-login-tab--active={loginMode === "phone"} type="button" on:click={() => selectLoginMode("phone")}>手机验证码</button>
-					<button class:music-login-tab--active={loginMode === "password"} type="button" on:click={() => selectLoginMode("password")}>账号密码</button>
 					{#if adminConfigured}<button class:music-login-tab--active={loginMode === "admin"} type="button" on:click={() => selectLoginMode("admin")}>管理员</button>{/if}
+					<button class:music-login-tab--active={loginMode === "phone"} type="button" on:click={() => selectLoginMode("phone")}>手机验证码</button>
 				</div>
 				{#if loginMode === "qr"}
 					<div class="music-qr-block">
@@ -1536,11 +1515,8 @@
 						{#if auth}<button class="music-quiet" type="button" disabled={loginBusy} on:click={() => void saveAdmin()}>{loginBusy ? "保存中…" : "保存当前登录"}</button>{/if}
 					</div>
 				{:else}
-					<div class="music-login-form">
-						<p class="music-muted">密码仅用于本次请求，组件不会保存密码。建议优先使用二维码或手机验证码。</p>
-						<label class="music-field"><span>账号</span><input bind:value={username} autocomplete="username" placeholder="酷狗账号" /></label>
-						<label class="music-field"><span>密码</span><input bind:value={password} type="password" autocomplete="current-password" placeholder="不会保存" /></label>
-						<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void passwordLogin()}>{loginBusy ? "登录中…" : "账号登录"}</button>
+					<div class="music-qr-block">
+						<p class="music-muted">改用手机验证码登录</p>
 					</div>
 				{/if}
 				{#if loginMessage}<p class="music-status-line music-error">{loginMessage}</p>{/if}

@@ -180,9 +180,11 @@ globalThis.fetch = async (input, init) => {
 		headers: { "Content-Type": "application/json" },
 	});
 };
-await assert.rejects(
-	() => bff.loginPassword("user", "wrong"),
-	(error: unknown) => error instanceof MusicApiError && error.code === "INVALID_CREDENTIALS" && error.message === "账号或密码错误",
+// 账号密码登录已下线（上游对任何凭据形态都拒绝），契约要求该方法不存在。
+assert.equal(
+	(bff as unknown as Record<string, unknown>).loginPassword,
+	undefined,
+	"account+password login must no longer exist on the client",
 );
 try {
 	assert.equal(await bff.getStreamUrl("abc123"), "https://music.hmb2011.dpdns.org/tracks/abc123/stream");
