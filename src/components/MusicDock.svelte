@@ -124,6 +124,36 @@
 	const LAST_SONG_KEY = "hengduo-music-last-song";
 	let queueSongs: MusicSong[] = [];
 	let queueOpen = false;
+	// ===== D: 音质 / A: 歌词偏移 / C: 播放历史 =====
+	const QUALITY_KEY = "hengduo-music-quality";
+	const LYRIC_OFFSET_KEY = "hengduo-music-lyric-offset";
+	const HISTORY_KEY = "hengduo-music-history";
+	const HISTORY_LIMIT = 100;
+	// 酷狗 song_url 的 quality：128/320 为常规码率，flac 无损，magic_* 为特效音。
+	let audioQuality = "128";
+	let lyricOffsetMs = 0;
+	let playHistory: Array<{ song: MusicSong; at: number }> = [];
+	let historyOpen = false;
+
+	const persistHistory = () => {
+		try {
+			safeStorage.set(HISTORY_KEY, JSON.stringify(playHistory.slice(0, HISTORY_LIMIT)));
+		} catch {
+			/* 历史只是便利功能 */
+		}
+	};
+
+	const recordHistory = (song: MusicSong) => {
+		// 同一首歌重复播放时只保留最近一次，避免历史被单曲刷满。
+		playHistory = [{ song, at: Date.now() }, ...playHistory.filter((item) => item.song.hash !== song.hash)].slice(0, HISTORY_LIMIT);
+		persistHistory();
+	};
+
+	const clearHistory = () => {
+		playHistory = [];
+		persistHistory();
+		setNotice("播放历史已清空");
+	};
 	// 队列来源：歌单 / 每日推荐 / 搜索结果，仅用于界面标注。
 	let queueSource: "playlist" | "daily" | "search" = "playlist";
 
@@ -213,6 +243,37 @@
 	// 内存里的 songs 要等下次重载才包含它；若只看 songs，爱心会一直是空心。
 	// 这里单独记一份，并集进 effectiveFavorites，让收藏立刻可见。
 	let locallyFavorited: Set<string> = new Set();
+	// ===== 全歌单收藏索引 =====
+	// favoriteHashes 只反映「当前选中歌单」。全网搜索时，一首歌可能收藏在
+	// 别的歌单里，于是显示空心——这是搜索场景收藏状态不准的根因。
+	// allFavorites 汇总所有歌单的 hash；为避免登录后立刻拉爆网络，
+	// 只在需要时（打开搜索/歌曲库）惰性构建一次，之后由本地增删增量维护。
+	let allFavorites: Set<string> = new Set();
+	let allFavoritesLoaded = false;
+	let allFavoritesLoading = false;
+	// 单次构建最多扫描的歌单数，防止歌单极多时卡住界面。
+	const ALL_FAVORITES_PLAYLIST_LIMIT = 12;
+
+	const buildAllFavoritesIndex = async () => {
+		if (allFavoritesLoaded || allFavoritesLoading || !client || !auth) return;
+		allFavoritesLoading = true;
+		try {
+			const collected = new Set<string>();
+			const targets = playlists.slice(0, ALL_FAVORITES_PLAYLIST_LIMIT);
+			for (const playlist of targets) {
+				try {
+					const tracks = await client.getPlaylistSongs(String(playlist.listid));
+					for (const track of tracks) collected.add(track.hash);
+				} catch {
+					// 单个歌单失败不影响其余歌单的索引
+				}
+			}
+			allFavorites = collected;
+			allFavoritesLoaded = true;
+		} finally {
+			allFavoritesLoading = false;
+		}
+	};
 	// 缓冲区按 hash 记录，而不是 `${playlistId}:${hash}`：切歌单不该丢掉待删除项。
 	let pendingRemovals: Map<string, { playlistId: string; song: MusicSong }> = new Map();
 	// 选项 A：取消收藏后进入 5 秒反悔窗口，到点自动提交，不再依赖手动点「刷新」。
@@ -248,7 +309,7 @@
 	// 之前模板里写 effectiveFavorites.has(song.hash)，编译产物只把 song 记为依赖，
 	// favoriteHashes / pendingRemovalHashes 变化时按钮不会重新渲染（爱心不变色）。
 	$: effectiveFavorites = new Set(
-		[...new Set([...favoriteHashes, ...locallyFavorited])].filter(
+		[...new Set([...favoriteHashes, ...locallyFavorited, ...allFavorites])].filter(
 			(hash) => !pendingRemovalHashes.has(hash),
 		),
 	);
@@ -462,6 +523,8 @@
 			return;
 		}
 		searchBusy = true;
+		// 全网搜索前确保收藏索引就绪，否则已收藏的歌会显示空心。
+		if (searchScope === "all") await buildAllFavoritesIndex();
 		searchMessage = searchScope === "all" ? "正在搜索全网歌曲…" : "正在筛选当前歌单…";
 		try {
 			if (searchScope === "playlist") {
@@ -480,6 +543,8 @@
 	};
 
 	const openLibrary = () => {
+		// 打开歌曲库时补建全歌单收藏索引，让搜索结果的爱心状态准确。
+		void buildAllFavoritesIndex();
 		// 重进弹窗 = 执行上一会话遗留的待删除并重载列表（用户确认过的行为）。
 		void flushPendingRemovals().then(() => {
 			libraryOpen = true;
@@ -574,10 +639,11 @@
 		const generation = ++playGeneration;
 		currentSongLoading = song.hash;
 		try {
-			const audioUrl = await client.getStreamUrl(song.hash);
+			const audioUrl = await client.getStreamUrl(song.hash, audioQuality);
 			if (!audioUrl) throw new MusicApiError("BFF 播放流不可用");
 			currentSong = song;
 			sharedWindow().__hengduoMusicLast = song;
+			recordHistory(song);
 			// 队列以「点播放那一刻的列表」为准；若这首歌本来就在队列里则不重建，
 			// 否则每切一首都会把队列重置成当前歌单。
 			if (!queueSongs.some((item) => item.hash === song.hash)) {
@@ -734,6 +800,12 @@
 		// 这里若只读 favoriteHashes，从搜索收藏的歌会显示已收藏却走「添加」分支，
 		// 于是永远取消不掉。
 		if (effectiveFavorites.has(song.hash)) {
+			// 从全歌单索引里摘掉，否则取消收藏后仍会被索引顶回「已收藏」。
+			if (allFavorites.has(song.hash)) {
+				const nextAll = new Set(allFavorites);
+				nextAll.delete(song.hash);
+				allFavorites = nextAll;
+			}
 			pendingRemovals.set(song.hash, { playlistId: selectedPlaylistId, song });
 			pendingRemovalHashes = new Set(pendingRemovals.keys());
 			armRemovalCommit();
@@ -863,10 +935,59 @@
 			await client.addPlaylistTracks(selectedPlaylistId, searchSongAddData(song));
 			// 立刻标记为已收藏：远端已接受，但 songs 要等重载才含这首歌。
 			locallyFavorited = new Set(locallyFavorited).add(song.hash);
+			allFavorites = new Set(allFavorites).add(song.hash);
 			showToast("fav", `已收藏「${song.name}」到当前歌单`);
 			await loadSongs();
 		} catch (error) {
 			showToast("error", errorMessage(error, "收藏失败"));
+		}
+	};
+
+	let playlistBusy = false;
+
+	const reloadPlaylists = async () => {
+		if (!client) return;
+		try {
+			playlists = await client.getPlaylists();
+			if (!selectedPlaylistId && playlists.length > 0) selectedPlaylistId = String(playlists[0].listid);
+		} catch (error) {
+			setNotice(errorMessage(error, "歌单列表刷新失败"));
+		}
+	};
+
+	const createNewPlaylist = async () => {
+		if (!client || playlistBusy) return;
+		const name = sharedWindow().prompt?.("新歌单名称", "")?.trim();
+		if (!name) return;
+		playlistBusy = true;
+		try {
+			await client.createPlaylist(name);
+			setNotice(`已创建歌单「${name}」`);
+			await reloadPlaylists();
+		} catch (error) {
+			setNotice(errorMessage(error, "新建歌单失败"));
+		} finally {
+			playlistBusy = false;
+		}
+	};
+
+	const deleteCurrentPlaylist = async () => {
+		if (!client || !selectedPlaylistId || playlistBusy) return;
+		const current = playlists.find((playlist) => String(playlist.listid) === selectedPlaylistId);
+		const label = current?.name ?? selectedPlaylistId;
+		if (!sharedWindow().confirm?.(`确定删除歌单「${label}」？此操作不可撤销。`)) return;
+		playlistBusy = true;
+		try {
+			await client.deletePlaylist(selectedPlaylistId);
+			setNotice(`已删除歌单「${label}」`);
+			selectedPlaylistId = "";
+			songs = [];
+			await reloadPlaylists();
+			if (selectedPlaylistId) await loadSongs();
+		} catch (error) {
+			setNotice(errorMessage(error, "删除歌单失败"));
+		} finally {
+			playlistBusy = false;
 		}
 	};
 
@@ -1008,7 +1129,8 @@
 	};
 
 	const updateActiveLyric = () => {
-		const t = audio?.currentTime ?? 0;
+		// 歌词偏移：正值让歌词更早高亮（补偿整体滞后的曲子）。
+		const t = (audio?.currentTime ?? 0) + lyricOffsetMs / 1000;
 		// timeupdate 每秒会触发多次；若当前时间仍落在当前行的时间窗内，
 		// 活跃行不可能变化，直接跳过整轮扫描（歌词最多 300 行）。
 		const current = activeLyricIndex >= 0 ? lyricsLines[activeLyricIndex] : null;
@@ -1327,6 +1449,18 @@
 			if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) volume = savedVolume;
 		}
 		restoreQueue();
+		audioQuality = safeStorage.get(QUALITY_KEY) || "128";
+		const savedOffset = Number(safeStorage.get(LYRIC_OFFSET_KEY));
+		lyricOffsetMs = Number.isFinite(savedOffset) ? savedOffset : 0;
+		try {
+			const rawHistory = safeStorage.get(HISTORY_KEY);
+			if (rawHistory) {
+				const parsed = JSON.parse(rawHistory) as Array<{ song: MusicSong; at: number }>;
+				if (Array.isArray(parsed)) playHistory = parsed.filter((item) => item?.song?.hash).slice(0, HISTORY_LIMIT);
+			}
+		} catch {
+			/* 历史解析失败就当没有 */
+		}
 		const savedShuffle = safeStorage.get(SHUFFLE_KEY) === "1";
 		// 旧版本可能存过 "order"，coercePlayMode 会把它迁到 "list"。
 		playMode = savedShuffle ? "shuffle" : coercePlayMode(safeStorage.get(REPEAT_KEY));
@@ -1462,6 +1596,18 @@
 							<input type="checkbox" bind:checked={lyricAutoFollow} on:change={() => { safeStorage.set("hengduo-music-lyric-follow", lyricAutoFollow ? "1" : "0"); if (lyricAutoFollow) syncLyricScroll(true); }} />
 						</label>
 						<label class="music-setting-row">
+							<span>音质<small>128 / 320 / 无损；无损需账号有权限</small></span>
+							<select value={audioQuality} aria-label="音质" on:change={(event) => { audioQuality = (event.currentTarget as HTMLSelectElement).value; safeStorage.set(QUALITY_KEY, audioQuality); setNotice(`音质已切换到 ${audioQuality}`); }}>
+								<option value="128">128 kbps</option>
+								<option value="320">320 kbps</option>
+								<option value="flac">无损 FLAC</option>
+							</select>
+						</label>
+						<label class="music-setting-row">
+							<span>歌词偏移<small>正值提前高亮；当前 {lyricOffsetMs > 0 ? "+" : ""}{lyricOffsetMs} ms</small></span>
+							<input type="range" min="-2000" max="2000" step="100" value={lyricOffsetMs} aria-label="歌词偏移" on:input={(event) => { lyricOffsetMs = Number((event.currentTarget as HTMLInputElement).value); safeStorage.set(LYRIC_OFFSET_KEY, String(lyricOffsetMs)); updateActiveLyric(); }} />
+						</label>
+						<label class="music-setting-row">
 							<span>弹窗列表每页数量<small>歌曲库与每日推荐共用</small></span>
 							<select value={libraryPageSize} aria-label="默认每页数量" on:change={setLibraryPageSize}><option value={20}>20 首</option><option value={50}>50 首</option><option value={100}>100 首</option></select>
 						</label>
@@ -1553,6 +1699,87 @@
 		</section>
 	{/if}
 
+	{#if historyOpen}
+		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (historyOpen = false)}>
+			<section class="music-library-modal" role="dialog" aria-modal="true" aria-label="播放历史">
+				<header class="music-library-header">
+					<div>
+						<p class="music-kicker">RECENTLY PLAYED</p>
+						<h2>播放历史</h2>
+						<span class="music-muted">{playHistory.length} 首</span>
+					</div>
+					<button class="music-icon-button" type="button" aria-label="关闭播放历史" on:click={() => (historyOpen = false)}><Icon icon="material-symbols:close-rounded" /></button>
+				</header>
+				<div class="music-library-toolbar">
+					<div class="music-library-toolbar__left"><span class="music-muted">最多保留最近 100 首</span></div>
+					<div class="music-library-toolbar__controls">
+						<button class="music-quiet music-quiet--danger" type="button" disabled={playHistory.length === 0} on:click={clearHistory}>清空历史</button>
+					</div>
+				</div>
+				<div class="music-library-list" aria-label="播放历史列表">
+					{#if playHistory.length === 0}
+						<p class="music-muted music-library-empty">还没有播放记录</p>
+					{:else}
+						{#each playHistory as entry, i}
+							<div class="music-library-row">
+								<button class="music-song" type="button" on:click={() => { historyOpen = false; void playSong(entry.song); }}>
+									<span class="music-song-index">{String(i + 1).padStart(2, "0")}</span>
+									{#if entry.song.img}<img class="music-song-cover" src={entry.song.img} alt="" loading="eager" decoding="async" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
+									<span class="music-song-info"><strong>{entry.song.name}</strong><small>{entry.song.author}</small></span>
+									<Icon icon="material-symbols:play-arrow-rounded" />
+								</button>
+							</div>
+						{/each}
+					{/if}
+				</div>
+			</section>
+		</div>
+	{/if}
+
+	{#if queueOpen}
+		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (queueOpen = false)}>
+			<section class="music-library-modal" role="dialog" aria-modal="true" aria-label="播放队列">
+				<header class="music-library-header">
+					<div>
+						<p class="music-kicker">PLAY QUEUE</p>
+						<h2>播放队列</h2>
+						<span class="music-muted">{queueSongs.length} 首 · 来源{queueSource === "daily" ? "每日推荐" : queueSource === "search" ? "搜索结果" : "当前歌单"}</span>
+					</div>
+					<button class="music-icon-button" type="button" aria-label="关闭播放队列" on:click={() => (queueOpen = false)}><Icon icon="material-symbols:close-rounded" /></button>
+				</header>
+				<div class="music-library-toolbar">
+					<div class="music-library-toolbar__left">
+						<span class="music-muted">{currentSong ? `正在播放：${currentSong.name}` : "队列尚未开始播放"}</span>
+					</div>
+					<div class="music-library-toolbar__controls">
+						<button class="music-quiet" type="button" on:click={appendCurrentPlaylistToQueue}>加入当前歌单</button>
+						<button class="music-quiet music-quiet--danger" type="button" disabled={queueSongs.length === 0} on:click={clearQueue}>清空队列</button>
+					</div>
+				</div>
+				<div class="music-library-list" aria-label="队列列表">
+					{#if queueSongs.length === 0}
+						<p class="music-muted music-library-empty">还没有播放队列，播放一首歌就会生成</p>
+					{:else}
+						{#each queueSongs as song, i}
+							<div class="music-library-row" class:music-queue-row--current={currentSong?.hash === song.hash}>
+								<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => { queueOpen = false; void playSong(song); }}>
+									<span class="music-song-index">{currentSong?.hash === song.hash ? "▶" : String(i + 1).padStart(2, "0")}</span>
+									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="eager" decoding="async" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
+									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span>
+									<Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
+								</button>
+								{#if currentSong?.hash !== song.hash}
+									<button class="music-search-favorite music-queue-action" type="button" aria-label={`下一首播放 ${song.name}`} title="下一首播放" on:click={() => playNextInQueue(song.hash)}><Icon icon="material-symbols:playlist-play-rounded" /></button>
+								{/if}
+								<button class="music-search-favorite music-queue-action" type="button" aria-label={`从队列移除 ${song.name}`} title="从队列移除" on:click={() => removeFromQueue(song.hash)}><Icon icon="material-symbols:close-rounded" /></button>
+							</div>
+						{/each}
+					{/if}
+				</div>
+			</section>
+		</div>
+	{/if}
+
 	{#if libraryOpen}
 		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && closeLibrary()}>
 			<section class="music-library-modal" role="dialog" aria-modal="true" aria-label={libraryView === "daily" ? "每日推荐" : "歌曲库"}>
@@ -1606,7 +1833,11 @@
 				{:else}
 					<header class="music-library-header">
 						<div><p class="music-kicker">LIBRARY / SEARCH</p><h2>歌曲库</h2><span class="music-muted">{selectedPlaylistId ? playlists.find((playlist) => String(playlist.listid) === selectedPlaylistId)?.name : "我的音乐"}</span></div>
-						<button class="music-icon-button" type="button" aria-label="关闭歌曲库" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
+						<div class="music-panel-actions">
+							<button class="music-quiet" type="button" on:click={() => void createNewPlaylist()}>新建歌单</button>
+							<button class="music-quiet music-quiet--danger" type="button" disabled={!selectedPlaylistId || playlistBusy} on:click={() => void deleteCurrentPlaylist()}>删除歌单</button>
+							<button class="music-icon-button" type="button" aria-label="关闭歌曲库" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
+						</div>
 					</header>
 					<div class="music-library-search">
 						<input bind:value={searchQuery} aria-label="搜索歌曲库" placeholder="搜索歌曲名或歌手" on:keydown={(event) => event.key === "Enter" && void searchLibrary()} />
@@ -2032,10 +2263,10 @@
 	.music-favorite:hover { color: var(--primary); border-color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: scale(1.06); }
 	.music-favorite--active { color: #fff; border-color: var(--primary); background: var(--primary); animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	@keyframes music-heart-pop { 0% { transform: scale(0.7); } 45% { transform: scale(1.28); } 70% { transform: scale(0.92); } 100% { transform: scale(1); } }
-	/* 播放时这个均衡器才存在，它占的行内宽度会把 SERVICE ONLINE 右推。
-	   固定宽度占位，保证播放/暂停两种状态下标签位置一致。 */
-	.music-track-status { display: inline-flex; align-items: center; gap: 0.3rem; }
-	.music-eq { display: inline-flex; align-items: flex-end; gap: 2px; width: 0.95rem; height: 0.7rem; flex: 0 0 auto; }
+	/* 均衡器不能参与行内布局：上一版给它固定宽度占位，结果把 SERVICE ONLINE
+	   在两种状态下都推右了。改为绝对定位在文字左侧的留白区，文字自己保持左边缘。 */
+	.music-track-status { position: relative; display: inline-block; padding-left: 1.25rem; }
+	.music-eq { position: absolute; left: 0; bottom: 0.15rem; display: inline-flex; align-items: flex-end; gap: 2px; width: 0.95rem; height: 0.7rem; }
 	.music-eq i { display: block; width: 2.5px; border-radius: 2px; background: var(--primary); transform-origin: bottom; animation: music-eq-bounce 900ms ease-in-out infinite alternate; }
 	.music-eq--idle i { animation: none; transform: scaleY(0.45); opacity: 0; }
 	.music-eq i:nth-child(2) { animation-delay: -300ms; }

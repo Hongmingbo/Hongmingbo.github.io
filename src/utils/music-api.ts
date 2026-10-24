@@ -513,6 +513,18 @@ export class MusicApiClient {
 		await this.request("/session/logout", { method: "POST" });
 	}
 
+	async createPlaylist(name: string): Promise<{ listid: string | null; name: string }> {
+		const payload = await this.request("/playlists", { method: "POST", body: { name } });
+		if (!responseSucceeded(payload)) throw new MusicApiError("新建歌单失败", payload, undefined, responseErrorCode(payload));
+		const data = responseData<any>(payload);
+		return { listid: data?.listid != null ? String(data.listid) : null, name: String(data?.name ?? name) };
+	}
+
+	async deletePlaylist(listid: string | number): Promise<void> {
+		const payload = await this.request(`/playlists/${encodeURIComponent(String(listid))}`, { method: "DELETE" });
+		if (!responseSucceeded(payload)) throw new MusicApiError("删除歌单失败", payload, undefined, responseErrorCode(payload));
+	}
+
 	async getPlaylists(): Promise<MusicPlaylist[]> {
 		return normalizePlaylists(await this.request("/playlists", { query: { pagesize: 500 } }));
 	}
@@ -566,12 +578,13 @@ export class MusicApiClient {
 		});
 	}
 
-	async getStreamUrl(hash: string): Promise<string> {
+	async getStreamUrl(hash: string, quality?: string): Promise<string> {
 		if (!this.baseUrl) throw new MusicApiError("音乐服务尚未配置");
-		await this.getStreamPreparation(hash);
+		await this.getStreamPreparation(hash, quality);
 		// Native Audio requests this BFF URL directly. The BFF HttpOnly session cookie
 		// authenticates the request; this never resolves or exposes an upstream media URL.
-		return `${this.baseUrl}/tracks/${encodeURIComponent(hash)}/stream`;
+		const streamQuery = quality ? `?quality=${encodeURIComponent(quality)}` : "";
+		return `${this.baseUrl}/tracks/${encodeURIComponent(hash)}/stream${streamQuery}`;
 	}
 
 	async getLyrics(hash: string, durationMs = 0): Promise<string> {
