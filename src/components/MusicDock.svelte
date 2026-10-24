@@ -677,7 +677,10 @@
 			showToast("fav", `已恢复收藏「${song.name}」`);
 			return;
 		}
-		if (favoriteHashes.has(song.hash)) {
+		// 判定必须和模板显示用同一个集合：模板读 effectiveFavorites（含本地标记），
+		// 这里若只读 favoriteHashes，从搜索收藏的歌会显示已收藏却走「添加」分支，
+		// 于是永远取消不掉。
+		if (effectiveFavorites.has(song.hash)) {
 			pendingRemovals.set(song.hash, { playlistId: selectedPlaylistId, song });
 			pendingRemovalHashes = new Set(pendingRemovals.keys());
 			armRemovalCommit();
@@ -1423,7 +1426,7 @@
 						{/if}
 						<div class="music-track-copy">
 							<span class="music-track-status">
-								{#if isPlaying}<span class="music-eq" aria-hidden="true"><i></i><i></i><i></i></span>{/if}
+								<span class="music-eq" class:music-eq--idle={!isPlaying} aria-hidden="true"><i></i><i></i><i></i></span>
 								<span class="music-status-line">{apiStatus === "ready" ? "SERVICE ONLINE" : "SERVICE OFFLINE"}</span>
 							</span>
 							<strong>{currentSong?.name ?? "还没有开始播放"}</strong>
@@ -1522,7 +1525,7 @@
 								<div class="music-library-row">
 									<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => void playSong(song)}>
 										<span class="music-song-index">{String((libraryPage - 1) * 10 + i + 1).padStart(2, "0")}</span>
-										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
+										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="eager" decoding="async" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 									</button>
 									<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（5 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（5 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，5 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
@@ -1974,8 +1977,12 @@
 	.music-favorite:hover { color: var(--primary); border-color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: scale(1.06); }
 	.music-favorite--active { color: #fff; border-color: var(--primary); background: var(--primary); animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	@keyframes music-heart-pop { 0% { transform: scale(0.7); } 45% { transform: scale(1.28); } 70% { transform: scale(0.92); } 100% { transform: scale(1); } }
-	.music-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 0.7rem; }
+	/* 播放时这个均衡器才存在，它占的行内宽度会把 SERVICE ONLINE 右推。
+	   固定宽度占位，保证播放/暂停两种状态下标签位置一致。 */
+	.music-track-status { display: inline-flex; align-items: center; gap: 0.3rem; }
+	.music-eq { display: inline-flex; align-items: flex-end; gap: 2px; width: 0.95rem; height: 0.7rem; flex: 0 0 auto; }
 	.music-eq i { display: block; width: 2.5px; border-radius: 2px; background: var(--primary); transform-origin: bottom; animation: music-eq-bounce 900ms ease-in-out infinite alternate; }
+	.music-eq--idle i { animation: none; transform: scaleY(0.45); opacity: 0; }
 	.music-eq i:nth-child(2) { animation-delay: -300ms; }
 	.music-eq i:nth-child(3) { animation-delay: -600ms; }
 	.music-progress-row, .music-volume { display: grid; grid-template-columns: 2.3rem minmax(0, 1fr) 2.3rem; align-items: center; gap: 0.4rem; }

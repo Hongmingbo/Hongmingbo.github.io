@@ -240,7 +240,18 @@ export const normalizeSongs = (payload: unknown): MusicSong[] => {
 				hash: String(item.hash ?? item.FileHash),
 				name: identity.name,
 				author: identity.author,
-				img: String(item.cover ?? item.sizable_cover ?? item.pic ?? item.image ?? item.img ?? "").replace("{size}", "480"),
+				// 搜索结果经常没有封面对段；酷狗封面接口按 hash 取图，
+				// 缺字段时用它兜底，避免列表里大片占位图标。
+				img: String(
+					item.cover ??
+						item.sizable_cover ??
+						item.pic ??
+						item.image ??
+						item.img ??
+						(item.hash || item.FileHash
+							? `https://imge.kugou.com/stdmusic/480/${String(item.hash ?? item.FileHash).toLowerCase()}.jpg`
+							: ""),
+				).replace("{size}", "480"),
 				timeLength: Number(item.timelen ?? item.time_length ?? item.duration ?? item.timeLength ?? 0) || 0,
 				album: item.album ?? item.album_name ?? "",
 			};
