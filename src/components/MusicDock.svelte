@@ -28,6 +28,32 @@
 	} from "@utils/music-api";
 
 	type ApiStatus = "idle" | "connecting" | "ready" | "error";
+	// localStorage 在隐私模式、配额耗尽或站点数据被禁用时会抛异常。
+	// 播放器状态（音量/播放模式/歌词跟随/VIP 日期）全部是可再生的偏好，
+	// 绝不能因为存储不可用就让 onMount 中断、整个组件失效。
+	const safeStorage = {
+		get(key: string): string | null {
+			try {
+				return localStorage.getItem(key);
+			} catch {
+				return null;
+			}
+		},
+		set(key: string, value: string): void {
+			try {
+				localStorage.setItem(key, value);
+			} catch {
+				/* 存储不可用时静默降级：本次会话内仍按内存状态工作 */
+			}
+		},
+		remove(key: string): void {
+			try {
+				localStorage.removeItem(key);
+			} catch {
+				/* 同上 */
+			}
+		},
+	};
 	type LoginMode = "qr" | "phone" | "admin";
 	type VipState = "idle" | "checking" | "claimed" | "risk" | "error";
 	type SearchScope = "all" | "playlist";
@@ -236,7 +262,7 @@
 		if (!client || !auth?.userid) return;
 		const dateKey = getShanghaiDateKey();
 		const storageKey = `${VIP_DATE_PREFIX}${auth.userid}`;
-		if (localStorage.getItem(storageKey) === dateKey) {
+		if (safeStorage.get(storageKey) === dateKey) {
 			vipState = "claimed";
 			vipMessage = "今日 VIP 已检查";
 			return;
@@ -244,19 +270,26 @@
 
 		vipState = "checking";
 		vipMessage = "正在检查今日 VIP…";
-		const result = await runDailyVipFlow({
-			dateKey,
-			claim: (day) => client.claimVip(day),
-			upgrade: () => client.upgradeVip(),
-		});
-		vipMessage = result.message;
-		if (result.status === "completed") {
-			localStorage.setItem(storageKey, dateKey);
-			vipState = "claimed";
-		} else if (result.status === "risk") {
-			vipState = "risk";
-		} else {
+		try {
+			const result = await runDailyVipFlow({
+				dateKey,
+				claim: (day) => client.claimVip(day),
+				upgrade: () => client.upgradeVip(),
+			});
+			vipMessage = result.message;
+			if (result.status === "completed") {
+				safeStorage.set(storageKey, dateKey);
+				vipState = "claimed";
+			} else if (result.status === "risk") {
+				vipState = "risk";
+			} else {
+				vipState = "error";
+			}
+		} catch (error) {
+			// runDailyVipFlow 内部只处理业务错误；网络/会话类异常会冒泡到这里。
+			// 不兜住的话 vipState 会永久停在 "checking"，按钮一直禁用无法重试。
 			vipState = "error";
+			vipMessage = errorMessage(error, "VIP 检查失败，可稍后重试");
 		}
 	};
 
@@ -674,7 +707,7 @@
 
 	const cycleRepeat = () => {
 		playMode = nextPlayMode(playMode);
-		localStorage.setItem(REPEAT_KEY, playMode);
+		safeStorage.set(REPEAT_KEY, playMode);
 		// 模式变化由图标+常驻标签直接体现，不再弹提示导致面板高度跳动。
 	};
 
@@ -702,7 +735,7 @@
 		const target = event.currentTarget as HTMLInputElement;
 		volume = Number(target.value) / 100;
 		if (audio) audio.volume = volume;
-		localStorage.setItem("hengduo-music-volume", String(volume));
+		safeStorage.set("hengduo-music-volume", String(volume));
 	};
 
 	const loadDailyRecommendations = async () => {
@@ -1076,18 +1109,18 @@
 		apiUrl = normalizeApiBaseUrl(isDev && devApiUrl ? devApiUrl : MUSIC_BFF_ORIGIN);
 		// 注意：键缺失时 Number(null) === 0，会被误判为「合法音量 0」导致无声。
 		// 必须区分「从未设置过」（键为 null → 保留默认 0.7）与「用户主动设为 0」（键为 "0" → 尊重该值）。
-		const savedVolumeRaw = localStorage.getItem("hengduo-music-volume");
+		const savedVolumeRaw = safeStorage.get("hengduo-music-volume");
 		if (savedVolumeRaw !== null && savedVolumeRaw.trim() !== "") {
 			const savedVolume = Number(savedVolumeRaw);
 			if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) volume = savedVolume;
 		}
-		const savedShuffle = localStorage.getItem(SHUFFLE_KEY) === "1";
-		const savedRepeat = localStorage.getItem(REPEAT_KEY);
+		const savedShuffle = safeStorage.get(SHUFFLE_KEY) === "1";
+		const savedRepeat = safeStorage.get(REPEAT_KEY);
 		const savedRepeatMode = savedRepeat === "one" || savedRepeat === "off" ? savedRepeat : "list";
 		playMode = normalizePlayMode(savedShuffle, savedRepeatMode);
-		localStorage.setItem(REPEAT_KEY, playMode);
-		localStorage.removeItem(SHUFFLE_KEY);
-		lyricAutoFollow = localStorage.getItem("hengduo-music-lyric-follow") !== "0";
+		safeStorage.set(REPEAT_KEY, playMode);
+		safeStorage.remove(SHUFFLE_KEY);
+		lyricAutoFollow = safeStorage.get("hengduo-music-lyric-follow") !== "0";
 		const shared = sharedWindow();
 		if (shared.__hengduoMusicAudio) {
 			audio = shared.__hengduoMusicAudio;
@@ -1215,7 +1248,7 @@
 						<div class="music-section-label">PLAYER PREFERENCES</div>
 						<label class="music-setting-row">
 							<span>歌词自动居中跟随<small>关闭后可自由滚动查看全屏歌词</small></span>
-							<input type="checkbox" bind:checked={lyricAutoFollow} on:change={() => { localStorage.setItem("hengduo-music-lyric-follow", lyricAutoFollow ? "1" : "0"); if (lyricAutoFollow) syncLyricScroll(true); }} />
+							<input type="checkbox" bind:checked={lyricAutoFollow} on:change={() => { safeStorage.set("hengduo-music-lyric-follow", lyricAutoFollow ? "1" : "0"); if (lyricAutoFollow) syncLyricScroll(true); }} />
 						</label>
 						<label class="music-setting-row">
 							<span>弹窗列表每页数量<small>歌曲库与每日推荐共用</small></span>
