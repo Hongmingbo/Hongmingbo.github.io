@@ -170,6 +170,20 @@
 	let pendingRemovalHashes: Set<string> = new Set();
 	// 缓冲区按 hash 记录，而不是 `${playlistId}:${hash}`：切歌单不该丢掉待删除项。
 	let pendingRemovals: Map<string, { playlistId: string; song: MusicSong }> = new Map();
+	// 选项 A：取消收藏后进入 5 秒反悔窗口，到点自动提交，不再依赖手动点「刷新」。
+	let removalTimer: ReturnType<typeof setTimeout> | null = null;
+	const REMOVAL_COMMIT_DELAY_MS = 5000;
+	const armRemovalCommit = () => {
+		if (removalTimer) clearTimeout(removalTimer);
+		removalTimer = setTimeout(() => {
+			removalTimer = null;
+			void flushPendingRemovals();
+		}, REMOVAL_COMMIT_DELAY_MS);
+	};
+	const cancelRemovalCommit = () => {
+		if (removalTimer) clearTimeout(removalTimer);
+		removalTimer = null;
+	};
 	// 直接依赖 songs：Svelte 在 songs 重新赋值时重跑此语句。
 	$: favoriteHashes = new Set(songs.map((song) => song.hash));
 	// 派生「最终显示为已收藏」的集合。模板必须直接读这个变量：
@@ -613,13 +627,16 @@
 		if (pendingRemovalHashes.has(song.hash)) {
 			pendingRemovals.delete(song.hash);
 			pendingRemovalHashes = new Set(pendingRemovals.keys());
+			// 缓冲区清空就没有待提交内容了，撤掉定时器。
+			if (pendingRemovals.size === 0) cancelRemovalCommit();
 			showToast("fav", `已恢复收藏「${song.name}」`);
 			return;
 		}
 		if (favoriteHashes.has(song.hash)) {
 			pendingRemovals.set(song.hash, { playlistId: selectedPlaylistId, song });
 			pendingRemovalHashes = new Set(pendingRemovals.keys());
-			showToast("unfav", `取消收藏「${song.name}」，刷新后生效`);
+			armRemovalCommit();
+			showToast("unfav", `取消收藏「${song.name}」，5 秒后生效`);
 			return;
 		}
 		void addSongToCurrentPlaylist(song);
@@ -637,6 +654,7 @@
 	 */
 	const flushPendingRemovals = async (): Promise<boolean> => {
 		if (!client || pendingRemovals.size === 0) return true;
+		cancelRemovalCommit();
 		const byPlaylist = new Map<string, Array<{ hash: string; fileid: string }>>();
 		for (const [hash, value] of pendingRemovals) {
 			const fileid = songFileId(value.song);
@@ -714,6 +732,7 @@
 		try {
 			const fileids = entries.filter(([, song]) => songFileId(song)).map(([, song]) => String(songFileId(song)));
 			await client.delPlaylistTracks(selectedPlaylistId, fileids);
+			cancelRemovalCommit();
 			showToast("unfav", `已从歌单移除 ${fileids.length} 首歌曲`);
 			batchSelected.clear();
 			batchMode = false;
@@ -1206,6 +1225,8 @@
 		return () => {
 			clearQrTimer();
 			clearCountdown();
+			// 取消收藏的 5 秒自动提交定时器也要清掉，否则组件销毁后仍会触发请求。
+			cancelRemovalCommit();
 			// 共享 Audio 继续播放；只移除本实例的监听器，避免重复回调。
 			audio?.removeEventListener("timeupdate", onTimeUpdate);
 			audio?.removeEventListener("loadedmetadata", onLoadedMetadata);
@@ -1297,7 +1318,7 @@
 							<span>{currentSong?.author ?? "登录后读取你的歌单"}{currentIndex >= 0 ? ` · ${currentIndex + 1}/${songs.length}` : ""}</span>
 							</div>
 							{#if currentSong}
-							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? `取消收藏「${currentSong.name}」` : `收藏「${currentSong.name}」到当前歌单`} title={isFavorite ? "点击取消收藏（刷新后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}>
+							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? `取消收藏「${currentSong.name}」` : `收藏「${currentSong.name}」到当前歌单`} title={isFavorite ? "点击取消收藏（5 秒后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}>
 								<Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} />
 							</button>
 							{/if}
@@ -1315,10 +1336,10 @@
 						</button>
 						<button class="music-icon-button" type="button" aria-label="下一首" on:click={playNext}><Icon icon="material-symbols:skip-next-rounded" /></button>
 						<span class="music-mode-wrap">
-							<button class:music-mode-button--active={playMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label="切换播放模式" title={playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : playMode === "order" ? "顺序播放" : "列表循环"} on:click={cycleRepeat}>
+							<button class:music-mode-button--active={playMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label="切换播放模式" title={`播放模式：${playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : playMode === "order" ? "顺序播放" : "列表循环"}（点击切换，共 4 种）`} on:click={cycleRepeat}>
 								<Icon icon={playMode === "one" ? "material-symbols:repeat-one-rounded" : playMode === "shuffle" ? "material-symbols:shuffle-rounded" : playMode === "order" ? "material-symbols:format-list-numbered-rounded" : "material-symbols:repeat-rounded"} />
 							</button>
-							<small class="music-mode-label">{playMode === "one" ? "单曲" : playMode === "shuffle" ? "随机" : playMode === "order" ? "顺序" : "列表"}</small>
+				
 						</span>
 					</div>
 					<div class="music-volume-row">
@@ -1392,7 +1413,7 @@
 										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 									</button>
-									<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（刷新后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+									<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（5 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（5 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，5 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 								</div>
 							{/each}
 						{:else}
@@ -1450,7 +1471,7 @@
 									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 								</button>
-								<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（刷新后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+								<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（5 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（5 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，5 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 							</div>
 						{/each}
 					{:else}
@@ -1498,7 +1519,7 @@
 						<span>{formatTime(duration)}</span>
 					</div>
 					<div class="music-controls">
-						<button class:music-favorite--active={isFavorite} class="music-icon-button music-favorite" type="button" aria-label={isFavorite ? "取消收藏（刷新后生效）" : "收藏到当前歌单"} title={isFavorite ? "点击取消收藏（刷新后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}><Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+						<button class:music-favorite--active={isFavorite} class="music-icon-button music-favorite" type="button" aria-label={isFavorite ? "取消收藏（5 秒后生效）" : "收藏到当前歌单"} title={isFavorite ? "点击取消收藏（5 秒后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}><Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 						<button class="music-icon-button" type="button" aria-label="上一首" title="上一首" on:click={playPrevious}><Icon icon="material-symbols:skip-previous-rounded" /></button>
 						<button class:music-play-button--playing={isPlaying} class="music-play-button" type="button" aria-label={isPlaying ? "暂停" : "播放"} title={isPlaying ? "暂停" : "播放"} on:click={togglePlay}>
 							<Icon icon={isPlaying ? "material-symbols:pause-rounded" : "material-symbols:play-arrow-rounded"} />
@@ -1508,7 +1529,7 @@
 							<button class:music-mode-button--active={playMode !== "list"} class="music-icon-button music-mode-button" type="button" aria-label="切换播放模式" title={playMode === "one" ? "单曲循环" : playMode === "shuffle" ? "随机播放" : playMode === "order" ? "顺序播放" : "列表循环"} on:click={cycleRepeat}>
 								<Icon icon={playMode === "one" ? "material-symbols:repeat-one-rounded" : playMode === "shuffle" ? "material-symbols:shuffle-rounded" : playMode === "order" ? "material-symbols:format-list-numbered-rounded" : "material-symbols:repeat-rounded"} />
 							</button>
-							<small class="music-mode-label">{playMode === "one" ? "单曲" : playMode === "shuffle" ? "随机" : playMode === "order" ? "顺序" : "列表"}</small>
+				
 						</span>
 					</div>
 				</div>
@@ -1731,6 +1752,10 @@
 	.music-fullscreen__left .music-controls { margin-top: 0.9rem; position: relative; z-index: 3; }
 	.music-fullscreen__left .music-icon-button { width: 2.6rem; height: 2.6rem; color: #fff; background: rgb(255 255 255 / 0.08); font-size: 1.25rem; backdrop-filter: blur(8px); }
 	.music-fullscreen__left .music-icon-button:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 22%, transparent); }
+	/* .music-favorite 自带 margin-left:auto（为歌曲行右侧对齐设计），
+	   在全屏控制行里会把爱心推向一侧导致图标不居中，这里抵消掉。 */
+	.music-fullscreen__left .music-icon-button.music-favorite { margin-left: 0; }
+
 	.music-fullscreen__left .music-icon-button.music-favorite--active,
 	.music-fullscreen__left .music-icon-button.music-favorite--active:hover { color: #fff; border-color: #4fd1c5; background: #4fd1c5; animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-fullscreen__left .music-play-button { width: 3.6rem; height: 3.6rem; font-size: 1.8rem; }
@@ -1809,7 +1834,7 @@
 	   align-items 默认 stretch 会把整行推歪。改为相对定位 + 绝对定位标签，
 	   让这一列与普通按钮同高同宽。 */
 	.music-mode-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 2.6rem; height: 2.6rem; }
-	.music-mode-label { position: absolute; top: calc(100% + 0.12rem); left: 50%; transform: translateX(-50%); color: var(--md-tone-muted); font-size: 0.56rem; line-height: 1; letter-spacing: 0.04em; white-space: nowrap; pointer-events: none; }
+
 	.music-controls { margin-top: 0.55rem; display: flex; align-items: center; justify-content: center; gap: 0.35rem; }
 	.music-play-button { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border: 0; border-radius: 50%; color: #fff; background: var(--primary); cursor: pointer; font-size: 1.5rem; transition: transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), box-shadow 180ms ease; }
 	.music-play-button:hover { transform: scale(1.05); }
