@@ -1564,6 +1564,7 @@
 					{:else}
 						<button class="music-quiet music-quiet--tiny" type="button" on:click={() => (showLogin = true)}>登录</button>
 					{/if}
+					<button class:music-quiet--on={historyOpen} class="music-icon-button" type="button" aria-label="播放历史" title="播放历史" on:click={() => (historyOpen = !historyOpen)}><Icon icon="material-symbols:history-rounded" /></button>
 					<button class:music-quiet--on={queueOpen} class="music-icon-button" type="button" aria-label="播放队列" title={`播放队列${queueSongs.length > 0 ? `（${queueSongs.length} 首）` : ""}`} on:click={() => (queueOpen = !queueOpen)}><Icon icon="material-symbols:queue-music-rounded" /></button>
 					<button class="music-icon-button" type="button" aria-label={apiStatus !== "ready" || showSettings ? "返回播放器" : "音乐服务设置"} title={apiStatus !== "ready" || showSettings ? "返回播放器" : "音乐服务设置"} on:click={toggleSettings}><Icon icon="material-symbols:tune-rounded" /></button>
 					<button class="music-icon-button" type="button" aria-label="关闭音乐面板" on:click={() => (expanded = false)}>
