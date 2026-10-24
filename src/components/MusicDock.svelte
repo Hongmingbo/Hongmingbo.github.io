@@ -60,7 +60,7 @@
 	type PanelTab = "songs" | "discover";
 	type LibrarySort = "default" | "title" | "artist";
 	type LibraryView = "library" | "daily";
-	type PageSizeOption = 10 | 25 | 50;
+	type PageSizeOption = 20 | 50 | 100;
 
 	const VIP_DATE_PREFIX = "hengduo-music-vip-date:";
 	const SHUFFLE_KEY = "hengduo-music-shuffle";
@@ -132,7 +132,7 @@
 	let libraryPage = 1;
 	let librarySort: LibrarySort = "default";
 	let libraryView: LibraryView = "library";
-	let libraryPageSize: PageSizeOption = 10;
+	let libraryPageSize: PageSizeOption = 20;
 	let dailyPage = 1;
 	let libraryPageJump = "";
 	let lyricsLines: Array<{ time: number | null; text: string }> = [];
@@ -168,6 +168,10 @@
 	// 在不同歌单下显示不同的收藏状态——这是收藏按钮互不相通的根因。
 	let favoriteHashes: Set<string> = new Set();
 	let pendingRemovalHashes: Set<string> = new Set();
+	// 本地已确认收藏的 hash。从搜索里收藏一首歌时，接口只是把它加进远端歌单，
+	// 内存里的 songs 要等下次重载才包含它；若只看 songs，爱心会一直是空心。
+	// 这里单独记一份，并集进 effectiveFavorites，让收藏立刻可见。
+	let locallyFavorited: Set<string> = new Set();
 	// 缓冲区按 hash 记录，而不是 `${playlistId}:${hash}`：切歌单不该丢掉待删除项。
 	let pendingRemovals: Map<string, { playlistId: string; song: MusicSong }> = new Map();
 	// 选项 A：取消收藏后进入 5 秒反悔窗口，到点自动提交，不再依赖手动点「刷新」。
@@ -186,12 +190,26 @@
 	};
 	// 直接依赖 songs：Svelte 在 songs 重新赋值时重跑此语句。
 	$: favoriteHashes = new Set(songs.map((song) => song.hash));
+	// songs 成为权威来源后，本地标记就没必要了；同时清掉已被移除的标记，
+	// 避免取消收藏后又被 locallyFavorited 顶回「已收藏」。
+	$: if (favoriteHashes.size > 0 || locallyFavorited.size > 0) {
+		const stale = [...locallyFavorited].filter(
+			(hash) => favoriteHashes.has(hash) || pendingRemovalHashes.has(hash),
+		);
+		if (stale.length > 0) {
+			const next = new Set(locallyFavorited);
+			for (const hash of stale) next.delete(hash);
+			locallyFavorited = next;
+		}
+	}
 	// 派生「最终显示为已收藏」的集合。模板必须直接读这个变量：
 	// Svelte 5 的编译期依赖分析看不到普通函数内部的响应式读取，
 	// 之前模板里写 effectiveFavorites.has(song.hash)，编译产物只把 song 记为依赖，
 	// favoriteHashes / pendingRemovalHashes 变化时按钮不会重新渲染（爱心不变色）。
 	$: effectiveFavorites = new Set(
-		[...favoriteHashes].filter((hash) => !pendingRemovalHashes.has(hash)),
+		[...new Set([...favoriteHashes, ...locallyFavorited])].filter(
+			(hash) => !pendingRemovalHashes.has(hash),
+		),
 	);
 	const favoriteStateOf = (hash: string): boolean => effectiveFavorites.has(hash);
 	$: isFavorite = currentSong ? effectiveFavorites.has(currentSong.hash) : false;
@@ -590,8 +608,16 @@
 				await playSong(last);
 				return;
 			}
-			if (songs[0]) await playSong(songs[0]);
-			else showLogin = true;
+			if (songs[0]) {
+				await playSong(songs[0]);
+				return;
+			}
+			// 已登录但当前歌单没有歌：这不是登录问题，弹登录框会让人以为掉线了。
+			if (auth) {
+				setNotice(selectedPlaylistId ? "这个歌单还没有歌曲，换一个歌单或先收藏几首" : "还没有选择歌单");
+				return;
+			}
+			showLogin = true;
 			return;
 		}
 		if (!audio.paused) {
@@ -779,6 +805,8 @@
 		if (!client || !selectedPlaylistId) return;
 		try {
 			await client.addPlaylistTracks(selectedPlaylistId, searchSongAddData(song));
+			// 立刻标记为已收藏：远端已接受，但 songs 要等重载才含这首歌。
+			locallyFavorited = new Set(locallyFavorited).add(song.hash);
 			showToast("fav", `已收藏「${song.name}」到当前歌单`);
 			await loadSongs();
 		} catch (error) {
@@ -1377,7 +1405,7 @@
 						</label>
 						<label class="music-setting-row">
 							<span>弹窗列表每页数量<small>歌曲库与每日推荐共用</small></span>
-							<select value={libraryPageSize} aria-label="默认每页数量" on:change={setLibraryPageSize}><option value={10}>10 首</option><option value={25}>25 首</option><option value={50}>50 首</option></select>
+							<select value={libraryPageSize} aria-label="默认每页数量" on:change={setLibraryPageSize}><option value={20}>20 首</option><option value={50}>50 首</option><option value={100}>100 首</option></select>
 						</label>
 						<div class="music-setting-row">
 							<span>歌词缓存<small>当前缓存 {lyricsCache.size} 首</small></span>
@@ -1483,7 +1511,7 @@
 						<div class="music-library-toolbar__controls">
 							<button class="music-quiet" type="button" disabled={songsLoading || dailyLoading} on:click={() => void refreshLibrary()}>重新加载</button>
 							<select value={librarySort} aria-label="推荐排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
-							<select value={libraryPageSize} aria-label="每页显示数量" on:change={setLibraryPageSize}><option value={10}>10 首/页</option><option value={25}>25 首/页</option><option value={50}>50 首/页</option></select>
+							<select value={libraryPageSize} aria-label="每页显示数量" on:change={setLibraryPageSize}><option value={20}>20 首/页</option><option value={50}>50 首/页</option><option value={100}>100 首/页</option></select>
 						</div>
 					</div>
 					<div class="music-library-list" aria-label="每日推荐列表">
@@ -1538,7 +1566,7 @@
 							{#if batchMode}<button class:music-quiet--danger={batchSelected.size > 0} class="music-quiet" type="button" disabled={batchBusy || batchSelected.size === 0} on:click={() => void deleteBatchSelected()}>移除所选 ({batchSelected.size})</button>{/if}
 							<button class="music-quiet" type="button" on:click={toggleBatchMode}>{batchMode ? "退出批量" : "批量管理"}</button>
 							<select value={librarySort} aria-label="歌曲排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
-							<select value={libraryPageSize} aria-label="每页显示数量" on:change={setLibraryPageSize}><option value={10}>10 首/页</option><option value={25}>25 首/页</option><option value={50}>50 首/页</option></select>
+							<select value={libraryPageSize} aria-label="每页显示数量" on:change={setLibraryPageSize}><option value={20}>20 首/页</option><option value={50}>50 首/页</option><option value={100}>100 首/页</option></select>
 						</div>
 					</div>
 						<div class="music-library-list" aria-label="歌曲库列表">
@@ -1760,9 +1788,13 @@
 	.music-trigger-copy small { overflow: hidden; color: var(--md-tone-muted); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
 	.music-trigger-chevron { display: grid; place-items: center; flex: 0 0 auto; width: 1.1rem; height: 1.1rem; color: color-mix(in oklch, var(--primary) 78%, currentColor); font-size: 1.1rem; }
 
-	.music-panel { position: relative; width: 100%; flex: 0 1 auto; min-height: 0; max-height: calc(100vh - 6rem); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	/* 高度固定：面板在「播放」和「设置/歌曲库」之间切换时不应改变尺寸，
+	   否则整块 UI 会跟着内容跳动。用同一个高度 + 内部滚动。 */
+	.music-panel { position: relative; width: 100%; flex: 0 0 auto; height: min(38rem, calc(100vh - 6rem)); min-height: 0; margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; }
-	.music-panel-title { display: grid; gap: 0.1rem; }
+	/* 与右侧标题同一基线：用 flex 列对齐并统一行高，避免 SERVICE ONLINE
+	   被自己的 line-height 顶偏。 */
+	.music-panel-title { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0.1rem; }
 	.music-panel-title .music-kicker { margin-bottom: 0; }
 	.music-title-status { color: var(--md-tone-faint); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; }
 	.music-panel-actions { display: flex; align-items: center; gap: 0.3rem; }
@@ -1823,8 +1855,28 @@
 	.music-fullscreen { position: fixed; inset: 0; z-index: 990; display: flex; align-items: stretch; justify-content: center; overflow: hidden; overscroll-behavior: none; isolation: isolate; background: rgb(12 16 24); }
 	.music-fullscreen__bg { position: absolute; inset: -4rem; background-size: cover; background-position: center; filter: blur(72px) saturate(1.4) brightness(0.9); opacity: 0.85; transform: scale(1.2); pointer-events: none; }
 	.music-fullscreen__scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgb(10 15 24 / 0.42), rgb(8 12 20 / 0.78)); pointer-events: none; }
-	.music-fullscreen__close { position: absolute; top: 1.1rem; right: 1.1rem; z-index: 2; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border: 0; border-radius: 50%; color: currentColor; background: rgb(255 255 255 / 0.1); cursor: pointer; font-size: 1.3rem; backdrop-filter: blur(8px); transition: background 200ms ease, transform 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
-	.music-fullscreen__close:hover { background: rgb(255 255 255 / 0.22); transform: scale(1.06); }
+	/* 退出全屏按钮原来用 currentColor + 10% 白底，深色封面上几乎看不见。
+	   改为固定浅色前景 + 更实的底色 + 一圈描边，保证任何封面下都可辨。 */
+	.music-fullscreen__close {
+		position: absolute;
+		top: 1.1rem;
+		right: 1.1rem;
+		z-index: 2;
+		display: grid;
+		place-items: center;
+		width: 2.6rem;
+		height: 2.6rem;
+		border: 1px solid rgb(255 255 255 / 0.45);
+		border-radius: 50%;
+		color: #fff;
+		background: rgb(15 23 42 / 0.55);
+		box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+		cursor: pointer;
+		font-size: 1.3rem;
+		backdrop-filter: blur(8px);
+		transition: background 200ms ease, transform 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+	}
+	.music-fullscreen__close:hover { color: #fff; background: rgb(15 23 42 / 0.78); transform: scale(1.06); }
 	.music-fullscreen__content { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(20rem, 34rem); gap: clamp(1.5rem, 4vw, 4rem); align-items: center; width: min(72rem, 100%); padding: clamp(1.5rem, 4vw, 3.5rem); }
 	.music-fullscreen__left { display: grid; gap: 1.1rem; justify-items: center; }
 	.music-fullscreen__cover { width: min(22rem, 52vw); aspect-ratio: 1; border-radius: 1.3rem; object-fit: cover; box-shadow: 0 30px 70px -28px rgb(0 0 0 / 0.75); }
@@ -1913,7 +1965,7 @@
 	.music-cover--empty { display: grid; place-items: center; color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 1.5rem; }
 	.music-track-copy { min-width: 0; display: grid; gap: 0.12rem; }
 	.music-track-copy .music-track-status { margin-bottom: 0.1rem; }
-	.music-title-status { color: var(--md-tone-faint); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.2rem; }
+
 	.music-track-copy strong, .music-track-copy span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.music-track-copy strong { font-size: 0.85rem; }
 	.music-track-copy span:last-child { color: var(--md-tone-muted); font-size: 0.72rem; }
@@ -2029,7 +2081,7 @@
 		.music-dock-trigger { width: 100%; min-height: 3.75rem; padding: 0.55rem 0.7rem 0.55rem 0.6rem; border-radius: 1rem; }
 	
 	
-		.music-panel { max-height: min(74vh, calc(100vh - 5.5rem)); margin-bottom: 0.65rem; padding: 1rem; border-radius: 1.4rem 1.4rem 0 0; }
+		.music-panel { height: min(74vh, calc(100vh - 5.5rem)); margin-bottom: 0.65rem; padding: 1rem; border-radius: 1.4rem 1.4rem 0 0; }
 		.music-panel::before { content: ""; display: block; width: 2.75rem; height: 0.28rem; margin: 0 auto 0.8rem; border-radius: 999px; background: color-mix(in oklch, var(--md-tone-faint) 45%, transparent); }
 		.music-volume-row { display: none; }
 		.music-song { min-height: 3rem; }
