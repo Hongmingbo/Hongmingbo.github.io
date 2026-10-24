@@ -172,7 +172,7 @@
 	let pendingRemovals: Map<string, { playlistId: string; song: MusicSong }> = new Map();
 	// 选项 A：取消收藏后进入 5 秒反悔窗口，到点自动提交，不再依赖手动点「刷新」。
 	let removalTimer: ReturnType<typeof setTimeout> | null = null;
-	const REMOVAL_COMMIT_DELAY_MS = 2500;
+	const REMOVAL_COMMIT_DELAY_MS = 5000;
 	const armRemovalCommit = () => {
 		if (removalTimer) clearTimeout(removalTimer);
 		removalTimer = setTimeout(() => {
@@ -636,7 +636,7 @@
 			pendingRemovals.set(song.hash, { playlistId: selectedPlaylistId, song });
 			pendingRemovalHashes = new Set(pendingRemovals.keys());
 			armRemovalCommit();
-			showToast("unfav", `取消收藏「${song.name}」，3 秒后生效`);
+			showToast("unfav", `取消收藏「${song.name}」，5 秒后生效`);
 			return;
 		}
 		void addSongToCurrentPlaylist(song);
@@ -1319,7 +1319,7 @@
 							<span>{currentSong?.author ?? "登录后读取你的歌单"}{currentIndex >= 0 ? ` · ${currentIndex + 1}/${songs.length}` : ""}</span>
 							</div>
 							{#if currentSong}
-							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? `取消收藏「${currentSong.name}」` : `收藏「${currentSong.name}」到当前歌单`} title={isFavorite ? "点击取消收藏（3 秒后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}>
+							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? `取消收藏「${currentSong.name}」` : `收藏「${currentSong.name}」到当前歌单`} title={isFavorite ? "点击取消收藏（5 秒后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}>
 								<Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} />
 							</button>
 							{/if}
@@ -1414,7 +1414,7 @@
 										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 									</button>
-									<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（3 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（3 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，3 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+									<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（5 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（5 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，5 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 								</div>
 							{/each}
 						{:else}
@@ -1472,7 +1472,7 @@
 									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 								</button>
-								<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（3 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（3 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，3 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+								<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（5 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（5 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，5 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 							</div>
 						{/each}
 					{:else}
@@ -1520,7 +1520,7 @@
 						<span>{formatTime(duration)}</span>
 					</div>
 					<div class="music-controls">
-						<button class:music-favorite--active={isFavorite} class="music-icon-button music-favorite" type="button" aria-label={isFavorite ? "取消收藏（3 秒后生效）" : "收藏到当前歌单"} title={isFavorite ? "点击取消收藏（3 秒后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}><Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+						<button class:music-favorite--active={isFavorite} class="music-icon-button music-favorite" type="button" aria-label={isFavorite ? "取消收藏（5 秒后生效）" : "收藏到当前歌单"} title={isFavorite ? "点击取消收藏（5 秒后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}><Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 						<button class="music-icon-button" type="button" aria-label="上一首" title="上一首" on:click={playPrevious}><Icon icon="material-symbols:skip-previous-rounded" /></button>
 						<button class:music-play-button--playing={isPlaying} class="music-play-button" type="button" aria-label={isPlaying ? "暂停" : "播放"} title={isPlaying ? "暂停" : "播放"} on:click={togglePlay}>
 							<Icon icon={isPlaying ? "material-symbols:pause-rounded" : "material-symbols:play-arrow-rounded"} />
@@ -1765,6 +1765,13 @@
 		padding: 0;
 		vertical-align: middle;
 		line-height: 1;
+	}
+	/* 字形补偿：Material Symbols favorite 墨迹中心比几何中心偏左 1-2px。
+	   Icon 是子组件，Svelte 看不到内部结构，选择器穿透会被剔除；
+	   所以补偿加在按钮自身的内容盒上（padding-left 代替 transform，
+	   同时把 grid 的 place-items 改为显式居中避免二次偏移）。 */
+	.music-fullscreen__left .music-icon-button.music-favorite {
+		padding-left: 0.09em;
 	}
 
 	.music-fullscreen__left .music-icon-button.music-favorite--active,
