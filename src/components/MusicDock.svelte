@@ -1498,7 +1498,7 @@
 						<span>{formatTime(duration)}</span>
 					</div>
 					<div class="music-controls">
-						<button class="music-icon-button" type="button" aria-label={isFavorite ? "取消收藏（刷新后生效）" : "收藏到当前歌单"} title={isFavorite ? "点击取消收藏（刷新后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}><Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+						<button class:music-favorite--active={isFavorite} class="music-icon-button music-favorite" type="button" aria-label={isFavorite ? "取消收藏（刷新后生效）" : "收藏到当前歌单"} title={isFavorite ? "点击取消收藏（刷新后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}><Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 						<button class="music-icon-button" type="button" aria-label="上一首" title="上一首" on:click={playPrevious}><Icon icon="material-symbols:skip-previous-rounded" /></button>
 						<button class:music-play-button--playing={isPlaying} class="music-play-button" type="button" aria-label={isPlaying ? "暂停" : "播放"} title={isPlaying ? "暂停" : "播放"} on:click={togglePlay}>
 							<Icon icon={isPlaying ? "material-symbols:pause-rounded" : "material-symbols:play-arrow-rounded"} />
@@ -1804,10 +1804,13 @@
 	.music-progress-row { margin-top: 0.85rem; color: var(--md-tone-muted); font-family: var(--font-mono, monospace); font-size: 0.6rem; }
 	.music-progress-row span:last-child { text-align: right; }
 	input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer; }
-	.music-fullscreen__left .music-controls { margin-top: 0.9rem; gap: 0.7rem; }
-	.music-mode-wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 0.1rem; }
-	.music-mode-label { color: var(--md-tone-muted); font-size: 0.56rem; line-height: 1; letter-spacing: 0.04em; }
-	.music-controls { margin-top: 0.55rem; justify-content: center; gap: 0.35rem; }
+	.music-fullscreen__left .music-controls { margin-top: 0.9rem; gap: 0.7rem; align-items: center; }
+	/* 播放模式是唯一带文字标签的控件：若标签参与布局，这一列会比其它按钮高，
+	   align-items 默认 stretch 会把整行推歪。改为相对定位 + 绝对定位标签，
+	   让这一列与普通按钮同高同宽。 */
+	.music-mode-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 2.6rem; height: 2.6rem; }
+	.music-mode-label { position: absolute; top: calc(100% + 0.12rem); left: 50%; transform: translateX(-50%); color: var(--md-tone-muted); font-size: 0.56rem; line-height: 1; letter-spacing: 0.04em; white-space: nowrap; pointer-events: none; }
+	.music-controls { margin-top: 0.55rem; display: flex; align-items: center; justify-content: center; gap: 0.35rem; }
 	.music-play-button { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border: 0; border-radius: 50%; color: #fff; background: var(--primary); cursor: pointer; font-size: 1.5rem; transition: transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), box-shadow 180ms ease; }
 	.music-play-button:hover { transform: scale(1.05); }
 	.music-play-button:active { transform: scale(0.94); }
