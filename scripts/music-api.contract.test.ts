@@ -17,6 +17,8 @@ import {
 	isCurrentLyricsRequest,
 	nextPlayMode,
 	normalizePlayMode,
+	coercePlayMode,
+	PLAY_MODE_ORDER,
 	shuffleSongs,
 	isSongInPlaylist,
 	responseData,
@@ -80,14 +82,23 @@ assert.deepEqual(sortSongs(librarySongs, "artist").map((song) => song.author), [
 assert.equal(songFileId({ id: 42 } as any), "42");
 assert.equal(songFileId({ fileid: "7" } as any), "7");
 assert.equal(songFileId({ hash: "X" } as any), null);
-assert.equal(nextPlayMode("order"), "list");
+// 播放模式合并为 3 种：列表循环 -> 单曲循环 -> 随机 -> 回到列表循环
 assert.equal(nextPlayMode("list"), "one");
 assert.equal(nextPlayMode("one"), "shuffle");
-assert.equal(nextPlayMode("shuffle"), "order");
+assert.equal(nextPlayMode("shuffle"), "list");
 assert.equal(normalizePlayMode(true, "list"), "shuffle");
 assert.equal(normalizePlayMode(false, "one"), "one");
 assert.equal(normalizePlayMode(false, "off"), "list");
 assert.equal(normalizePlayMode(false, "list"), "list");
+// 历史存储值迁移：旧的 "order" 已合并进 "list"
+assert.equal(coercePlayMode("order"), "list");
+assert.equal(coercePlayMode("list"), "list");
+assert.equal(coercePlayMode("one"), "one");
+assert.equal(coercePlayMode("shuffle"), "shuffle");
+assert.equal(coercePlayMode(null), "list");
+assert.equal(coercePlayMode("garbage"), "list");
+// 三种模式构成闭环，不会出现第 4 种
+assert.deepEqual(PLAY_MODE_ORDER, ["list", "one", "shuffle"]);
 const shuffleSource = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const shuffledOnce = shuffleSongs(shuffleSource);
 const shuffledTwice = shuffleSongs(shuffleSource);

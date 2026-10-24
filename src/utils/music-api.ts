@@ -266,9 +266,11 @@ export const songFileId = (song: MusicSong): string | null => {
 	return Number.isFinite(value) && value > 0 ? String(value) : null;
 };
 
-export type PlayMode = "order" | "list" | "one" | "shuffle";
+// 列表循环与顺序播放对同一列表的遍历顺序完全相同，只在列表末尾行为上有差别，
+// 同时保留两个选项只会让用户困惑，因此合并为 "list"（列表循环）。
+export type PlayMode = "list" | "one" | "shuffle";
 
-export const PLAY_MODE_ORDER: PlayMode[] = ["order", "list", "one", "shuffle"];
+export const PLAY_MODE_ORDER: PlayMode[] = ["list", "one", "shuffle"];
 
 export const nextPlayMode = (mode: PlayMode): PlayMode => {
 	const index = PLAY_MODE_ORDER.indexOf(mode);
@@ -279,6 +281,13 @@ export const nextPlayMode = (mode: PlayMode): PlayMode => {
 export const normalizePlayMode = (shuffle: boolean, repeat: "list" | "one" | "off"): PlayMode => {
 	if (shuffle) return "shuffle";
 	if (repeat === "one") return "one";
+	return "list";
+};
+
+/** 读取历史存储值：旧的 "order" 迁移到 "list"，未知值回退到默认。 */
+export const coercePlayMode = (raw: string | null): PlayMode => {
+	if (raw === "one" || raw === "shuffle" || raw === "list") return raw;
+	// "order" 已合并进 "list"；其余（含 null/空）都用默认列表循环。
 	return "list";
 };
 
