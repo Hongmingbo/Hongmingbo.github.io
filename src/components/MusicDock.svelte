@@ -109,9 +109,6 @@
 	let batchMode = false;
 	let batchSelected = new Map<string, MusicSong>();
 	let batchBusy = false;
-	// 待删除缓冲区：key 为 `${playlistId}:${hash}`，切歌单时旧缓冲自动失效。
-	// UI 立即变白但接口延迟执行，退出重进/点刷新才真正删除。
-	let pendingRemovals = new Map<string, { playlistId: string; song: MusicSong }>();
 	// 居中卡片微弹窗（收藏反馈等）
 	let toastVisible = false;
 	let toastKind: "fav" | "unfav" | "info" | "error" = "info";
@@ -163,11 +160,21 @@
 	$: progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 	$: dockLabel = currentSong ? `${currentSong.name} · ${currentSong.author}` : "连接你的音乐平台";
 	$: currentIndex = songs.findIndex((song) => song.hash === currentSong?.hash);
-	// ===== 收藏状态唯一判断源：所有位置（面板/全屏/歌曲库/每日推荐）统一调用 =====
-	const pendingKey = (hash: string) => `${selectedPlaylistId}:${hash}`;
-	const hasPendingRemoval = (hash: string) => pendingRemovals.has(pendingKey(hash));
-	const favoriteStateOf = (hash: string): boolean => isSongInPlaylist(hash, songs) && !hasPendingRemoval(hash);
+	// ===== 收藏状态唯一判断源 =====
+	// 收藏是「这首歌在不在当前歌单里」，与播放队列/搜索结果无关。
+	// favoriteHashes 在每次歌单加载后重建，是所有界面（面板/全屏/歌曲库/每日推荐）
+	// 唯一读取的集合；pendingRemovals 只是叠在上面的「延迟删除」覆盖层。
+	// 早期实现直接读 `songs`，而 songs 只代表当前选中歌单，导致同一个 hash
+	// 在不同歌单下显示不同的收藏状态——这是收藏按钮互不相通的根因。
+	let favoriteHashes: Set<string> = new Set();
+	let pendingRemovalHashes: Set<string> = new Set();
+	// 缓冲区按 hash 记录，而不是 `${playlistId}:${hash}`：切歌单不该丢掉待删除项。
+	let pendingRemovals: Map<string, { playlistId: string; song: MusicSong }> = new Map();
+	const hasPendingRemoval = (hash: string) => pendingRemovalHashes.has(hash);
+	const favoriteStateOf = (hash: string): boolean => favoriteHashes.has(hash) && !hasPendingRemoval(hash);
 	$: isFavorite = currentSong ? favoriteStateOf(currentSong.hash) : false;
+	// 直接依赖 songs：Svelte 在 songs 重新赋值时重跑此语句。
+	$: favoriteHashes = new Set(songs.map((song) => song.hash));
 	// 响应式版本号：Map 原地变更后递增触发视图更新
 	$: librarySourceSongs = searchQuery.trim() ? searchResults : songs;
 	$: librarySortedSongs = sortSongs(librarySourceSongs, librarySort);
@@ -340,8 +347,8 @@
 
 	const onPlaylistChange = (event: Event) => {
 		selectedPlaylistId = (event.currentTarget as HTMLSelectElement).value;
-		// 切歌单：旧歌单的待删除缓冲立即失效（避免用新歌单 id 删旧歌单的歌）
-		pendingRemovals = new Map();
+		// 待删除项按 hash 保存且自带 playlistId，切歌单时保留：
+		// 旧实现直接清空缓冲区，用户已经看到「刷新后生效」的提示却永远不会生效。
 		void loadSongs();
 	};
 
@@ -588,51 +595,71 @@
 		showToast("info", message);
 	};
 
-	const toggleFavorite = () => {
-		if (!currentSong) return;
-		if (isFavorite) {
-			// 已收藏 → 进入待删除缓冲区：UI 立即变白，接口延迟到刷新/重进时执行
-			pendingRemovals = new Map(pendingRemovals).set(pendingKey(currentSong.hash), { playlistId: selectedPlaylistId, song: currentSong });
-			showToast("unfav", `取消收藏「${currentSong.name}」，刷新后生效`);
+	/**
+	 * 所有收藏入口（全屏爱心、歌曲库行内爱心、每日推荐行内爱心）都走这里。
+	 * 语义只有三条，顺序固定，不再按入口分叉：
+	 *   1. 处于待删除 → 本地恢复（不调接口）
+	 *   2. 已收藏     → 进入待删除缓冲区（UI 立即变白，接口延迟到刷新时执行）
+	 *   3. 未收藏     → 立即调接口加入当前歌单
+	 */
+	const toggleFavoriteSong = (song: MusicSong) => {
+		if (!song) return;
+		if (hasPendingRemoval(song.hash)) {
+			pendingRemovals.delete(song.hash);
+			pendingRemovalHashes = new Set(pendingRemovals.keys());
+			showToast("fav", `已恢复收藏「${song.name}」`);
 			return;
 		}
-		if (hasPendingRemoval(currentSong.hash)) {
-			// 待删除期间反悔：本地恢复，不调接口
-			pendingRemovals = new Map(pendingRemovals);
-			pendingRemovals.delete(pendingKey(currentSong.hash));
-			showToast("fav", `已恢复收藏「${currentSong.name}」`);
+		if (favoriteHashes.has(song.hash)) {
+			pendingRemovals.set(song.hash, { playlistId: selectedPlaylistId, song });
+			pendingRemovalHashes = new Set(pendingRemovals.keys());
+			showToast("unfav", `取消收藏「${song.name}」，刷新后生效`);
 			return;
 		}
-		// 未收藏 → 直接加入当前选中歌单（立即生效）
-		void addSongToCurrentPlaylist(currentSong);
+		void addSongToCurrentPlaylist(song);
 	};
 
+	const toggleFavorite = () => {
+		if (!currentSong) return;
+		toggleFavoriteSong(currentSong);
+	};
+
+	/**
+	 * 执行延迟删除。按每个待删除项自己记录的 playlistId 分组提交，
+	 * 因此「取消收藏后切歌单」不会丢掉操作，也不会用错歌单 id 去删歌。
+	 * 只有确实提交成功的条目才从缓冲区移除；失败的保留下来供重试。
+	 */
 	const flushPendingRemovals = async (): Promise<boolean> => {
-		if (!client || !selectedPlaylistId || pendingRemovals.size === 0) return true;
-		// 只执行属于当前歌单的待删除项；切歌单遗留的旧缓冲直接作废。
-		const entries = [...pendingRemovals.entries()].filter(([key]) => key.startsWith(`${selectedPlaylistId}:`));
-		const removable = entries.filter(([, value]) => songFileId(value.song));
-		if (entries.length === 0) {
-			pendingRemovals = new Map();
+		if (!client || pendingRemovals.size === 0) return true;
+		const byPlaylist = new Map<string, Array<{ hash: string; fileid: string }>>();
+		for (const [hash, value] of pendingRemovals) {
+			const fileid = songFileId(value.song);
+			if (!value.playlistId || !fileid) continue;
+			const bucket = byPlaylist.get(value.playlistId) ?? [];
+			bucket.push({ hash, fileid: String(fileid) });
+			byPlaylist.set(value.playlistId, bucket);
+		}
+		if (byPlaylist.size === 0) {
+			pendingRemovals.clear();
+			pendingRemovalHashes = new Set();
 			return true;
 		}
-		if (removable.length === 0) {
-			pendingRemovals = new Map();
-			return true;
+		let ok = true;
+		for (const [playlistId, items] of byPlaylist) {
+			try {
+				await client.delPlaylistTracks(playlistId, items.map((item) => item.fileid));
+				for (const item of items) pendingRemovals.delete(item.hash);
+			} catch (error) {
+				ok = false;
+				showToast("error", errorMessage(error, "移除执行失败，收藏状态已保留，可重试"));
+			}
 		}
-		try {
-			const fileids = removable.map(([, value]) => String(songFileId(value.song)));
-			await client.delPlaylistTracks(selectedPlaylistId, fileids);
-			for (const [key] of removable) pendingRemovals.delete(key);
-			pendingRemovals = new Map(pendingRemovals);
-			showToast("unfav", `已移除 ${fileids.length} 首，列表已刷新`);
+		pendingRemovalHashes = new Set(pendingRemovals.keys());
+		if (ok) {
+			showToast("unfav", "收藏变更已提交，列表已刷新");
 			await loadSongs();
-			return true;
-		} catch (error) {
-			showToast("error", errorMessage(error, "移除执行失败，已恢复收藏状态"));
-			pendingRemovals = new Map();
-			return false;
 		}
+		return ok;
 	};
 
 	const refreshLibrary = async () => {
@@ -641,21 +668,8 @@
 		await flushPendingRemovals();
 	};
 
-	const toggleFavoriteState = (song: MusicSong) => {
-		// 弹窗内单爱心切换：已收藏→待删除缓冲区；待删除→本地恢复。均不立即调接口。
-		if (hasPendingRemoval(song.hash)) {
-			pendingRemovals = new Map(pendingRemovals);
-			pendingRemovals.delete(pendingKey(song.hash));
-			showToast("fav", `已恢复收藏「${song.name}」`);
-			return;
-		}
-		if (isSongInPlaylist(song.hash, songs)) {
-			pendingRemovals = new Map(pendingRemovals).set(pendingKey(song.hash), { playlistId: selectedPlaylistId, song });
-			showToast("unfav", `取消收藏「${song.name}」，刷新后生效`);
-			return;
-		}
-		addSongToCurrentPlaylist(song);
-	};
+	// 兼容旧调用点：与 toggleFavorite 完全同一实现，避免两套分支顺序再次分叉。
+	const toggleFavoriteState = (song: MusicSong) => toggleFavoriteSong(song);
 
 	const addSongToCurrentPlaylist = async (song: MusicSong) => {
 		if (!client || !selectedPlaylistId) return;
@@ -1581,9 +1595,22 @@
 		bottom: 1rem;
 		z-index: 70;
 		width: auto;
+		/* 只锚定 bottom 时，元素会向上生长；面板一旦高过视口，顶部（标题栏、
+		   关闭按钮）就会跑到屏幕外且无法触达。这里给一个视口上限并让内部滚动，
+		   保证任何视口高度下整个面板都可达。 */
+		max-height: calc(100vh - 2rem);
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
 		font-family: var(--font-sans, "Noto Sans SC", sans-serif);
-		color: var(--text-90, rgb(30 41 59));
+		/* 单一锚点：整棵子树的文字层级都从 currentColor 派生，
+		   亮/暗主题各自继承正文色，不再依赖未定义的 --text-* 变量。 */
+		color: var(--deep-text, oklch(0.25 0.02 200));
+		--md-tone-body: color-mix(in oklch, currentColor 72%, transparent);
+		--md-tone-muted: color-mix(in oklch, currentColor 58%, transparent);
+		--md-tone-faint: color-mix(in oklch, currentColor 46%, transparent);
 	}
+
 
 	.music-dock-trigger,
 	.music-panel {
@@ -1615,24 +1642,26 @@
 	.music-trigger-cover { width: 100%; height: 100%; object-fit: cover; }
 	.music-trigger-spin { animation: music-spin 16s linear infinite; }
 	.music-trigger-pulse { animation: music-pulse 1.8s ease-in-out infinite; }
-	.music-trigger-copy { display: none; min-width: 0; flex: 1; flex-direction: column; gap: 0.05rem; }
+	/* 折叠态下显示标题与当前曲目；展开态由面板头部承担同样信息，故隐藏。 */
+	.music-trigger-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 0.05rem; }
+	.music-dock--open .music-trigger-copy { display: none; }
 	.music-trigger-copy strong { font-size: 0.8rem; letter-spacing: 0.08em; }
-	.music-trigger-copy small { overflow: hidden; color: var(--text-50, rgb(100 116 139)); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+	.music-trigger-copy small { overflow: hidden; color: var(--md-tone-muted); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
 	:global(.music-trigger-chevron) { display: none; color: var(--primary); font-size: 1.25rem; }
 
-	.music-panel { position: relative; width: 100%; min-height: min(38rem, calc(100vh - 2rem)); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	.music-panel { position: relative; width: 100%; flex: 0 1 auto; min-height: 0; max-height: calc(100vh - 6rem); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; }
 	.music-panel-title { display: grid; gap: 0.1rem; }
 	.music-panel-title .music-kicker { margin-bottom: 0; }
-	.music-title-status { color: var(--text-40, rgb(148 163 184)); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; }
+	.music-title-status { color: var(--md-tone-faint); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; }
 	.music-panel-actions { display: flex; align-items: center; gap: 0.3rem; }
-	.music-header-account { max-width: 7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-50, rgb(100 116 139)); font-size: 0.66rem; }
-	.music-vip-badge { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0.1rem 0.38rem; border: 1px solid color-mix(in oklch, var(--text-40, #94a3b8) 30%, transparent); border-radius: 999px; color: var(--text-50, #64748b); font-size: 0.56rem; letter-spacing: 0.02em; white-space: nowrap; }
+	.music-header-account { max-width: 7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--md-tone-muted); font-size: 0.66rem; }
+	.music-vip-badge { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0.1rem 0.38rem; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 30%, transparent); border-radius: 999px; color: var(--md-tone-muted); font-size: 0.56rem; letter-spacing: 0.02em; white-space: nowrap; }
 	.music-vip-badge--ok { border-color: color-mix(in oklch, #2f9e72 36%, transparent); color: #2f9e72; background: color-mix(in oklch, #2f9e72 8%, transparent); }
 	.music-vip-badge--risk { border-color: color-mix(in oklch, #c05640 36%, transparent); color: #c05640; background: color-mix(in oklch, #c05640 8%, transparent); }
 	.music-quiet--tiny { min-height: 1.8rem; padding: 0.2rem 0.55rem; font-size: 0.66rem; }
 	.music-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; margin-top: 0.75rem; padding: 0.22rem; border-radius: 0.8rem; background: color-mix(in oklch, var(--primary) 7%, var(--card-border, #dce5e5)); }
-	.music-tab { min-height: 2rem; padding: 0.3rem 0.4rem; border: 0; border-radius: 0.6rem; color: var(--text-50, rgb(100 116 139)); background: transparent; font: inherit; font-size: 0.72rem; cursor: pointer; transition: color 200ms ease, background 200ms ease, box-shadow 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-tab { min-height: 2rem; padding: 0.3rem 0.4rem; border: 0; border-radius: 0.6rem; color: var(--md-tone-muted); background: transparent; font: inherit; font-size: 0.72rem; cursor: pointer; transition: color 200ms ease, background 200ms ease, box-shadow 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-tab:hover { color: var(--primary); }
 	.music-tab--active { color: var(--primary); background: var(--card-bg, #fff); box-shadow: 0 2px 8px -4px rgb(15 23 42 / 0.35); }
 	.music-lyrics-tab { margin-top: 0.65rem; }
@@ -1665,7 +1694,7 @@
 	.music-pending-hint { padding: 0.12rem 0.45rem; border-radius: 999px; color: #c05640; background: color-mix(in oklch, #c05640 9%, transparent); font-size: 0.6rem; white-space: nowrap; }
 	.music-library-empty { display: grid; min-height: 12rem; place-items: center; padding: 1rem; text-align: center; }
 	.music-quiet--danger { color: #c05640; border-color: color-mix(in oklch, #c05640 36%, transparent); }
-	.music-batch-check { display: grid; place-items: center; flex: 0 0 1.15rem; width: 1.15rem; height: 1.15rem; margin-right: 0.45rem; border: 1.5px solid var(--text-40, #94a3b8); border-radius: 50%; color: transparent; font-size: 0.7rem; line-height: 1; }
+	.music-batch-check { display: grid; place-items: center; flex: 0 0 1.15rem; width: 1.15rem; height: 1.15rem; margin-right: 0.45rem; border: 1.5px solid var(--md-tone-faint); border-radius: 50%; color: transparent; font-size: 0.7rem; line-height: 1; }
 	.music-batch-check--on { border-color: var(--primary); color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); }
 	.music-song--selected { border-color: color-mix(in oklch, var(--primary) 35%, transparent); background: color-mix(in oklch, var(--primary) 10%, transparent); }
 	.music-library-footer { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 75%, transparent); flex-wrap: wrap; }
@@ -1675,7 +1704,7 @@
 	.music-library-footer .music-actions { display: flex; align-items: center; gap: 0.4rem; flex-direction: row; }
 	.music-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; padding-top: 0.55rem; margin-top: 0.55rem; border-top: 1px dashed color-mix(in oklch, var(--card-border, #dce5e5) 70%, transparent); font-size: 0.74rem; }
 	.music-setting-row span { display: grid; gap: 0.1rem; }
-	.music-setting-row small { color: var(--text-45, rgb(148 163 184)); font-size: 0.62rem; }
+	.music-setting-row small { color: var(--md-tone-muted); font-size: 0.62rem; }
 	.music-setting-row select { min-height: 2rem; padding: 0.3rem 1.4rem 0.3rem 0.5rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.55rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.7rem; }
 	.music-setting-row input[type="checkbox"] { width: 1.15rem; height: 1.15rem; accent-color: var(--primary); }
 	@keyframes music-modal-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
@@ -1683,7 +1712,7 @@
 	.music-fullscreen { position: fixed; inset: 0; z-index: 990; display: flex; align-items: stretch; justify-content: center; overflow: hidden; overscroll-behavior: none; isolation: isolate; background: rgb(12 16 24); }
 	.music-fullscreen__bg { position: absolute; inset: -4rem; background-size: cover; background-position: center; filter: blur(72px) saturate(1.4) brightness(0.9); opacity: 0.85; transform: scale(1.2); pointer-events: none; }
 	.music-fullscreen__scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgb(10 15 24 / 0.42), rgb(8 12 20 / 0.78)); pointer-events: none; }
-	.music-fullscreen__close { position: absolute; top: 1.1rem; right: 1.1rem; z-index: 2; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border: 0; border-radius: 50%; color: var(--text-90, #e2e8f0); background: rgb(255 255 255 / 0.1); cursor: pointer; font-size: 1.3rem; backdrop-filter: blur(8px); transition: background 200ms ease, transform 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-fullscreen__close { position: absolute; top: 1.1rem; right: 1.1rem; z-index: 2; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border: 0; border-radius: 50%; color: currentColor; background: rgb(255 255 255 / 0.1); cursor: pointer; font-size: 1.3rem; backdrop-filter: blur(8px); transition: background 200ms ease, transform 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-fullscreen__close:hover { background: rgb(255 255 255 / 0.22); transform: scale(1.06); }
 	.music-fullscreen__content { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(18rem, 26rem) minmax(20rem, 34rem); gap: clamp(1.5rem, 4vw, 4rem); align-items: center; width: min(72rem, 100%); padding: clamp(1.5rem, 4vw, 3.5rem); }
 	.music-fullscreen__left { display: grid; gap: 1.1rem; justify-items: center; }
@@ -1708,7 +1737,7 @@
 	.music-fullscreen .music-lyric--active { color: var(--primary); opacity: 1; }
 	.music-fullscreen .music-progress-row span { color: rgb(203 213 225); }
 	.music-fullscreen .music-progress-row input { accent-color: var(--primary); }
-	.music-fullscreen__empty { color: var(--text-50, rgb(148 163 184)); font-size: 0.9rem; text-align: center; }
+	.music-fullscreen__empty { color: var(--md-tone-muted); font-size: 0.9rem; text-align: center; }
 	@media (max-width: 860px) {
 		.music-fullscreen__content { grid-template-columns: 1fr; gap: 1.4rem; align-content: start; align-items: center; overflow-y: auto; text-align: center; }
 		.music-fullscreen__cover { width: min(14rem, 60vw); }
@@ -1718,14 +1747,14 @@
 	}
 	.music-panel__header h2 { margin: 0.15rem 0 0; font-size: 1.25rem; line-height: 1.2; }
 	.music-kicker, .music-section-label { margin: 0; color: var(--primary); font-family: var(--font-mono, monospace); font-size: 0.62rem; letter-spacing: 0.13em; }
-	.music-section-label { display: block; margin-bottom: 0.35rem; color: var(--text-50, rgb(100 116 139)); }
-	.music-icon-button { display: inline-grid; place-items: center; width: 2.2rem; height: 2.2rem; padding: 0; border: 0; border-radius: 0.65rem; color: var(--text-60, rgb(71 85 105)); background: transparent; cursor: pointer; font-size: 1.25rem; transition: color 180ms ease, background 180ms ease, transform 180ms ease; }
+	.music-section-label { display: block; margin-bottom: 0.35rem; color: var(--md-tone-muted); }
+	.music-icon-button { display: inline-grid; place-items: center; width: 2.2rem; height: 2.2rem; padding: 0; border: 0; border-radius: 0.65rem; color: var(--md-tone-body); background: transparent; cursor: pointer; font-size: 1.25rem; transition: color 180ms ease, background 180ms ease, transform 180ms ease; }
 	.music-icon-button:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: translateY(-1px); }
 	.music-toast-backdrop { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; background: rgb(8 12 20 / 0.32); animation: music-fade-in 150ms ease both; }
 	.music-toast-card { display: grid; justify-items: center; gap: 0.6rem; width: min(20rem, calc(100vw - 3rem)); padding: 1.4rem 1.2rem; border-radius: 1.1rem; color: inherit; background: var(--card-bg, #fff); box-shadow: 0 24px 60px -24px rgb(15 23 42 / 0.55); animation: music-toast-in 240ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; text-align: center; }
 	.music-toast-heart { display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 50%; font-size: 1.7rem; animation: music-toast-beat 900ms ease-in-out 2; }
 	.music-toast-card--fav .music-toast-heart { color: #fff; background: var(--primary); }
-	.music-toast-card--unfav .music-toast-heart { color: var(--text-45, rgb(148 163 184)); border: 1.5px dashed var(--text-40, #94a3b8); }
+	.music-toast-card--unfav .music-toast-heart { color: var(--md-tone-muted); border: 1.5px dashed var(--md-tone-faint); }
 	.music-toast-card--error .music-toast-heart { color: #c05640; background: color-mix(in oklch, #c05640 10%, transparent); }
 	.music-toast-card--info .music-toast-heart { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); }
 	.music-toast-card strong { max-width: 100%; overflow-wrap: anywhere; font-size: 0.8rem; line-height: 1.5; }
@@ -1734,9 +1763,9 @@
 	.music-config-block, .music-player-core, .music-account-row, .music-vip-state { padding: 0.8rem; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 80%, transparent); border-radius: 0.9rem; background: color-mix(in oklch, var(--card-bg, #fff) 70%, transparent); }
 	.music-config-block--full { min-height: 38rem; align-content: start; }
 	.music-config-block, .music-login-form { display: grid; gap: 0.7rem; }
-	.music-muted, .music-status-line, .music-login-note { margin: 0; color: rgb(71 85 105); font-size: 0.72rem; line-height: 1.55; }
+	.music-muted, .music-status-line, .music-login-note { margin: 0; color: var(--md-tone-muted); font-size: 0.72rem; line-height: 1.55; }
 	.music-error { color: #c05640; }
-	.music-field { display: grid; gap: 0.3rem; color: var(--text-60, rgb(71 85 105)); font-size: 0.7rem; }
+	.music-field { display: grid; gap: 0.3rem; color: var(--md-tone-body); font-size: 0.7rem; }
 	.music-field input, .music-field select { width: 100%; min-height: 2.25rem; padding: 0.45rem 0.65rem; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 88%, transparent); border-radius: 0.6rem; outline: 0; color: inherit; background: color-mix(in oklch, var(--page-bg, #f8fafc) 70%, transparent); font: inherit; }
 	.music-field input:focus, .music-field select:focus { border-color: color-mix(in oklch, var(--primary) 60%, var(--card-border, #dce5e5)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 14%, transparent); }
 	.music-actions, .music-controls, .music-secondary-actions { display: flex; align-items: center; gap: 0.45rem; }
@@ -1746,18 +1775,18 @@
 	.music-primary:hover:not(:disabled), .music-quiet:hover:not(:disabled) { transform: translateY(-1px); }
 	.music-primary:disabled, .music-quiet:disabled { cursor: not-allowed; opacity: 0.5; }
 	.music-primary--small { min-height: 2rem; }
-	.music-quiet { border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 95%, transparent); color: var(--text-60, rgb(71 85 105)); background: transparent; }
+	.music-quiet { border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 95%, transparent); color: var(--md-tone-body); background: transparent; }
 	.music-now-playing { display: flex; align-items: center; gap: 0.75rem; }
 	.music-cover { flex: 0 0 3.6rem; width: 3.6rem; height: 3.6rem; border-radius: 0.85rem; object-fit: cover; box-shadow: 0 8px 18px -12px rgb(15 23 42 / 0.7); }
 	.music-cover--empty { display: grid; place-items: center; color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 1.5rem; }
 	.music-track-copy { min-width: 0; display: grid; gap: 0.12rem; }
 	.music-track-copy .music-track-status { margin-bottom: 0.1rem; }
-	.music-title-status { color: var(--text-40, rgb(148 163 184)); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.2rem; }
+	.music-title-status { color: var(--md-tone-faint); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.2rem; }
 	.music-track-copy strong, .music-track-copy span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.music-track-copy strong { font-size: 0.85rem; }
-	.music-track-copy span:last-child { color: rgb(71 85 105); font-size: 0.72rem; }
+	.music-track-copy span:last-child { color: var(--md-tone-muted); font-size: 0.72rem; }
 	.music-track-status { display: inline-flex; align-items: center; gap: 0.35rem; }
-	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 1px solid color-mix(in oklch, var(--text-40, #94a3b8) 45%, transparent); border-radius: 0.65rem; color: rgb(120 134 156); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), border-color 180ms ease; }
+	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 45%, transparent); border-radius: 0.65rem; color: var(--md-tone-muted); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), border-color 180ms ease; }
 	.music-favorite:hover { color: var(--primary); border-color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: scale(1.06); }
 	.music-favorite--active { color: #fff; border-color: var(--primary); background: var(--primary); animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	@keyframes music-heart-pop { 0% { transform: scale(0.7); } 45% { transform: scale(1.28); } 70% { transform: scale(0.92); } 100% { transform: scale(1); } }
@@ -1766,12 +1795,12 @@
 	.music-eq i:nth-child(2) { animation-delay: -300ms; }
 	.music-eq i:nth-child(3) { animation-delay: -600ms; }
 	.music-progress-row, .music-volume { display: grid; grid-template-columns: 2.3rem minmax(0, 1fr) 2.3rem; align-items: center; gap: 0.4rem; }
-	.music-progress-row { margin-top: 0.85rem; color: var(--text-50, rgb(100 116 139)); font-family: var(--font-mono, monospace); font-size: 0.6rem; }
+	.music-progress-row { margin-top: 0.85rem; color: var(--md-tone-muted); font-family: var(--font-mono, monospace); font-size: 0.6rem; }
 	.music-progress-row span:last-child { text-align: right; }
 	input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer; }
 	.music-fullscreen__left .music-controls { margin-top: 0.9rem; gap: 0.7rem; }
 	.music-mode-wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 0.1rem; }
-	.music-mode-label { color: var(--text-50, rgb(100 116 139)); font-size: 0.56rem; line-height: 1; letter-spacing: 0.04em; }
+	.music-mode-label { color: var(--md-tone-muted); font-size: 0.56rem; line-height: 1; letter-spacing: 0.04em; }
 	.music-controls { margin-top: 0.55rem; justify-content: center; gap: 0.35rem; }
 	.music-play-button { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border: 0; border-radius: 50%; color: #fff; background: var(--primary); cursor: pointer; font-size: 1.5rem; transition: transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), box-shadow 180ms ease; }
 	.music-play-button:hover { transform: scale(1.05); }
@@ -1779,13 +1808,13 @@
 	.music-play-button--playing { box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 16%, transparent); }
 	.music-mode-button--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); }
 	.music-volume-row { margin-top: 0.55rem; }
-	.music-volume { width: 100%; color: var(--text-50, rgb(100 116 139)); font-family: var(--font-mono, monospace); font-size: 0.66rem; }
-	.music-volume-icon { display: grid; place-items: center; justify-self: start; width: 2.3rem; color: var(--text-60, rgb(71 85 105)); font-family: inherit; font-size: 1rem; }
-	.music-volume-value { justify-self: end; min-width: 2.3rem; color: var(--text-50, rgb(100 116 139)); text-align: right; }
+	.music-volume { width: 100%; color: var(--md-tone-muted); font-family: var(--font-mono, monospace); font-size: 0.66rem; }
+	.music-volume-icon { display: grid; place-items: center; justify-self: start; width: 2.3rem; color: var(--md-tone-body); font-family: inherit; font-size: 1rem; }
+	.music-volume-value { justify-self: end; min-width: 2.3rem; color: var(--md-tone-muted); text-align: right; }
 	.music-volume input { min-width: 0; }
 	.music-account-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.65rem; }
 	.music-account-row strong { display: block; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; }
-	.music-vip-state { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.65rem; color: var(--text-50, rgb(100 116 139)); font-size: 0.7rem; }
+	.music-vip-state { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.65rem; color: var(--md-tone-muted); font-size: 0.7rem; }
 	.music-state-dot { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: #a3a3a3; }
 	.music-vip-state--ok .music-state-dot { background: #36a269; box-shadow: 0 0 0 4px rgb(54 162 105 / 0.12); }
 	.music-vip-state--risk .music-state-dot { background: #d18b3d; }
@@ -1797,7 +1826,7 @@
 	.music-search-box { display: grid; gap: 0.25rem; margin-top: 0.75rem; }
 	.music-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.35rem; align-items: center; }
 	.music-search-row input, .music-search-row select, .music-add-song-card select { min-width: 0; min-height: 2rem; padding: 0.35rem 0.5rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.55rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.68rem; }
-	.music-search-message { margin: 0; color: var(--text-50, rgb(100 116 139)); font-size: 0.64rem; }
+	.music-search-message { margin: 0; color: var(--md-tone-muted); font-size: 0.64rem; }
 	.music-song-list { display: grid; gap: 0.25rem; max-height: 13rem; margin-top: 0.6rem; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
 	.music-song-list::-webkit-scrollbar { display: none; }
 	.music-list-status { display: flex; align-items: center; justify-content: space-between; gap: 0.65rem; padding: 0.35rem 0.15rem; }
@@ -1808,7 +1837,7 @@
 	.music-search-results { margin-top: 0.55rem; }
 	.music-search-result { display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
 	.music-search-result .music-song { min-width: 0; flex: 1; }
-	.music-search-favorite { display: grid; place-items: center; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid color-mix(in oklch, var(--text-40, #94a3b8) 45%, transparent); border-radius: 0.6rem; color: var(--text-45, rgb(120 134 156)); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.1rem; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
+	.music-search-favorite { display: grid; place-items: center; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 45%, transparent); border-radius: 0.6rem; color: var(--md-tone-muted); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.1rem; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
 	.music-search-favorite:hover { border-color: color-mix(in oklch, var(--primary) 30%, transparent); color: var(--primary); background: color-mix(in oklch, var(--primary) 8%, transparent); }
 	.music-search-favorite--active { color: #fff; border-color: var(--primary); background: var(--primary); }
 	.music-add-song-card { display: grid; gap: 0.55rem; margin-top: 0.6rem; padding: 0.7rem; border: 1px solid color-mix(in oklch, var(--primary) 22%, var(--card-border, #dce5e5)); border-radius: 0.75rem; background: color-mix(in oklch, var(--primary) 5%, transparent); }
@@ -1817,43 +1846,40 @@
 	.music-song--active .music-song-index { color: var(--primary); }
 	.music-song-cover { flex: 0 0 2.1rem; width: 2.1rem; height: 2.1rem; border-radius: 0.45rem; object-fit: cover; background: color-mix(in oklch, var(--primary) 10%, transparent); }
 	.music-song-cover--empty { display: grid; place-items: center; color: var(--primary); font-size: 1rem; }
-	.music-song-index { width: 1.6rem; color: var(--text-35, rgb(148 163 184)); font-family: var(--font-mono, monospace); font-size: 0.62rem; }
+	.music-song-index { width: 1.6rem; color: var(--md-tone-faint); font-family: var(--font-mono, monospace); font-size: 0.62rem; }
 	.music-song-info { min-width: 0; display: grid; flex: 1; gap: 0.08rem; }
 	.music-song-info strong, .music-song-info small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.music-song-info strong { font-size: 0.74rem; font-weight: 650; }
-	.music-song-info small { color: var(--text-50, rgb(100 116 139)); font-size: 0.64rem; }
+	.music-song-info small { color: var(--md-tone-muted); font-size: 0.64rem; }
 	.music-song > :global(svg) { color: var(--primary); font-size: 1.1rem; }
 	.music-secondary-actions { justify-content: flex-end; margin-top: 0.5rem; }
 	.music-lyrics { max-height: 15rem; margin-top: 0.55rem; padding: 3.2rem 0.45rem; overflow: auto; scroll-padding-block: 5.5rem; scroll-behavior: smooth; scrollbar-width: none; border: 1px solid color-mix(in oklch, var(--primary) 10%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: linear-gradient(180deg, color-mix(in oklch, var(--primary) 4%, var(--page-bg, #f8fafc)), color-mix(in oklch, var(--page-bg, #f8fafc) 90%, transparent)); }
 	.music-lyrics::-webkit-scrollbar { display: none; }
 	.music-lyrics ul { display: grid; gap: 0.22rem; margin: 0; padding: 0; list-style: none; }
-	.music-lyric { display: block; width: 100%; padding: 0.42rem 0.72rem; border: 0; border-radius: 0.55rem; color: var(--text-40, rgb(148 163 184)); background: transparent; font: inherit; font-size: 0.76rem; line-height: 1.75; opacity: 0.52; transform: scale(0.98); text-align: center; cursor: pointer; transition: color 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), background 220ms ease, opacity 220ms ease, transform 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-lyric { display: block; width: 100%; padding: 0.42rem 0.72rem; border: 0; border-radius: 0.55rem; color: var(--md-tone-faint); background: transparent; font: inherit; font-size: 0.76rem; line-height: 1.75; opacity: 0.52; transform: scale(0.98); text-align: center; cursor: pointer; transition: color 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), background 220ms ease, opacity 220ms ease, transform 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-lyric:disabled { cursor: default; }
 		.music-lyric--past { opacity: 0.38; }
-		.music-lyric--next { color: var(--text-60, rgb(71 85 105)); opacity: 0.7; }
+		.music-lyric--next { color: var(--md-tone-body); opacity: 0.7; }
 		.music-lyric--active { color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 0.86rem; font-weight: 700; opacity: 1; transform: scale(1); }
 	.music-login-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1rem; background: rgb(15 23 42 / 0.28); backdrop-filter: blur(5px); }
 	.music-login-card { width: min(27rem, 100%); max-height: calc(100vh - 2rem); padding: 1.25rem 1.35rem 1.15rem; overflow: auto; border: 1px solid color-mix(in oklch, var(--primary) 25%, var(--card-border, #dce5e5)); border-radius: 1.2rem; background: var(--card-bg, #fff); box-shadow: 0 30px 80px -35px rgb(15 23 42 / 0.65); animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-login-card > .music-panel__header { margin-bottom: 1.05rem; }
 	.music-login-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.25rem; padding: 0.25rem; border-radius: 0.75rem; background: color-mix(in oklch, var(--primary) 7%, var(--page-bg, #f8fafc)); }
-	.music-login-tabs button { min-height: 2.1rem; border: 0; border-radius: 0.55rem; color: var(--text-50, rgb(100 116 139)); background: transparent; font: inherit; font-size: 0.7rem; cursor: pointer; }
+	.music-login-tabs button { min-height: 2.1rem; border: 0; border-radius: 0.55rem; color: var(--md-tone-muted); background: transparent; font: inherit; font-size: 0.7rem; cursor: pointer; }
 	.music-login-tab--active { color: var(--primary) !important; background: var(--card-bg, #fff) !important; box-shadow: 0 5px 12px -10px rgb(15 23 42 / 0.55); }
 	.music-qr-block { display: grid; justify-items: center; gap: 0.85rem; padding: 1.25rem 0 0.75rem; text-align: center; }
 	.music-qr-block img { width: 13rem; height: 13rem; padding: 0.45rem; border-radius: 0.8rem; background: #fff; }
 	.music-qr-empty { display: grid; place-items: center; gap: 0.55rem; width: 13rem; height: 13rem; border: 1px dashed color-mix(in oklch, var(--primary) 35%, var(--card-border, #dce5e5)); border-radius: 0.8rem; color: var(--primary); font-size: 2.4rem; }
-	.music-qr-empty span { color: var(--text-50, rgb(100 116 139)); font-size: 0.68rem; }
-	.music-qr-block p { margin: 0; color: var(--text-60, rgb(71 85 105)); font-size: 0.72rem; }
+	.music-qr-empty span { color: var(--md-tone-muted); font-size: 0.68rem; }
+	.music-qr-block p { margin: 0; color: var(--md-tone-body); font-size: 0.72rem; }
 	.music-code-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; }
 	.music-account-options { display: grid; gap: 0.4rem; }
 	.music-login-note { margin: 1rem 0 0; padding: 0 0.35rem; text-align: center; line-height: 1.6; }
 
-	:global(.dark) .music-dock-trigger, :global(.dark) .music-panel { color: var(--text-90, rgb(226 232 240)); background: color-mix(in oklch, var(--card-bg, #172033) 90%, transparent); }
-	:global(.dark) .music-muted, :global(.dark) .music-status-line, :global(.dark) .music-login-note { color: rgb(226 232 240); }
-	:global(.dark) .music-title-status { color: rgb(226 232 240); }
-	:global(.dark) .music-song-info small { color: rgb(226 232 240); }
-	:global(.dark) .music-mode-label { color: rgb(226 232 240); }
-	:global(.dark) .music-login-card { background: var(--card-bg, #172033); }
-	:global(.dark) .music-field input, :global(.dark) .music-field select { background: rgb(255 255 255 / 0.05); }
+	.music-dock-trigger, .music-panel { background: color-mix(in oklch, var(--card-bg, #fff) 92%, transparent); }
+
+	:global(html[data-theme="github-dark"]) .music-login-card { background: var(--card-bg, #172033); }
+	:global(html[data-theme="github-dark"]) .music-field input, :global(html[data-theme="github-dark"]) .music-field select { background: rgb(255 255 255 / 0.05); }
 
 	@keyframes music-panel-in { from { opacity: 0; transform: translateY(0.55rem) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 	@keyframes music-eq-bounce { from { transform: scaleY(0.45); } to { transform: scaleY(1); } }
@@ -1869,7 +1895,7 @@
 		.music-trigger-copy { display: flex; }
 		:global(.music-trigger-chevron) { display: inline; }
 		.music-panel { max-height: min(74vh, calc(100vh - 5.5rem)); margin-bottom: 0.65rem; padding: 1rem; border-radius: 1.4rem 1.4rem 0 0; }
-		.music-panel::before { content: ""; display: block; width: 2.75rem; height: 0.28rem; margin: 0 auto 0.8rem; border-radius: 999px; background: color-mix(in oklch, var(--text-40, #94a3b8) 45%, transparent); }
+		.music-panel::before { content: ""; display: block; width: 2.75rem; height: 0.28rem; margin: 0 auto 0.8rem; border-radius: 999px; background: color-mix(in oklch, var(--md-tone-faint) 45%, transparent); }
 		.music-volume-row { display: none; }
 		.music-song { min-height: 3rem; }
 		.music-play-button { width: 3.1rem; height: 3.1rem; font-size: 1.6rem; }
