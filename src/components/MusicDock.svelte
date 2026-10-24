@@ -116,6 +116,47 @@
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 	let currentSong: MusicSong | null = null;
 	let currentSongLoading = "";
+	// ===== 播放队列 =====
+	// songs 只是「当前选中的歌单」，不是播放队列：切歌单会把队列一起换掉，
+	// 导致正在播的列表和后续要播的列表不一致。这里在开始播放时拍一份快照，
+	// 队列以快照为准，并持久化到 localStorage，刷新后可以接着播。
+	const QUEUE_KEY = "hengduo-music-queue";
+	const LAST_SONG_KEY = "hengduo-music-last-song";
+	let queueSongs: MusicSong[] = [];
+	let queueOpen = false;
+	// 队列来源：歌单 / 每日推荐 / 搜索结果，仅用于界面标注。
+	let queueSource: "playlist" | "daily" | "search" = "playlist";
+
+	const persistQueue = () => {
+		try {
+			safeStorage.set(QUEUE_KEY, JSON.stringify({ source: queueSource, songs: queueSongs.slice(0, 500) }));
+			if (currentSong) safeStorage.set(LAST_SONG_KEY, JSON.stringify(currentSong));
+		} catch {
+			/* 队列只是便利功能，存储不可用时静默降级 */
+		}
+	};
+
+	const restoreQueue = () => {
+		try {
+			const rawQueue = safeStorage.get(QUEUE_KEY);
+			if (rawQueue) {
+				const parsed = JSON.parse(rawQueue) as { source?: typeof queueSource; songs?: MusicSong[] };
+				if (Array.isArray(parsed.songs) && parsed.songs.length > 0) {
+					queueSongs = parsed.songs;
+					if (parsed.source === "daily" || parsed.source === "search" || parsed.source === "playlist") {
+						queueSource = parsed.source;
+					}
+				}
+			}
+			const rawLast = safeStorage.get(LAST_SONG_KEY);
+			if (rawLast) {
+				const parsed = JSON.parse(rawLast) as MusicSong;
+				if (parsed && typeof parsed.hash === "string") currentSong = parsed;
+			}
+		} catch {
+			/* 解析失败就当没有历史队列 */
+		}
+	};
 	let audio: HTMLAudioElement | null = null;
 	// Swup 切页会销毁重建本组件；把 Audio 和"上次播放的歌"挂在 window 上，
 	// 新实例直接接管旧 Audio，播放不中断，未选歌点播放则续播上一首。
@@ -537,6 +578,14 @@
 			if (!audioUrl) throw new MusicApiError("BFF 播放流不可用");
 			currentSong = song;
 			sharedWindow().__hengduoMusicLast = song;
+			// 队列以「点播放那一刻的列表」为准；若这首歌本来就在队列里则不重建，
+			// 否则每切一首都会把队列重置成当前歌单。
+			if (!queueSongs.some((item) => item.hash === song.hash)) {
+				const source = searchQuery.trim() ? searchResults : songs;
+				queueSongs = source.length > 0 ? [...source] : [song];
+				queueSource = searchQuery.trim() ? "search" : "playlist";
+			}
+			persistQueue();
 			lyricsRequestGeneration = generation;
 			lyricsLines = [];
 			activeLyricIndex = -1;
@@ -635,17 +684,21 @@
 		}
 	};
 
+	// 播放顺序以队列为准（而非当前歌单）：用户切走歌单后，正在播的队列不应被打断。
+	const activeQueue = (): MusicSong[] => (queueSongs.length > 0 ? queueSongs : songs);
+
 	const playNext = async () => {
-		if (!currentSong || songs.length === 0) return;
-		if (playMode === "shuffle" && songs.length > 1) {
-			let nextIndex = Math.floor(Math.random() * songs.length);
-			const currentIndexNow = songs.findIndex((song) => song.hash === currentSong?.hash);
-			if (nextIndex === currentIndexNow) nextIndex = (nextIndex + 1) % songs.length;
-			await playSong(songs[nextIndex]);
+		const list = activeQueue();
+		if (!currentSong || list.length === 0) return;
+		if (playMode === "shuffle" && list.length > 1) {
+			let nextIndex = Math.floor(Math.random() * list.length);
+			const currentIndexNow = list.findIndex((song) => song.hash === currentSong?.hash);
+			if (nextIndex === currentIndexNow) nextIndex = (nextIndex + 1) % list.length;
+			await playSong(list[nextIndex]);
 			return;
 		}
-		const index = songs.findIndex((song) => song.hash === currentSong?.hash);
-		await playSong(songs[(index + 1) % songs.length]);
+		const index = list.findIndex((song) => song.hash === currentSong?.hash);
+		await playSong(list[(index + 1) % list.length]);
 	};
 
 	const showToast = (kind: "fav" | "unfav" | "info" | "error", text: string) => {
@@ -1273,6 +1326,7 @@
 			const savedVolume = Number(savedVolumeRaw);
 			if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) volume = savedVolume;
 		}
+		restoreQueue();
 		const savedShuffle = safeStorage.get(SHUFFLE_KEY) === "1";
 		// 旧版本可能存过 "order"，coercePlayMode 会把它迁到 "list"。
 		playMode = savedShuffle ? "shuffle" : coercePlayMode(safeStorage.get(REPEAT_KEY));
@@ -1376,6 +1430,7 @@
 					{:else}
 						<button class="music-quiet music-quiet--tiny" type="button" on:click={() => (showLogin = true)}>登录</button>
 					{/if}
+					<button class:music-quiet--on={queueOpen} class="music-icon-button" type="button" aria-label="播放队列" title={`播放队列${queueSongs.length > 0 ? `（${queueSongs.length} 首）` : ""}`} on:click={() => (queueOpen = !queueOpen)}><Icon icon="material-symbols:queue-music-rounded" /></button>
 					<button class="music-icon-button" type="button" aria-label={apiStatus !== "ready" || showSettings ? "返回播放器" : "音乐服务设置"} title={apiStatus !== "ready" || showSettings ? "返回播放器" : "音乐服务设置"} on:click={toggleSettings}><Icon icon="material-symbols:tune-rounded" /></button>
 					<button class="music-icon-button" type="button" aria-label="关闭音乐面板" on:click={() => (expanded = false)}>
 						<Icon icon="material-symbols:close-rounded" />
@@ -2094,6 +2149,28 @@
 		.music-song { min-height: 3rem; }
 		.music-play-button { width: 3.1rem; height: 3.1rem; font-size: 1.6rem; }
 		.music-icon-button { width: 2.5rem; height: 2.5rem; }
+
+		/* 歌曲库 / 每日推荐 / 播放队列三个弹窗共用 .music-library-modal，
+		   桌面宽度在手机上会横向溢出，页码按钮也被挤掉。 */
+		.music-library-modal { width: 100%; max-height: calc(100vh - 1rem); padding: 0.9rem 0.75rem; border-radius: 1.1rem; }
+		.music-library-header { gap: 0.5rem; }
+		.music-library-header h2 { font-size: 1.05rem; }
+		.music-library-search { flex-wrap: wrap; gap: 0.4rem; }
+		.music-library-search input { flex: 1 1 100%; }
+		.music-library-search select { flex: 1 1 auto; min-width: 0; }
+		.music-library-toolbar { flex-wrap: wrap; gap: 0.4rem; }
+		.music-library-toolbar__controls { flex-wrap: wrap; gap: 0.35rem; }
+		.music-library-footer { flex-wrap: wrap; gap: 0.4rem; }
+
+		/* 行内固定宽度太多，长歌名几乎没地方显示：压缩序号与封面。 */
+		.music-song-index { width: 1.15rem; font-size: 0.56rem; }
+		.music-song-cover { flex: 0 0 1.8rem; width: 1.8rem; height: 1.8rem; }
+		.music-search-favorite { flex: 0 0 1.9rem; width: 1.9rem; height: 1.9rem; font-size: 1rem; }
+		.music-song-info strong { font-size: 0.72rem; }
+		.music-song-info small { font-size: 0.6rem; }
+
+		/* 全屏退出按钮在窄屏上缩小并内收，避免压住封面。 */
+		.music-fullscreen__close { top: 0.7rem; right: 0.7rem; width: 2.2rem; height: 2.2rem; font-size: 1.1rem; }
 	}
 	@media (prefers-reduced-motion: reduce) { .music-panel, .music-login-card { animation: none; } .music-trigger-pulse, .music-trigger-cover { animation: none; } .music-eq i { animation: none; } .music-dock-trigger, .music-play-button, .music-song, .music-icon-button, .music-primary, .music-quiet, .music-favorite { transition: none; } }
 </style>
