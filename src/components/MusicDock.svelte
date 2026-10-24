@@ -372,18 +372,26 @@
 		void loadSongs();
 	};
 
+	// 代际守卫：快速切歌单 A→B 时，A 的迟到响应绝不能覆盖 B 的列表，
+	// 否则会出现「下拉显示 B、列表却是 A 的歌」。与 playSong 的 playGeneration 同理。
+	let loadGeneration = 0;
 	const loadSongs = async () => {
 		if (!client || !selectedPlaylistId) return;
+		const generation = ++loadGeneration;
+		const requestedId = selectedPlaylistId;
 		songsLoading = true;
 		songsMessage = "正在读取歌单…";
 		try {
-			songs = await client.getPlaylistSongs(selectedPlaylistId);
-			songsMessage = songs.length ? "" : "这个歌单暂时没有可播放歌曲";
+			const loaded = await client.getPlaylistSongs(requestedId);
+			if (generation !== loadGeneration || requestedId !== selectedPlaylistId) return;
+			songs = loaded;
+			songsMessage = loaded.length ? "" : "这个歌单暂时没有可播放歌曲";
 		} catch (error) {
+			if (generation !== loadGeneration || requestedId !== selectedPlaylistId) return;
 			songs = [];
 			songsMessage = errorMessage(error, "歌曲列表加载失败");
 		} finally {
-			songsLoading = false;
+			if (generation === loadGeneration) songsLoading = false;
 		}
 	};
 
@@ -586,8 +594,19 @@
 			else showLogin = true;
 			return;
 		}
-		if (audio.paused) await audio.play();
-		else audio.pause();
+		if (!audio.paused) {
+			audio.pause();
+			return;
+		}
+		try {
+			await audio.play();
+		} catch (error) {
+			// 快速连点会中断上一次 play()，AbortError 属于正常竞态。
+			if (error instanceof DOMException && error.name === "AbortError") return;
+			// 其余（媒体失效 / 浏览器自动播放策略）必须给用户可见反馈，
+			// 否则按钮看起来「点了没反应」。
+			setNotice(errorMessage(error, "播放失败，请重新点击歌曲"));
+		}
 	};
 
 	const playNext = async () => {
@@ -851,6 +870,14 @@
 
 	const updateActiveLyric = () => {
 		const t = audio?.currentTime ?? 0;
+		// timeupdate 每秒会触发多次；若当前时间仍落在当前行的时间窗内，
+		// 活跃行不可能变化，直接跳过整轮扫描（歌词最多 300 行）。
+		const current = activeLyricIndex >= 0 ? lyricsLines[activeLyricIndex] : null;
+		const next = activeLyricIndex + 1 < lyricsLines.length ? lyricsLines[activeLyricIndex + 1] : null;
+		if (current && current.time !== null && t >= current.time && (!next || next.time === null || t < next.time)) {
+			syncLyricScroll();
+			return;
+		}
 		let idx = -1;
 		for (let i = 0; i < lyricsLines.length; i++) {
 			const line = lyricsLines[i];
@@ -1141,6 +1168,7 @@
 				return;
 			}
 			if (fullscreen) fullscreen = false;
+			if (showLogin) showLogin = false;
 		};
 		window.addEventListener("keydown", onKeydown);
 		return () => window.removeEventListener("keydown", onKeydown);
