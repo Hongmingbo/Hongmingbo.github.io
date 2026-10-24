@@ -723,12 +723,23 @@
 		}
 	};
 
-	const reshuffleDailyRecommendations = () => {
-		if (dailySongs.length > 0) {
-			dailySongs = shuffleSongs(dailySongs);
-			setNotice("已为你换一批推荐歌曲");
-		} else {
-			void loadDailyRecommendations();
+	const reshuffleDailyRecommendations = async () => {
+		if (dailySongs.length === 0) {
+			await loadDailyRecommendations();
+			return;
+		}
+		// 先立即重排当前列表（零等待反馈），再后台重拉：上游每日推荐列表
+		// 固定 30 首，真正的新鲜感来自重新请求，而不是同一份列表重排。
+		dailySongs = shuffleSongs(dailySongs);
+		dailyPage = 1;
+		setNotice("已为你换一批推荐歌曲");
+		if (client && !dailyLoading) {
+			try {
+				const fresh = await client.getDailyRecommendations();
+				if (fresh.length > 0) dailySongs = shuffleSongs(fresh);
+			} catch {
+				// 重拉失败时保留已重排的列表，不打扰用户。
+			}
 		}
 	};
 
@@ -1144,6 +1155,14 @@
 				navigator.mediaSession.setActionHandler("pause", () => audio?.pause());
 				navigator.mediaSession.setActionHandler("nexttrack", () => void playNext());
 				navigator.mediaSession.setActionHandler("previoustrack", () => void playPrevious());
+				// 系统/耳机端进度条拖动与快进快退（各浏览器支持度不同，逐个 try）。
+				const seekTo = (time: number) => {
+					if (audio && Number.isFinite(time)) audio.currentTime = Math.max(0, time);
+				};
+				try { navigator.mediaSession.setActionHandler("seekto", (details) => { if (details.seekTime != null) seekTo(details.seekTime); }); } catch { /* unsupported */ }
+				try { navigator.mediaSession.setActionHandler("seekforward", (details) => { if (audio) seekTo(audio.currentTime + (details.seekOffset ?? 10)); }); } catch { /* unsupported */ }
+				try { navigator.mediaSession.setActionHandler("seekbackward", (details) => { if (audio) seekTo(audio.currentTime - (details.seekOffset ?? 10)); }); } catch { /* unsupported */ }
+				try { navigator.mediaSession.setActionHandler("stop", () => { audio?.pause(); if (audio) audio.currentTime = 0; }); } catch { /* unsupported */ }
 			} catch {
 				// 不支持某个 Media Session action 时保留基础播放。
 			}
@@ -1355,7 +1374,7 @@
 						</form>
 						<div class="music-actions">
 							<button class="music-quiet" type="button" disabled={dailyPage <= 1} on:click={() => (dailyPage -= 1)}>上一页</button>
-							<button class="music-quiet" type="button" disabled={dailyLoading || dailySortedSongs.length === 0} on:click={() => { reshuffleDailyRecommendations(); dailyPage = 1; }}>{dailyLoading ? "加载中…" : "换一批"}</button>
+							<button class="music-quiet" type="button" disabled={dailyLoading || dailySortedSongs.length === 0} on:click={() => void reshuffleDailyRecommendations()}>{dailyLoading ? "加载中…" : "换一批"}</button>
 							<button class="music-quiet" type="button" disabled={dailyLoading} on:click={() => { dailyPage = 1; void loadDailyRecommendations(); }}>刷新</button>
 							<button class="music-quiet" type="button" disabled={dailyPage >= dailyTotalPages} on:click={() => (dailyPage += 1)}>下一页</button>
 						</div>
