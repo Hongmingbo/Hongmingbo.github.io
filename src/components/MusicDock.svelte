@@ -170,11 +170,17 @@
 	let pendingRemovalHashes: Set<string> = new Set();
 	// 缓冲区按 hash 记录，而不是 `${playlistId}:${hash}`：切歌单不该丢掉待删除项。
 	let pendingRemovals: Map<string, { playlistId: string; song: MusicSong }> = new Map();
-	const hasPendingRemoval = (hash: string) => pendingRemovalHashes.has(hash);
-	const favoriteStateOf = (hash: string): boolean => favoriteHashes.has(hash) && !hasPendingRemoval(hash);
-	$: isFavorite = currentSong ? favoriteStateOf(currentSong.hash) : false;
 	// 直接依赖 songs：Svelte 在 songs 重新赋值时重跑此语句。
 	$: favoriteHashes = new Set(songs.map((song) => song.hash));
+	// 派生「最终显示为已收藏」的集合。模板必须直接读这个变量：
+	// Svelte 5 的编译期依赖分析看不到普通函数内部的响应式读取，
+	// 之前模板里写 effectiveFavorites.has(song.hash)，编译产物只把 song 记为依赖，
+	// favoriteHashes / pendingRemovalHashes 变化时按钮不会重新渲染（爱心不变色）。
+	$: effectiveFavorites = new Set(
+		[...favoriteHashes].filter((hash) => !pendingRemovalHashes.has(hash)),
+	);
+	const favoriteStateOf = (hash: string): boolean => effectiveFavorites.has(hash);
+	$: isFavorite = currentSong ? effectiveFavorites.has(currentSong.hash) : false;
 	// 响应式版本号：Map 原地变更后递增触发视图更新
 	$: librarySourceSongs = searchQuery.trim() ? searchResults : songs;
 	$: librarySortedSongs = sortSongs(librarySourceSongs, librarySort);
@@ -604,7 +610,7 @@
 	 */
 	const toggleFavoriteSong = (song: MusicSong) => {
 		if (!song) return;
-		if (hasPendingRemoval(song.hash)) {
+		if (pendingRemovalHashes.has(song.hash)) {
 			pendingRemovals.delete(song.hash);
 			pendingRemovalHashes = new Set(pendingRemovals.keys());
 			showToast("fav", `已恢复收藏「${song.name}」`);
@@ -1386,7 +1392,7 @@
 										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 									</button>
-									<button class:music-search-favorite--active={favoriteStateOf(song.hash)} class="music-search-favorite" type="button" aria-label={favoriteStateOf(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={favoriteStateOf(song.hash) ? "点击取消收藏（刷新后生效）" : hasPendingRemoval(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={favoriteStateOf(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+									<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（刷新后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 								</div>
 							{/each}
 						{:else}
@@ -1444,7 +1450,7 @@
 									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 								</button>
-								<button class:music-search-favorite--active={favoriteStateOf(song.hash)} class="music-search-favorite" type="button" aria-label={favoriteStateOf(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={favoriteStateOf(song.hash) ? "点击取消收藏（刷新后生效）" : hasPendingRemoval(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={favoriteStateOf(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+								<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（刷新后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（刷新后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，刷新后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 							</div>
 						{/each}
 					{:else}
@@ -1627,7 +1633,7 @@
 		gap: 0.7rem;
 		width: auto;
 		min-height: 0;
-		padding: 0.35rem;
+		padding: 0.35rem 0.6rem 0.35rem 0.35rem;
 		border-radius: 999px;
 		text-align: left;
 		cursor: pointer;
@@ -1643,11 +1649,11 @@
 	.music-trigger-spin { animation: music-spin 16s linear infinite; }
 	.music-trigger-pulse { animation: music-pulse 1.8s ease-in-out infinite; }
 	/* 折叠态下显示标题与当前曲目；展开态由面板头部承担同样信息，故隐藏。 */
-	.music-trigger-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 0.05rem; }
+	.music-trigger-copy { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; align-items: flex-start; gap: 0.05rem; padding-right: 0.15rem; text-align: left; }
 	.music-dock--open .music-trigger-copy { display: none; }
 	.music-trigger-copy strong { font-size: 0.8rem; letter-spacing: 0.08em; }
 	.music-trigger-copy small { overflow: hidden; color: var(--md-tone-muted); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
-	:global(.music-trigger-chevron) { display: none; color: var(--primary); font-size: 1.25rem; }
+	.music-trigger-chevron { display: grid; place-items: center; flex: 0 0 auto; width: 1.1rem; height: 1.1rem; color: color-mix(in oklch, var(--primary) 78%, currentColor); font-size: 1.1rem; }
 
 	.music-panel { position: relative; width: 100%; flex: 0 1 auto; min-height: 0; max-height: calc(100vh - 6rem); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; }
@@ -1892,8 +1898,8 @@
 	@media (max-width: 640px) {
 		.music-dock { right: 0; bottom: 0; left: 0; width: 100%; padding: 0 0.7rem 0.7rem; }
 		.music-dock-trigger { width: 100%; min-height: 3.75rem; padding: 0.55rem 0.7rem 0.55rem 0.6rem; border-radius: 1rem; }
-		.music-trigger-copy { display: flex; }
-		:global(.music-trigger-chevron) { display: inline; }
+	
+	
 		.music-panel { max-height: min(74vh, calc(100vh - 5.5rem)); margin-bottom: 0.65rem; padding: 1rem; border-radius: 1.4rem 1.4rem 0 0; }
 		.music-panel::before { content: ""; display: block; width: 2.75rem; height: 0.28rem; margin: 0 auto 0.8rem; border-radius: 999px; background: color-mix(in oklch, var(--md-tone-faint) 45%, transparent); }
 		.music-volume-row { display: none; }
