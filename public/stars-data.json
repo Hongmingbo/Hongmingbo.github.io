@@ -1,14 +1,246 @@
 {
- "fetched_at": "2026-08-08T22:06:14.517413",
+ "fetched_at": "2026-10-24T12:22:09.472241",
  "user": "Hongmingbo",
  "repos": [
+  {
+   "name": "Ikaleio/lm-detector",
+   "desc": "Model fingerprint detection with a shared Web and Bun CLI reference bank",
+   "lang": "TypeScript",
+   "stars": 873,
+   "forks": 24,
+   "updated": "2026-10-24",
+   "url": "https://github.com/Ikaleio/lm-detector",
+   "topics": []
+  },
+  {
+   "name": "morluto/rea",
+   "desc": "Reverse engineer anything with agents, from app behavior down to native binaries.",
+   "lang": "TypeScript",
+   "stars": 373912,
+   "forks": 93517,
+   "updated": "2026-10-24",
+   "url": "https://github.com/morluto/rea",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "binary-analysis",
+    "claude-code",
+    "cli",
+    "codex",
+    "cordis",
+    "decompiler",
+    "developer-tools",
+    "dsh",
+    "dsh-plugin",
+    "ghidra",
+    "hopper",
+    "llm",
+    "mcp",
+    "model-context-protocol",
+    "rea",
+    "reverse-engineering",
+    "static-analysis",
+    "touhou"
+   ]
+  },
+  {
+   "name": "yetone/magpie",
+   "desc": "Every agent's model. One place. Codex on DeepSeek, Claude Code on Kimi, from the menu bar.",
+   "lang": "Go",
+   "stars": 20306,
+   "forks": 1570,
+   "updated": "2026-10-24",
+   "url": "https://github.com/yetone/magpie",
+   "topics": [
+    "claude-code",
+    "codex",
+    "deepseek",
+    "gemini-cli",
+    "llm",
+    "macos"
+   ]
+  },
+  {
+   "name": "tianyugithub/yucon",
+   "desc": "钥仓：在本机管理 New API / One API / Sub2API 站点的额度、密钥与调用记录",
+   "lang": "Dart",
+   "stars": 9,
+   "forks": 0,
+   "updated": "2026-10-04",
+   "url": "https://github.com/tianyugithub/yucon",
+   "topics": []
+  },
+  {
+   "name": "feitangyuan/onetake",
+   "desc": "Motion films that never cut to the next slide: every beat grows out of the one before, one continuous camera, continuity measured by an oracle. Product launch films and feature demos, made with a codi",
+   "lang": "Python",
+   "stars": 3111,
+   "forks": 209,
+   "updated": "2026-10-24",
+   "url": "https://github.com/feitangyuan/onetake",
+   "topics": [
+    "agent-skill",
+    "animation",
+    "canvas",
+    "claude-skill",
+    "launch-video",
+    "motion-graphics",
+    "video"
+   ]
+  },
+  {
+   "name": "CarterPerez-dev/Cybersecurity-Projects",
+   "desc": "Building 70 Projects ranging from beginner to advanced so anyone can — learn from, build upon, use as a reference, or even copy directly. Gamified Cybersecurity learning 👇",
+   "lang": "Go",
+   "stars": 8502,
+   "forks": 1245,
+   "updated": "2026-10-24",
+   "url": "https://github.com/CarterPerez-dev/Cybersecurity-Projects",
+   "topics": [
+    "ai",
+    "certification",
+    "cloud-engineering",
+    "cyber",
+    "cybersecurity",
+    "cybersecurity-analyst",
+    "cybersecurity-certification",
+    "cybersecurity-certifications",
+    "cybersecurity-education",
+    "cybersecurity-jobs",
+    "cybersecurity-portfolio",
+    "cybersecurity-projects",
+    "cybersecurity-tools",
+    "grc",
+    "hacking",
+    "learning",
+    "pentesting",
+    "project-repository",
+    "projetcs",
+    "python"
+   ]
+  },
+  {
+   "name": "zhaoxuya520/reverse-skill",
+   "desc": "Reverse Engineering / Authorized Penetration Testing / Security Research Skill Router Pack AI-powered routing + On-demand toolchain bootstrapping + Self-evolving knowledge base  Supports Claude Code, ",
+   "lang": "PowerShell",
+   "stars": 43162,
+   "forks": 6355,
+   "updated": "2026-10-24",
+   "url": "https://github.com/zhaoxuya520/reverse-skill",
+   "topics": []
+  },
+  {
+   "name": "Moyf/moys-asr-workflow",
+   "desc": "阿墨的字幕工作台：Moy 的 ASR 字幕转写工作流（简称 MAW）",
+   "lang": "JavaScript",
+   "stars": 548,
+   "forks": 47,
+   "updated": "2026-10-24",
+   "url": "https://github.com/Moyf/moys-asr-workflow",
+   "topics": [
+    "asr",
+    "workflow"
+   ]
+  },
+  {
+   "name": "whiteguo233/OpenBiliClaw",
+   "desc": "本地私有、开源的自进化跨平台 AI 内容发现 Agent：先理解你，再主动从 B站、小红书、抖音、YouTube、X、知乎、Reddit、微博等平台与开放 Web 寻找内容。（支持 deepseek harness 插件） | Local-first open-source cross-platform AI content discovery agent: understands you, th",
+   "lang": "Python",
+   "stars": 3560,
+   "forks": 195,
+   "updated": "2026-10-24",
+   "url": "https://github.com/whiteguo233/OpenBiliClaw",
+   "topics": [
+    "ai-agent",
+    "bilibili",
+    "chrome-extension",
+    "content-discovery",
+    "cross-platform",
+    "deepseek-harness",
+    "douyin",
+    "dsh",
+    "dsh-plugin",
+    "llm",
+    "local-first",
+    "personal-ai",
+    "privacy-first",
+    "python",
+    "recommendation-system",
+    "self-hosted",
+    "typescript",
+    "xiaohongshu",
+    "youtube",
+    "zhihu"
+   ]
+  },
+  {
+   "name": "deepseek-ai/deepseek-harness",
+   "desc": "DeepSeek Harness: Everything is a Plugin.",
+   "lang": "TypeScript",
+   "stars": 259617,
+   "forks": 31351,
+   "updated": "2026-10-24",
+   "url": "https://github.com/deepseek-ai/deepseek-harness",
+   "topics": [
+    "ai-agents",
+    "cordis",
+    "dsh",
+    "dsh-plugin"
+   ]
+  },
+  {
+   "name": "cloudflare/computer",
+   "desc": "Give your agent a computer 👾",
+   "lang": "TypeScript",
+   "stars": 9693,
+   "forks": 571,
+   "updated": "2026-10-24",
+   "url": "https://github.com/cloudflare/computer",
+   "topics": []
+  },
+  {
+   "name": "MoeKoeMusic/MoeKoeMusic",
+   "desc": "一款开源简洁高颜值的酷狗第三方客户端 An open-source, concise, and aesthetically pleasing third-party client for KuGou that supports  Windows / macOS / Linux / Web :electron:",
+   "lang": "Vue",
+   "stars": 6931,
+   "forks": 434,
+   "updated": "2026-10-24",
+   "url": "https://github.com/MoeKoeMusic/MoeKoeMusic",
+   "topics": [
+    "electron",
+    "kugou",
+    "linux",
+    "macos",
+    "moekoe",
+    "music",
+    "vue3",
+    "windows"
+   ]
+  },
+  {
+   "name": "SnowLuma/SnowLuma",
+   "desc": "Next Remote Protocol Framework.",
+   "lang": "TypeScript",
+   "stars": 2176,
+   "forks": 120,
+   "updated": "2026-10-24",
+   "url": "https://github.com/SnowLuma/SnowLuma",
+   "topics": [
+    "bot-framework",
+    "ntqq",
+    "onebot",
+    "onebot-v11",
+    "onebot11",
+    "snowluma"
+   ]
+  },
   {
    "name": "NapNeko/NapCatQQ",
    "desc": "Modern protocol-side framework based on NTQQ",
    "lang": "TypeScript",
-   "stars": 10159,
-   "forks": 793,
-   "updated": "2026-08-08",
+   "stars": 11367,
+   "forks": 835,
+   "updated": "2026-10-24",
    "url": "https://github.com/NapNeko/NapCatQQ",
    "topics": [
     "napcat",
@@ -21,21 +253,20 @@
   {
    "name": "emilkowalski/skills",
    "desc": "Skills for Designers and Engineers.",
-   "lang": "N/A",
-   "stars": 27118,
-   "forks": 1483,
-   "updated": "2026-08-08",
+   "lang": "Markdown",
+   "stars": 49119,
+   "forks": 2844,
+   "updated": "2026-10-24",
    "url": "https://github.com/emilkowalski/skills",
-   "topics": [],
-   "cat": "dev-tools"
+   "topics": []
   },
   {
    "name": "AstrBotDevs/AstrBot",
    "desc": "AI Agent Assistant & development framework that integrates lots of IM platforms, LLMs, plugins and AI feature, and can be your openclaw alternative. ✨",
    "lang": "Python",
-   "stars": 38821,
-   "forks": 2783,
-   "updated": "2026-08-08",
+   "stars": 43040,
+   "forks": 3153,
+   "updated": "2026-10-24",
    "url": "https://github.com/AstrBotDevs/AstrBot",
    "topics": [
     "agent",
@@ -45,81 +276,76 @@
     "chatgpt",
     "discord",
     "docker",
-    "gemini"
-   ],
-   "cat": "agent"
-  },
-  {
-   "name": "Paving-Base/APK-Installer",
-   "desc": "An Android Application Installer for Windows",
-   "lang": "C#",
-   "stars": 1664,
-   "forks": 163,
-   "updated": "2026-08-06",
-   "url": "https://github.com/Paving-Base/APK-Installer",
-   "topics": [
-    "android",
-    "apk",
-    "installer",
-    "winui3",
-    "wsa"
-   ],
-   "cat": "dev-tools"
+    "gemini",
+    "gpt",
+    "llama",
+    "llm",
+    "mcp",
+    "openai",
+    "python",
+    "qq",
+    "qqbot",
+    "telegram"
+   ]
   },
   {
    "name": "xiaoyaya191/bilibili_learning_bot",
    "desc": "让 AI 替你管 B 站 — 自动刷推荐流、理解视频内容、互动评论弹幕、回复私信，构建知识库，还能自我进化越用越聪明，能够将任何视频总结成网页讲解动画（可自定义）。",
    "lang": "Python",
-   "stars": 58,
-   "forks": 7,
-   "updated": "2026-08-08",
+   "stars": 134,
+   "forks": 13,
+   "updated": "2026-10-24",
    "url": "https://github.com/xiaoyaya191/bilibili_learning_bot",
    "topics": [
     "agent",
     "ai",
     "bilibili",
     "bot"
-   ],
-   "cat": "social"
+   ]
   },
   {
    "name": "heygen-com/hyperframes",
    "desc": "Write HTML. Render video. Built for agents.",
    "lang": "TypeScript",
-   "stars": 40035,
-   "forks": 3811,
-   "updated": "2026-08-08",
+   "stars": 70905,
+   "forks": 6413,
+   "updated": "2026-10-24",
    "url": "https://github.com/heygen-com/hyperframes",
    "topics": [
     "ai",
+    "ai-agents",
     "animation",
+    "claude-code",
     "ffmpeg",
     "framework",
     "gsap",
     "html",
+    "html-to-video",
     "mcp",
-    "puppeteer"
-   ],
-   "cat": "video"
+    "motion-graphics",
+    "puppeteer",
+    "rendering",
+    "typescript",
+    "video-editor"
+   ]
   },
   {
    "name": "hero8152/Infinite-Canvas",
    "desc": "Supports comfyui/API calls/modelscope calls",
    "lang": "Python",
-   "stars": 2669,
-   "forks": 519,
-   "updated": "2026-08-08",
+   "stars": 3155,
+   "forks": 622,
+   "updated": "2026-10-23",
    "url": "https://github.com/hero8152/Infinite-Canvas",
-   "topics": [],
-   "cat": "image"
+   "topics": []
   },
   {
    "name": "ArcReel/ArcReel",
    "desc": "AI Agent 驱动的开源可自部署视频工作台：将小说与剧本转为角色、场景、道具资产、分镜、视频和剪映草稿，支持跨镜头一致性、多供应商与费用追踪 | Self-hosted AI video workspace for stories, storyboards and short-form video production",
    "lang": "Python",
-   "stars": 3914,
-   "forks": 783,
-   "updated": "2026-08-08",
+   "stars": 5693,
+   "forks": 1128,
+   "updated": "2026-10-24",
    "url": "https://github.com/ArcReel/ArcReel",
    "topics": [
     "agentic-workflow",
@@ -129,28 +355,28 @@
     "capcut",
     "claude-agent-sdk",
     "content-creation",
-    "docker"
-   ],
-   "cat": "video"
-  },
-  {
-   "name": "jiujiu532/grok2api",
-   "desc": "",
-   "lang": "Python",
-   "stars": 1873,
-   "forks": 347,
-   "updated": "2026-08-08",
-   "url": "https://github.com/jiujiu532/grok2api",
-   "topics": [],
-   "cat": "api-proxy"
+    "docker",
+    "ffmpeg",
+    "image-to-video",
+    "multi-provider",
+    "novel-to-video",
+    "reference-to-video",
+    "script-to-video",
+    "self-hosted",
+    "short-drama",
+    "short-video",
+    "storyboard",
+    "text-to-video",
+    "video-generation"
+   ]
   },
   {
    "name": "agentscope-ai/QwenPaw",
    "desc": "Your Personal AI Assistant; easy to install, deploy on your own machine or on the cloud; supports multiple chat apps with easily extensible capabilities.",
    "lang": "Python",
-   "stars": 34244,
-   "forks": 2962,
-   "updated": "2026-08-08",
+   "stars": 36025,
+   "forks": 3203,
+   "updated": "2026-10-24",
    "url": "https://github.com/agentscope-ai/QwenPaw",
    "topics": [
     "agent",
@@ -160,17 +386,24 @@
     "ai-agents",
     "chatbot",
     "harness-engineering",
-    "llm-tools"
-   ],
-   "cat": "agent"
+    "llm-tools",
+    "llms",
+    "loop-engineering",
+    "mcp",
+    "personal-ai-assistant",
+    "self-hosted",
+    "skills",
+    "super-agent",
+    "webui"
+   ]
   },
   {
    "name": "saicaca/fuwari",
    "desc": "✨A static blog template built with Astro. ",
    "lang": "Astro",
-   "stars": 4883,
-   "forks": 1237,
-   "updated": "2026-08-08",
+   "stars": 5103,
+   "forks": 1274,
+   "updated": "2026-10-24",
    "url": "https://github.com/saicaca/fuwari",
    "topics": [
     "astro",
@@ -180,18 +413,19 @@
     "dark-theme",
     "minimalist",
     "static",
-    "static-site"
-   ],
-   "cat": "frontend"
+    "static-site",
+    "tailwind",
+    "tailwindcss"
+   ]
   },
   {
-   "name": "Eatgrapes/WinIsland",
+   "name": "WinIslandProject/WinIsland",
    "desc": "Display Dynamic Island on Windows",
    "lang": "Rust",
-   "stars": 216,
-   "forks": 18,
-   "updated": "2026-08-08",
-   "url": "https://github.com/Eatgrapes/WinIsland",
+   "stars": 371,
+   "forks": 33,
+   "updated": "2026-10-24",
+   "url": "https://github.com/WinIslandProject/WinIsland",
    "topics": [
     "dynamic-island",
     "gui",
@@ -200,59 +434,27 @@
     "rust-lang",
     "skia",
     "win32",
-    "windows"
-   ],
-   "cat": "system"
+    "windows",
+    "winisland-plugin"
+   ]
   },
   {
    "name": "gongjuliang/xiaoliang02",
    "desc": "小良内网穿透是一套AI智能体(通过MCP)都能使用的 TCP/UDP 内网穿透工具，它基于 Go语言 采用 C/S 架构，由公网服务端 nattserver 和内网客户端 nattuser 组成。服务端负责公网监听、客户端授权、隧道状态和流量统计；客户端负责连接服务端、绑定本地目标服务，并把公网访问流量转发到内网 TCP/UDP 服务。",
    "lang": "Go",
-   "stars": 12,
-   "forks": 3,
-   "updated": "2026-08-02",
+   "stars": 19,
+   "forks": 5,
+   "updated": "2026-10-01",
    "url": "https://github.com/gongjuliang/xiaoliang02",
-   "topics": [],
-   "cat": "system"
-  },
-  {
-   "name": "CookSleep/gpt_image_playground",
-   "desc": "基于 OpenAI gpt-image-2 API 的图片生成与编辑工具",
-   "lang": "TypeScript",
-   "stars": 3356,
-   "forks": 843,
-   "updated": "2026-08-08",
-   "url": "https://github.com/CookSleep/gpt_image_playground",
-   "topics": [
-    "gpt-image",
-    "image-editing",
-    "image-generation",
-    "openai",
-    "react",
-    "tailwindcss",
-    "typescript",
-    "vite"
-   ],
-   "cat": "image"
-  },
-  {
-   "name": "the-yex/wechat-ilink-sdk",
-   "desc": "微信官方授权Bot SDK,开箱即用， 高度可扩展，支持自定义插件和消息处理",
-   "lang": "Go",
-   "stars": 14,
-   "forks": 0,
-   "updated": "2026-08-06",
-   "url": "https://github.com/the-yex/wechat-ilink-sdk",
-   "topics": [],
-   "cat": "social"
+   "topics": []
   },
   {
    "name": "cluic/wxauto",
    "desc": "Windows版本微信客户端（非网页版）自动化，可实现简单的发送、接收微信消息，简单微信机器人",
    "lang": "Python",
-   "stars": 7241,
-   "forks": 1375,
-   "updated": "2026-08-07",
+   "stars": 7393,
+   "forks": 1397,
+   "updated": "2026-10-24",
    "url": "https://github.com/cluic/wxauto",
    "topics": [
     "automatic",
@@ -260,60 +462,35 @@
     "rpa",
     "wechat",
     "weixin"
-   ],
-   "cat": "social"
+   ]
   },
   {
    "name": "basketikun/infinite-canvas",
    "desc": "面向 AI 创作的开源无限画布工作台，集成 AI 生图、参考图编辑、视频生成、Agent 智能助手、画布编排、对话创作、提示词库与素材管理等能力，支持可视化创作流程与多 Agent 协同工作。兼容 OpenAI 接口生态，支持 chatgpt2api、grok2api、flow2api、newapi 等渠道接入。",
    "lang": "TypeScript",
-   "stars": 4727,
-   "forks": 1189,
-   "updated": "2026-08-08",
+   "stars": 8797,
+   "forks": 2071,
+   "updated": "2026-10-24",
    "url": "https://github.com/basketikun/infinite-canvas",
-   "topics": [],
-   "cat": "image"
+   "topics": []
   },
   {
    "name": "Chunyu33/light-c",
    "desc": "A free, minimalist, lightweight, and high-performance C-drive cleanup tool.",
    "lang": "Rust",
-   "stars": 1429,
-   "forks": 65,
-   "updated": "2026-08-08",
+   "stars": 3150,
+   "forks": 129,
+   "updated": "2026-10-24",
    "url": "https://github.com/Chunyu33/light-c",
-   "topics": [],
-   "cat": "system"
-  },
-  {
-   "name": "yynxxxxx/Codex-X",
-   "desc": "OpenAI Codex 桌面端/CLI 的可视化管理工具，具有Provider/API 切换、会话同步、提示词注入、Skills/MCP 管理、TOML 配置可视化的跨平台工具。",
-   "lang": "Rust",
-   "stars": 2230,
-   "forks": 325,
-   "updated": "2026-08-08",
-   "url": "https://github.com/yynxxxxx/Codex-X",
-   "topics": [],
-   "cat": "dev-tools"
-  },
-  {
-   "name": "yynxxxxx/Codex-5.5-codex-instruct-5.5",
-   "desc": "",
-   "lang": "Python",
-   "stars": 2127,
-   "forks": 514,
-   "updated": "2026-08-08",
-   "url": "https://github.com/yynxxxxx/Codex-5.5-codex-instruct-5.5",
-   "topics": [],
-   "cat": "dev-tools"
+   "topics": []
   },
   {
    "name": "farion1231/cc-switch",
    "desc": "A cross-platform desktop All-in-One assistant for Claude Code, Codex, OpenCode, OpenClaw, Grok Build & Hermes Agent. Only official website: ccswitch.io",
    "lang": "Rust",
-   "stars": 125641,
-   "forks": 8550,
-   "updated": "2026-08-08",
+   "stars": 148109,
+   "forks": 9745,
+   "updated": "2026-10-24",
    "url": "https://github.com/farion1231/cc-switch",
    "topics": [
     "ai-tools",
@@ -323,61 +500,28 @@
     "grok",
     "grokbuild",
     "hermes",
-    "hermes-agent"
-   ],
-   "cat": "api-proxy"
-  },
-  {
-   "name": "teressalodas/Flclash-scripts",
-   "desc": "A repository for Flclash scripts",
-   "lang": "JavaScript",
-   "stars": 154,
-   "forks": 14,
-   "updated": "2026-08-05",
-   "url": "https://github.com/teressalodas/Flclash-scripts",
-   "topics": [],
-   "cat": "network"
-  },
-  {
-   "name": "lingbol088-spec/reverse-flow-skill",
-   "desc": "面向 AI Agent / Codex 的本地 CTF 逆向工程流程技能。加载后通过“真心为你”进入逆向模式，默认在本地沙盒、CTF、crackme、wargame 或训练靶场环境中工作，按“分析 → 报告 → 逆向 → 深度逆向 → 漏洞研判 → 用户选择下一步”的流程推进。",
-   "lang": "Python",
-   "stars": 721,
-   "forks": 299,
-   "updated": "2026-08-08",
-   "url": "https://github.com/lingbol088-spec/reverse-flow-skill",
-   "topics": [],
-   "cat": "reverse"
-  },
-  {
-   "name": "basketikun/chatgpt2api",
-   "desc": "ChatGPT官网接口纯协议的逆向实现，支持GPT-Image-2模型、文本模型，兼容OpenAI接口协议，在线批量生图/编辑图，号池管理，支持可编辑PPT/PSD文件逆向，支持导入CPA、sub2api号池 、支持接入Cherry  Studio、New Api 等软件",
-   "lang": "Python",
-   "stars": 5643,
-   "forks": 1517,
-   "updated": "2026-08-08",
-   "url": "https://github.com/basketikun/chatgpt2api",
-   "topics": [],
-   "cat": "api-proxy"
-  },
-  {
-   "name": "fclwtt/wechat-cli",
-   "desc": "WeChat CLI - 查询个人微信聊天记录，支持 Windows/macOS/Linux",
-   "lang": "Python",
-   "stars": 192,
-   "forks": 119,
-   "updated": "2026-08-07",
-   "url": "https://github.com/fclwtt/wechat-cli",
-   "topics": [],
-   "cat": "social"
+    "hermes-agent",
+    "mcp",
+    "open-source",
+    "openclaw",
+    "openclaw-ui",
+    "opencode",
+    "pi",
+    "provider-management",
+    "rust",
+    "skills",
+    "skills-management",
+    "tauri",
+    "wsl-support"
+   ]
   },
   {
    "name": "Loyalsoldier/clash-rules",
    "desc": "🦄️ 🎃 👻 Clash Premium 规则集(RULE-SET)，兼容 ClashX Pro、Clash for Windows 等基于 Clash Premium 内核的客户端。",
    "lang": "N/A",
-   "stars": 27940,
-   "forks": 2183,
-   "updated": "2026-08-08",
+   "stars": 28942,
+   "forks": 2222,
+   "updated": "2026-10-23",
    "url": "https://github.com/Loyalsoldier/clash-rules",
    "topics": [
     "adblock",
@@ -387,17 +531,25 @@
     "clash",
     "dnsmasq",
     "easylist",
-    "geosite"
-   ],
-   "cat": "network"
+    "geosite",
+    "gfw",
+    "gfwlist",
+    "proxy",
+    "routing",
+    "shadowsocks",
+    "ss",
+    "ssr",
+    "surge",
+    "v2ray"
+   ]
   },
   {
    "name": "yt-dlp/yt-dlp",
    "desc": "A feature-rich command-line audio/video downloader",
    "lang": "Python",
-   "stars": 183230,
-   "forks": 15768,
-   "updated": "2026-08-08",
+   "stars": 201070,
+   "forks": 17552,
+   "updated": "2026-10-24",
    "url": "https://github.com/yt-dlp/yt-dlp",
    "topics": [
     "cli",
@@ -407,56 +559,15 @@
     "youtube-dl",
     "youtube-downloader",
     "yt-dlp"
-   ],
-   "cat": "dev-tools"
-  },
-  {
-   "name": "freestylefly/awesome-gpt-image-2",
-   "desc": "Prompt as Code | GPT-Image2 工业级提示词引擎与模板库，470+ 个案例逆向工程，20+ 套工业级模板，并提炼出Skills，持续更新中",
-   "lang": "JavaScript",
-   "stars": 9892,
-   "forks": 1201,
-   "updated": "2026-08-08",
-   "url": "https://github.com/freestylefly/awesome-gpt-image-2",
-   "topics": [
-    "agents",
-    "ai-image-generation",
-    "chatgpt",
-    "gpt-image-2",
-    "image-prompts",
-    "prompt-as-code",
-    "prompt-engineering",
-    "skills"
-   ],
-   "cat": "image"
-  },
-  {
-   "name": "YouMind-OpenLab/awesome-gpt-image-2",
-   "desc": "🚀 World's largest GPT Image 2 prompt library, updated daily — 2000+ curated prompts with preview images, 16 languages. OpenAI's next-gen image model with pixel-perfect text rendering, cross-image cons",
-   "lang": "TypeScript",
-   "stars": 9183,
-   "forks": 842,
-   "updated": "2026-08-08",
-   "url": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
-   "topics": [
-    "ai-image-generation",
-    "ai-prompts",
-    "awesome",
-    "awesome-list",
-    "commercial-illustration",
-    "duct-tape",
-    "gpt",
-    "gpt-image"
-   ],
-   "cat": "image"
+   ]
   },
   {
    "name": "NousResearch/hermes-agent",
    "desc": "The agent that grows with you",
    "lang": "Python",
-   "stars": 227339,
-   "forks": 44505,
-   "updated": "2026-08-08",
+   "stars": 256570,
+   "forks": 56091,
+   "updated": "2026-10-24",
    "url": "https://github.com/NousResearch/hermes-agent",
    "topics": [
     "ai",
@@ -466,57 +577,21 @@
     "chatgpt",
     "claude",
     "claude-code",
-    "clawdbot"
-   ],
-   "cat": "agent"
-  },
-  {
-   "name": "zhu1090093659/deepseek-pp",
-   "desc": "DeepSeek Web browser extension: AI agent workspace with MCP tools, memory, Skills, automation, web search, and conversation export.",
-   "lang": "TypeScript",
-   "stars": 1490,
-   "forks": 189,
-   "updated": "2026-08-08",
-   "url": "https://github.com/zhu1090093659/deepseek-pp",
-   "topics": [
-    "agentic-ai",
-    "ai-agent",
-    "ai-memory",
-    "automation",
-    "browser-extension",
-    "chrome-extension",
-    "conversation-export",
-    "deepseek"
-   ],
-   "cat": "api-proxy"
-  },
-  {
-   "name": "wang1970/API-Switch",
-   "desc": "Multi-platform, Portable, Desktop + Web Dual Management, Triple Fault Tolerance · Smart Routing · Personal AI Gateway",
-   "lang": "Rust",
-   "stars": 63,
-   "forks": 10,
-   "updated": "2026-07-29",
-   "url": "https://github.com/wang1970/API-Switch",
-   "topics": [
-    "desktop",
-    "gateway",
-    "multi-platform",
-    "personal",
-    "portable",
-    "routing",
-    "tolerance",
-    "web"
-   ],
-   "cat": "api-proxy"
+    "codex",
+    "hermes",
+    "hermes-agent",
+    "llm",
+    "nous-research",
+    "openai"
+   ]
   },
   {
    "name": "chen08209/FlClash",
    "desc": "A multi-platform proxy client based on ClashMeta,simple and easy to use, open-source and ad-free.",
    "lang": "Dart",
-   "stars": 48029,
-   "forks": 3027,
-   "updated": "2026-08-08",
+   "stars": 57713,
+   "forks": 3723,
+   "updated": "2026-10-24",
    "url": "https://github.com/chen08209/FlClash",
    "topics": [
     "clash",
@@ -526,48 +601,47 @@
     "multi-platform",
     "proxy",
     "v2ray",
-    "vless"
-   ],
-   "cat": "network"
+    "vless",
+    "vpn"
+   ]
   },
   {
-   "name": "Sam404s/sam-image-app",
-   "desc": "",
+   "name": "EKKOLearnAI/ekko-studio",
+   "desc": "Ekko Studio is a local-first AI workspace for multi-agent chat, coding, and visual workflows, available on desktop and the web.",
    "lang": "TypeScript",
-   "stars": 28,
-   "forks": 3,
-   "updated": "2026-07-08",
-   "url": "https://github.com/Sam404s/sam-image-app",
-   "topics": [],
-   "cat": "image"
-  },
-  {
-   "name": "EKKOLearnAI/hermes-studio",
-   "desc": "Web dashboard for Hermes Agent — multi-platform AI chat, session management, scheduled jobs, usage analytics ",
-   "lang": "TypeScript",
-   "stars": 9867,
-   "forks": 1213,
-   "updated": "2026-08-08",
-   "url": "https://github.com/EKKOLearnAI/hermes-studio",
+   "stars": 11526,
+   "forks": 1429,
+   "updated": "2026-10-24",
+   "url": "https://github.com/EKKOLearnAI/ekko-studio",
    "topics": [
     "agent",
     "ai-agent",
     "chat-ui",
+    "coding-agents",
     "dashboard",
+    "ekko-studio",
     "hermes",
     "hermes-agent",
+    "hermes-studio",
     "hermes-web-ui",
-    "llm"
-   ],
-   "cat": "agent"
+    "llm",
+    "multi-agent",
+    "multi-model",
+    "multi-platform",
+    "self-hosted",
+    "typescript",
+    "vue3",
+    "web-ui",
+    "workflow-automation"
+   ]
   },
   {
    "name": "HKUDS/CLI-Anything",
    "desc": "\"CLI-Anything: Making ALL Software Agent-Native\" -- CLI-Hub: https://clianything.cc/",
    "lang": "Python",
-   "stars": 46781,
-   "forks": 4355,
-   "updated": "2026-08-08",
+   "stars": 56650,
+   "forks": 5084,
+   "updated": "2026-10-24",
    "url": "https://github.com/HKUDS/CLI-Anything",
    "topics": []
   },
@@ -575,21 +649,22 @@
    "name": "rikkahub/rikkahub",
    "desc": "RikkaHub is an Android APP that supports for multiple LLM providers.",
    "lang": "Kotlin",
-   "stars": 6734,
-   "forks": 540,
-   "updated": "2026-08-08",
+   "stars": 8412,
+   "forks": 815,
+   "updated": "2026-10-24",
    "url": "https://github.com/rikkahub/rikkahub",
    "topics": [
     "agent",
     "android",
     "app",
-    "chatbot-ui",
-    "chatbox",
     "chatgpt",
     "deepseek",
-    "gemini"
-   ],
-   "cat": "agent"
+    "gemini",
+    "jetpack-compose",
+    "llm-ui",
+    "mcp",
+    "openrouter"
+   ]
   }
  ]
 }

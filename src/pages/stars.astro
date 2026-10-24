@@ -183,8 +183,8 @@ const GITHUB_USER = "Hongmingbo";
   .stars-card { animation: stars-fade-in 0.3s ease-out; }
 </style>
 
-<script>
-const GITHUB_USER = "{GITHUB_USER}";
+<script is:inline define:vars={{ githubUser: GITHUB_USER }}>
+const GITHUB_USER = githubUser;
 
 // Category mapping
 const CATEGORIES = [
