@@ -562,8 +562,9 @@ export class MusicApiClient {
 		return `${this.baseUrl}/tracks/${encodeURIComponent(hash)}/stream`;
 	}
 
-	async getLyrics(hash: string): Promise<string> {
-		const payload = await this.request(`/tracks/${encodeURIComponent(hash)}/lyrics`);
+	async getLyrics(hash: string, durationMs = 0): Promise<string> {
+		const query = durationMs > 0 ? `?duration=${Math.floor(durationMs)}` : "";
+		const payload = await this.request(`/tracks/${encodeURIComponent(hash)}/lyrics${query}`);
 		const data = responseData<any>(payload);
 		return String(data?.content ?? data?.decodeContent ?? "");
 	}

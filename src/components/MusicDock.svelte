@@ -798,7 +798,7 @@
 		if (pending) return pending;
 
 		const requestClient = client;
-		const pendingRequest = requestClient.getLyrics(song.hash)
+		const pendingRequest = requestClient.getLyrics(song.hash, Math.round((Number(song.timeLength) || 0) * 1000))
 			.then(parseLyrics)
 			.then((lines) => {
 				lyricsCache.set(song.hash, lines);
