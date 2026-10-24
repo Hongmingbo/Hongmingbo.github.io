@@ -671,21 +671,44 @@
 	 * 因此「取消收藏后切歌单」不会丢掉操作，也不会用错歌单 id 去删歌。
 	 * 只有确实提交成功的条目才从缓冲区移除；失败的保留下来供重试。
 	 */
+	/**
+	 * 删除接口需要 fileid，而该字段**只有歌单曲目接口才返回**。
+	 * 全屏播放时 currentSong 来自播放上下文，通常不带 fileid，所以不能直接
+	 * 用缓冲区里存的对象。这里按 hash 从已加载的歌单里反查，
+	 * 取不到就让整个 flush 失败（保留缓冲区供重试），
+	 * 绝不再静默清空缓冲区后报告成功——那会让爱心刷新后又变回实心。
+	 */
+	const resolveFileId = (hash: string, playlistId: string): string | null => {
+		const fromPlaylist = songs.find((song) => song.hash === hash);
+		const fromPlaylistFileId = fromPlaylist ? songFileId(fromPlaylist) : null;
+		if (fromPlaylistFileId) return fromPlaylistFileId;
+		// 歌单还没加载时退回缓存对象自带的字段。
+		const cached = pendingRemovals.get(hash);
+		if (cached && cached.playlistId === playlistId) return songFileId(cached.song);
+		return null;
+	};
+
 	const flushPendingRemovals = async (): Promise<boolean> => {
 		if (!client || pendingRemovals.size === 0) return true;
 		cancelRemovalCommit();
 		const byPlaylist = new Map<string, Array<{ hash: string; fileid: string }>>();
+		const unresolved: string[] = [];
 		for (const [hash, value] of pendingRemovals) {
-			const fileid = songFileId(value.song);
-			if (!value.playlistId || !fileid) continue;
+			const fileid = resolveFileId(hash, value.playlistId);
+			if (!value.playlistId || !fileid) {
+				unresolved.push(value.song?.name ?? hash);
+				continue;
+			}
 			const bucket = byPlaylist.get(value.playlistId) ?? [];
 			bucket.push({ hash, fileid: String(fileid) });
 			byPlaylist.set(value.playlistId, bucket);
 		}
 		if (byPlaylist.size === 0) {
-			pendingRemovals.clear();
-			pendingRemovalHashes = new Set();
-			return true;
+			// 一首都删不了：保留缓冲区并报告失败，让爱心维持「已取消」的中间态，
+			// 用户可以重新打开歌曲库触发重试，而不是被误导以为已经删除。
+			pendingRemovalHashes = new Set(pendingRemovals.keys());
+			showToast("error", "无法定位要移除的歌曲，请打开歌曲库后重试");
+			return false;
 		}
 		let ok = true;
 		for (const [playlistId, items] of byPlaylist) {
@@ -699,7 +722,11 @@
 		}
 		pendingRemovalHashes = new Set(pendingRemovals.keys());
 		if (ok) {
-			showToast("unfav", "收藏变更已提交，列表已刷新");
+			// 不再弹「已提交」提示：5 秒倒计时消息已经说明过会发生什么，
+			// 爱心从实心变描边本身就是确认。只静默刷新列表。
+			if (unresolved.length > 0) {
+				showToast("error", `${unresolved.length} 首无法定位，未移除`);
+			}
 			await loadSongs();
 		}
 		return ok;
