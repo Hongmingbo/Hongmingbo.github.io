@@ -1844,7 +1844,7 @@
 								<span class="music-status-line">{apiStatus === "ready" ? "SERVICE ONLINE" : "SERVICE OFFLINE"}</span>
 							</span>
 							<strong>{currentSong?.name ?? "还没有开始播放"}</strong>
-							<span>{currentSong?.author ?? "登录后读取你的歌单"}{currentIndex >= 0 ? ` · ${currentIndex + 1}/${songs.length}` : ""}</span>
+							<span class="music-track-author">{currentSong?.author ?? "登录后读取你的歌单"}{currentIndex >= 0 ? ` · ${currentIndex + 1}/${songs.length}` : ""}</span>
 							{#if currentSong}
 							<!-- 音质徽章：显示当前生效档位；点击进设置页切换。 -->
 							<button
@@ -2350,12 +2350,15 @@
 	.music-search-field { position: relative; min-width: 0; }
 	.music-search-field input { width: 100%; }
 	/* 搜索历史下拉：浮在结果区之上，不撑开弹窗高度 */
-	.music-search-history { position: absolute; z-index: 30; top: calc(100% + 0.25rem); left: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; width: max-content; max-width: 100%; max-height: 9.5rem; overflow-y: auto; padding: 0.5rem; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 0.7rem; background: var(--card-bg, #fff); box-shadow: 0 14px 30px -18px rgb(15 23 42 / 0.45); }
-	.music-search-history__label { width: 100%; color: var(--md-tone-muted); font-size: 0.62rem; letter-spacing: 0.06em; }
-	.music-search-history__item { padding: 0.16rem 0.5rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 999px; background: transparent; color: var(--md-tone-body); font-size: 0.7rem; cursor: pointer; transition: border-color 150ms ease, color 150ms ease; }
-	.music-search-history__item:hover { border-color: var(--primary); color: var(--primary); }
-	.music-search-history__clear { margin-left: auto; padding: 0.1rem 0.4rem; border: 0; background: transparent; color: var(--md-tone-muted); font-size: 0.62rem; cursor: pointer; text-decoration: underline; }
-	.music-search-history__clear:hover { color: #c05640; }
+	/* 与输入框拉开距离、对齐输入框宽度，并加一个小箭头，明确「这是从搜索框展开的」。 */
+	.music-search-history { position: absolute; z-index: 30; top: calc(100% + 0.55rem); left: 0; right: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(0, 1fr)); grid-auto-flow: dense; gap: 0.45rem; max-height: 11rem; overflow-y: auto; padding: 0.7rem 0.75rem 0.65rem; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 0.8rem; background: var(--card-bg, #fff); box-shadow: 0 16px 34px -20px rgb(15 23 42 / 0.45); }
+	.music-search-history::before { content: ""; position: absolute; top: -0.3rem; left: 1.1rem; width: 0.6rem; height: 0.6rem; border-left: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-top: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); background: var(--card-bg, #fff); transform: rotate(45deg); }
+	.music-search-history__label { grid-column: 1 / -1; margin-bottom: 0.1rem; color: var(--md-tone-muted); font-size: 0.64rem; font-weight: 600; letter-spacing: 0.08em; }
+	/* 胶囊改为左对齐整块占一行，长关键词不再把卡片撑宽。 */
+	.music-search-history__item { overflow: hidden; padding: 0.28rem 0.7rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 999px; background: transparent; color: var(--md-tone-body); font-size: 0.72rem; line-height: 1.4; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; transition: border-color 150ms ease, color 150ms ease, background 150ms ease; }
+	.music-search-history__item:hover { border-color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); color: var(--primary); }
+	.music-search-history__clear { grid-column: 1 / -1; justify-self: start; margin-top: 0.1rem; padding: 0.1rem 0.2rem; border: 0; background: transparent; color: var(--md-tone-muted); font-size: 0.62rem; cursor: pointer; }
+	.music-search-history__clear:hover { color: #c05640; text-decoration: underline; }
 	.music-library-search input, .music-library-search select, .music-library-toolbar select { min-width: 0; min-height: 2.25rem; padding: 0.4rem 0.9rem 0.4rem 0.55rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.6rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.72rem; }
 	select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath fill='%2364748b' d='M7.41 8.58 12 13.17l4.59-4.59L18 10l-6 6-6-6z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.45rem center; padding-right: 1.5rem; }
 	.music-library-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-top: 0.65rem; }
@@ -2505,9 +2508,10 @@
 	.music-quality-badge { align-self: flex-start; margin-top: 0.1rem; padding: 0.05rem 0.4rem; border: 1px solid color-mix(in oklch, var(--primary) 40%, transparent); border-radius: 999px; background: color-mix(in oklch, var(--primary) 12%, transparent); color: var(--primary); font-size: 0.6rem; font-weight: 600; letter-spacing: 0.04em; cursor: pointer; transition: background 160ms ease, color 160ms ease; }
 	.music-quality-badge:hover { background: color-mix(in oklch, var(--primary) 24%, transparent); }
 
-	.music-track-copy strong, .music-track-copy span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.music-track-copy strong { font-size: 0.85rem; }
-	.music-track-copy span:last-child { color: var(--md-tone-muted); font-size: 0.72rem; }
+	/* 注意：不要再写 `span:last-child` —— 后面插入音质徽章按钮后它会指向别的元素，
+	   导致歌手行样式整体失效（字回落到继承大小）。必须用显式 class。 */
+	.music-track-copy strong { overflow: hidden; font-size: 0.85rem; text-overflow: ellipsis; white-space: nowrap; }
+	.music-track-author { overflow: hidden; color: var(--md-tone-muted); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
 	.music-track-status { display: inline-flex; align-items: center; gap: 0.35rem; }
 	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 45%, transparent); border-radius: 0.65rem; color: var(--md-tone-muted); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), border-color 180ms ease; }
 	.music-favorite:hover { color: var(--primary); border-color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: scale(1.06); }
