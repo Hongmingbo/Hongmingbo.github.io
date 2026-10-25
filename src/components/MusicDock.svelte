@@ -310,8 +310,8 @@
 	// 单次构建最多扫描的歌单数，防止歌单极多时卡住界面。
 	const ALL_FAVORITES_PLAYLIST_LIMIT = 12;
 
-	const buildAllFavoritesIndex = async () => {
-		if (allFavoritesLoaded || allFavoritesLoading || !client || !auth) return;
+	const buildAllFavoritesIndex = async (force = false) => {
+		if ((!force && allFavoritesLoaded) || allFavoritesLoading || !client || !auth) return;
 		allFavoritesLoading = true;
 		try {
 			const collected = new Set<string>();
@@ -418,6 +418,10 @@
 	};
 
 	const setSession = async (nextAuth: MusicSession) => {
+		// 登录成功后立刻构建全歌单收藏索引，保证搜索结果的爱心状态准确。
+		// 之前只在 openLibrary / search 时惰性构建，若用户先搜索后开歌单，
+		// 或索引构建时 playlists 还没加载完，就会出现「已收藏却显示空心」。
+		setTimeout(() => { void buildAllFavoritesIndex(); }, 0);
 		if (nextAuth?.userid === undefined || nextAuth?.userid === null) throw new MusicApiError("登录会话响应无效");
 		// 酷狗 token、Cookie 与设备指纹均由 BFF 保管；前端只保留非敏感展示资料在内存。
 		auth = nextAuth;
@@ -509,6 +513,9 @@
 			if (playlists.length > 0) {
 				selectedPlaylistId = String(playlists[0].listid);
 				await loadSongs();
+				// 歌单列表就绪后才能遍历建索引；这里必须显式触发，
+				// 否则要等用户手动打开歌曲库才开始建，搜索时会显示空心。
+				void buildAllFavoritesIndex();
 			} else {
 				songsMessage = "没有读取到可用歌单";
 			}
@@ -2155,7 +2162,9 @@
 	.music-vip-badge { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0.1rem 0.38rem; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 30%, transparent); border-radius: 999px; color: var(--md-tone-muted); font-size: 0.56rem; letter-spacing: 0.02em; white-space: nowrap; }
 	.music-vip-badge--ok { border-color: color-mix(in oklch, #2f9e72 36%, transparent); color: #2f9e72; background: color-mix(in oklch, #2f9e72 8%, transparent); }
 	.music-vip-badge--risk { border-color: color-mix(in oklch, #c05640 36%, transparent); color: #c05640; background: color-mix(in oklch, #c05640 8%, transparent); }
-	.music-quiet--tiny { min-height: 1.8rem; padding: 0.2rem 0.55rem; font-size: 0.66rem; }
+	/* 「保存登录」在窄容器里被挤成两行（保存登 / 录）。禁止折行并允许不被压缩，
+	   同时用 inline-flex 保证文字在按钮内垂直居中。 */
+	.music-quiet--tiny { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-height: 1.8rem; padding: 0.2rem 0.55rem; font-size: 0.66rem; white-space: nowrap; word-break: keep-all; }
 	.music-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; margin-top: 0.75rem; padding: 0.22rem; border-radius: 0.8rem; background: color-mix(in oklch, var(--primary) 7%, var(--card-border, #dce5e5)); }
 	.music-tab { min-height: 2rem; padding: 0.3rem 0.4rem; border: 0; border-radius: 0.6rem; color: var(--md-tone-muted); background: transparent; font: inherit; font-size: 0.72rem; cursor: pointer; transition: color 200ms ease, background 200ms ease, box-shadow 200ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-tab:hover { color: var(--primary); }
@@ -2329,8 +2338,10 @@
 	@keyframes music-heart-pop { 0% { transform: scale(0.7); } 45% { transform: scale(1.28); } 70% { transform: scale(0.92); } 100% { transform: scale(1); } }
 	/* 均衡器不能参与行内布局：上一版给它固定宽度占位，结果把 SERVICE ONLINE
 	   在两种状态下都推右了。改为绝对定位在文字左侧的留白区，文字自己保持左边缘。 */
-	.music-track-status { position: relative; display: inline-block; padding-left: 1.25rem; }
-	.music-eq { position: absolute; left: 0; bottom: 0.15rem; display: inline-flex; align-items: flex-end; gap: 2px; width: 0.95rem; height: 0.7rem; }
+	/* 关键：容器不能有 padding-left，否则 SERVICE ONLINE 整体右移（实测偏 23px）。
+	   均衡器用负偏移放到文字左边界之外，既保留播放动画又不影响文字对齐。 */
+	.music-track-status { position: relative; display: inline-block; padding-left: 0; }
+	.music-eq { position: absolute; left: -1.15rem; bottom: 0.12rem; display: inline-flex; align-items: flex-end; gap: 2px; width: 0.95rem; height: 0.7rem; }
 	.music-eq i { display: block; width: 2.5px; border-radius: 2px; background: var(--primary); transform-origin: bottom; animation: music-eq-bounce 900ms ease-in-out infinite alternate; }
 	.music-eq--idle i { animation: none; transform: scaleY(0.45); opacity: 0; }
 	.music-eq i:nth-child(2) { animation-delay: -300ms; }
