@@ -21,6 +21,9 @@ import {
 	PLAY_MODE_ORDER,
 	shuffleSongs,
 	isSongInPlaylist,
+	normalizeAudioQuality,
+	qualityLabel,
+	pushSearchHistory,
 	responseData,
 	responseSucceeded,
 	classifyMusicRisk,
@@ -62,6 +65,31 @@ assert.equal(caseNormalised[0].hash, "abc123def");
 assert.equal(caseNormalised[1].hash, "fedcba");
 assert.equal(isSongInPlaylist("fedcba", caseNormalised), true);
 assert.equal(isSongInPlaylist("FEDCBA".toLowerCase(), caseNormalised), true);
+
+// 音质：白名单归一 + 显示标签（存储可能被写入任意值，播放前必须归一）。
+assert.equal(normalizeAudioQuality("320"), "320");
+assert.equal(normalizeAudioQuality("flac"), "flac");
+assert.equal(normalizeAudioQuality("128"), "128");
+assert.equal(normalizeAudioQuality("999"), "128"); // 非法值回落默认
+assert.equal(normalizeAudioQuality(""), "128");
+assert.equal(normalizeAudioQuality(undefined), "128");
+assert.equal(qualityLabel("flac"), "无损");
+assert.equal(qualityLabel("320"), "320k");
+assert.equal(qualityLabel("128"), "128k");
+
+// 搜索历史：去重（大小写/空白不敏感）、置顶、截断到上限。
+const h1 = pushSearchHistory([], " 晴天 ");
+assert.deepEqual(h1, ["晴天"]);
+const h2 = pushSearchHistory(h1, "晴天");
+assert.deepEqual(h2, ["晴天"]); // 重复不增长
+const h3 = pushSearchHistory(h2, "稻香");
+assert.deepEqual(h3, ["稻香", "晴天"]); // 新词置顶
+let h4 = [];
+for (let i = 0; i < 15; i += 1) h4 = pushSearchHistory(h4, `k${i}`);
+assert.equal(h4.length, 10);
+assert.equal(h4[0], "k14");
+assert.deepEqual(pushSearchHistory(["a"], "   "), ["a"]); // 空白忽略
+assert.deepEqual(pushSearchHistory(null as unknown as string[], "x"), ["x"]); // 坏存储容错
 
 const filenameTracks = {
 	status: 1,

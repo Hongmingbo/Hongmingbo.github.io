@@ -310,6 +310,27 @@ export const isSongInPlaylist = (hash: string, songs: MusicSong[]): boolean => {
 	return songs.some((song) => String(song.hash || "").toLowerCase() === needle);
 };
 
+/** 音质白名单：存储值可能被旧版本或手改污染，播放请求前必须归一。 */
+export const AUDIO_QUALITIES = ["128", "320", "flac"] as const;
+export type AudioQuality = (typeof AUDIO_QUALITIES)[number];
+export const normalizeAudioQuality = (value: unknown): AudioQuality =>
+	(AUDIO_QUALITIES as readonly string[]).includes(String(value)) ? (String(value) as AudioQuality) : "128";
+
+/** 播放行音质徽章用的短标签。 */
+export const qualityLabel = (value: AudioQuality | string): string =>
+	value === "flac" ? "无损" : `${value}k`;
+
+/** 搜索历史：去重（trim + 大小写不敏感）、新词置顶、上限 10 条。
+ * 存储里可能是任何形状（旧数据/损坏 JSON），一律容错。 */
+export const SEARCH_HISTORY_LIMIT = 10;
+export const pushSearchHistory = (stored: unknown, keyword: string): string[] => {
+	const trimmed = String(keyword || "").trim();
+	if (!trimmed) return Array.isArray(stored) ? stored.filter((x) => typeof x === "string") : [];
+	const base = Array.isArray(stored) ? stored.filter((x): x is string => typeof x === "string") : [];
+	const needle = trimmed.toLowerCase();
+	return [trimmed, ...base.filter((x) => x.toLowerCase() !== needle)].slice(0, SEARCH_HISTORY_LIMIT);
+};
+
 /** Deterministic Fisher–Yates shuffle with optional seed. Never mutates the input. */
 export const shuffleSongs = <T,>(items: T[], seed = Math.floor(Math.random() * 2 ** 31)): T[] => {
 	const copy = [...items];

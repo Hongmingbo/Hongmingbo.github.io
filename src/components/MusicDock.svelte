@@ -7,6 +7,9 @@
 		getShanghaiDateKey,
 		isCurrentLyricsRequest,
 		songFileId,
+		normalizeAudioQuality,
+		pushSearchHistory,
+		qualityLabel,
 		MusicApiClient,
 		MusicApiError,
 		MusicRiskVerifyError,
@@ -100,6 +103,10 @@
 	let searchBusy = false;
 	let searchMessage = "搜索全网歌曲，结果不会自动加入歌单";
 	let searchResults: MusicSong[] = [];
+	// B2 搜索历史：最近 10 条，聚焦且输入为空时作为快捷入口显示。
+	const SEARCH_HISTORY_KEY = "hengduo-music-search-history";
+	let searchHistory: string[] = [];
+	let searchHistoryOpen = false;
 	let dailySongs: MusicSong[] = [];
 	let dailyLoading = false;
 	let dailyMessage = "点击加载今日推荐";
@@ -585,6 +592,7 @@
 
 	const searchMusic = async () => {
 		const keyword = searchQuery.trim();
+		if (keyword) rememberSearch(keyword);
 		if (!keyword) {
 			searchResults = [];
 			searchMessage = "请输入歌曲名、歌手或关键词";
@@ -649,9 +657,86 @@
 		libraryPageJump = "";
 	};
 
+	// 切换音质：存偏好；若正在播放则重新取流并从原进度继续，失败则保持原样。
+	const applyAudioQuality = async (next: string) => {
+		const quality = normalizeAudioQuality(next);
+		audioQuality = quality;
+		safeStorage.set(QUALITY_KEY, quality);
+		setNotice(`音质已切换到 ${qualityLabel(quality)}`);
+		if (!client || !currentSong || !audio) return;
+		const resumeAt = audio.duration && audio.currentTime > 1 ? audio.currentTime : 0;
+		const wasPlaying = isPlaying;
+		const generation = ++playGeneration;
+		try {
+			const url = await client.getStreamUrl(currentSong.hash, quality);
+			if (!url) throw new MusicApiError("BFF 播放流不可用");
+			if (generation !== playGeneration) return;
+			audio.src = url;
+			audio.currentTime = resumeAt;
+			if (wasPlaying) await audio.play();
+			setNotice(`音质已切换到 ${qualityLabel(quality)}，从 ${formatTime(resumeAt)} 继续`);
+		} catch (error) {
+			if (generation !== playGeneration) return;
+			// 高音质可能无权限或上游失败：回退到 128 保证不断播。
+			if (quality !== "128") {
+				try {
+					const fallback = await client.getStreamUrl(currentSong.hash, "128");
+					if (fallback && generation === playGeneration) {
+						audio.src = fallback;
+						audio.currentTime = resumeAt;
+						if (wasPlaying) await audio.play();
+						setNotice(`${qualityLabel(quality)} 不可用，已回退 128k`);
+						return;
+					}
+				} catch {
+					/* 回退也失败时走下面的统一提示 */
+				}
+			}
+			setNotice(errorMessage(error, "音质切换失败"));
+		}
+	};
+
+	const loadSearchHistory = () => {
+		try {
+			const raw = safeStorage.get(SEARCH_HISTORY_KEY);
+			searchHistory = raw ? JSON.parse(raw) : [];
+			if (!Array.isArray(searchHistory)) searchHistory = [];
+		} catch {
+			searchHistory = [];
+		}
+	};
+
+	const rememberSearch = (keyword: string) => {
+		const trimmed = keyword.trim();
+		if (!trimmed) return;
+		searchHistory = pushSearchHistory(searchHistory, trimmed);
+		try {
+			safeStorage.set(SEARCH_HISTORY_KEY, JSON.stringify(searchHistory));
+		} catch {
+			/* 历史只是便利功能，存储失败不影响搜索 */
+		}
+	};
+
+	const useSearchHistory = (keyword: string) => {
+		searchQuery = keyword;
+		searchHistoryOpen = false;
+		void searchLibrary();
+	};
+
+	const clearSearchHistory = () => {
+		searchHistory = [];
+		searchHistoryOpen = false;
+		try {
+			safeStorage.set(SEARCH_HISTORY_KEY, JSON.stringify([]));
+		} catch {
+			/* 同上 */
+		}
+	};
+
 	const closeLibrary = () => {
 		setModal(null);
 		addTargetSong = null;
+		searchHistoryOpen = false;
 	};
 
 	const searchLibrary = async () => {
@@ -1126,6 +1211,14 @@
 		audio.currentTime = (Number(target.value) / 100) * duration;
 	};
 
+	// 键盘调音量复用同一持久化路径，避免两套逻辑漂移。
+	const adjustVolume = (delta: number) => {
+		volume = Math.max(0, Math.min(1, volume + delta));
+		if (audio) audio.volume = volume;
+		safeStorage.set("hengduo-music-volume", String(volume));
+		setNotice(`音量 ${Math.round(volume * 100)}%`);
+	};
+
 	const changeVolume = (event: Event) => {
 		const target = event.currentTarget as HTMLInputElement;
 		volume = Number(target.value) / 100;
@@ -1494,13 +1587,52 @@
 
 	onMount(() => {
 		const onKeydown = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
-			if (libraryOpen) {
-				closeLibrary();
+			if (event.key === "Escape") {
+				if (libraryOpen) {
+					closeLibrary();
+					return;
+				}
+				if (fullscreen) fullscreen = false;
+				if (showLogin) showLogin = false;
 				return;
 			}
-			if (fullscreen) fullscreen = false;
-			if (showLogin) showLogin = false;
+			// 播放快捷键仅在播放器展开时生效，且不劫持任何输入环境。
+			if (!expanded) return;
+			const target = event.target as HTMLElement | null;
+			if (target) {
+				const tag = target.tagName;
+				if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || target.isContentEditable) return;
+			}
+			if (event.ctrlKey || event.metaKey || event.altKey) return;
+			// 面板还没播放过（无当前歌曲）时，除空格外的键没有意义。
+			const hasSong = Boolean(currentSong);
+			if (event.code === "Space" || event.key === "k") {
+				// togglePlay 自带「续播上次/首播列表第一首」兜底，这里只要有任何可播内容就放行。
+				if (!hasSong && !queueSongs.length && !songs.length) return;
+				event.preventDefault();
+				void togglePlay();
+				return;
+			}
+			if (!hasSong) return;
+			if (event.key === "ArrowRight" || event.key === "l") {
+				event.preventDefault();
+				void playNext();
+				return;
+			}
+			if (event.key === "ArrowLeft" || event.key === "j") {
+				event.preventDefault();
+				void playPrevious();
+				return;
+			}
+			if (event.key === "ArrowUp" || event.key === "u") {
+				event.preventDefault();
+				adjustVolume(0.05);
+				return;
+			}
+			if (event.key === "ArrowDown" || event.key === "d") {
+				event.preventDefault();
+				adjustVolume(-0.05);
+			}
 		};
 		window.addEventListener("keydown", onKeydown);
 		return () => window.removeEventListener("keydown", onKeydown);
@@ -1520,7 +1652,7 @@
 			if (Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1) volume = savedVolume;
 		}
 		restoreQueue();
-		audioQuality = safeStorage.get(QUALITY_KEY) || "128";
+		audioQuality = normalizeAudioQuality(safeStorage.get(QUALITY_KEY));
 		const savedOffset = Number(safeStorage.get(LYRIC_OFFSET_KEY));
 		lyricOffsetMs = Number.isFinite(savedOffset) ? savedOffset : 0;
 		try {
@@ -1598,7 +1730,11 @@
 			}
 		}
 
-		if (apiUrl) void connectApi();
+		// 搜索历史与 BFF 无关，任何时候都要恢复（放在 apiUrl 判断之外）。
+		loadSearchHistory();
+		if (apiUrl) {
+			void connectApi();
+		}
 
 		return () => {
 			clearQrTimer();
@@ -1674,7 +1810,7 @@
 						</label>
 						<label class="music-setting-row">
 							<span>音质<small>128 / 320 / 无损；无损需账号有权限</small></span>
-							<select value={audioQuality} aria-label="音质" on:change={(event) => { audioQuality = (event.currentTarget as HTMLSelectElement).value; safeStorage.set(QUALITY_KEY, audioQuality); setNotice(`音质已切换到 ${audioQuality}`); }}>
+							<select value={audioQuality} aria-label="音质" on:change={(event) => void applyAudioQuality((event.currentTarget as HTMLSelectElement).value)}>
 								<option value="128">128 kbps</option>
 								<option value="320">320 kbps</option>
 								<option value="flac">无损 FLAC</option>
@@ -1709,6 +1845,16 @@
 							</span>
 							<strong>{currentSong?.name ?? "还没有开始播放"}</strong>
 							<span>{currentSong?.author ?? "登录后读取你的歌单"}{currentIndex >= 0 ? ` · ${currentIndex + 1}/${songs.length}` : ""}</span>
+							{#if currentSong}
+							<!-- 音质徽章：显示当前生效档位；点击进设置页切换。 -->
+							<button
+								class="music-quality-badge"
+								type="button"
+								aria-label={`播放音质 ${qualityLabel(audioQuality)}，点击更改`}
+								title={`播放音质：${qualityLabel(audioQuality)}，点击切换`}
+								on:click={() => (showSettings = true)}
+							>{qualityLabel(audioQuality)}</button>
+							{/if}
 							</div>
 							{#if currentSong}
 							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? `取消收藏「${currentSong.name}」` : `收藏「${currentSong.name}」到当前歌单`} title={isFavorite ? "点击取消收藏（5 秒后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}>
@@ -1917,7 +2063,18 @@
 						</div>
 					</header>
 					<div class="music-library-search">
-						<input bind:value={searchQuery} aria-label="搜索歌曲库" placeholder="搜索歌曲名或歌手" on:keydown={(event) => event.key === "Enter" && void searchLibrary()} />
+						<div class="music-search-field">
+							<input bind:value={searchQuery} aria-label="搜索歌曲库" placeholder="搜索歌曲名或歌手" on:keydown={(event) => event.key === "Enter" && void searchLibrary()} on:focus={() => (searchHistoryOpen = true)} on:blur={() => setTimeout(() => (searchHistoryOpen = false), 120)} on:input={() => (searchHistoryOpen = true)} />
+							{#if searchHistoryOpen && searchHistory.length > 0 && !searchQuery.trim()}
+								<div class="music-search-history" role="listbox" aria-label="最近搜索">
+										<span class="music-search-history__label">最近搜索</span>
+										{#each searchHistory as item (item)}
+											<button class="music-search-history__item" type="button" role="option" tabindex="-1" on:mousedown|preventDefault={() => useSearchHistory(item)}>{item}</button>
+										{/each}
+										<button class="music-search-history__clear" type="button" tabindex="-1" on:mousedown|preventDefault={clearSearchHistory}>清空历史</button>
+									</div>
+							{/if}
+						</div>
 						<select bind:value={searchScope} aria-label="搜索范围"><option value="playlist">当前歌单</option><option value="all">全网歌曲</option></select>
 						<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
 					</div>
@@ -2190,6 +2347,15 @@
 	.music-library-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 	.music-library-header h2 { margin: 0.15rem 0 0.1rem; font-size: 1.15rem; }
 	.music-library-search { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.4rem; margin-top: 0.9rem; }
+	.music-search-field { position: relative; min-width: 0; }
+	.music-search-field input { width: 100%; }
+	/* 搜索历史下拉：浮在结果区之上，不撑开弹窗高度 */
+	.music-search-history { position: absolute; z-index: 30; top: calc(100% + 0.25rem); left: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; width: max-content; max-width: 100%; max-height: 9.5rem; overflow-y: auto; padding: 0.5rem; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 0.7rem; background: var(--card-bg, #fff); box-shadow: 0 14px 30px -18px rgb(15 23 42 / 0.45); }
+	.music-search-history__label { width: 100%; color: var(--md-tone-muted); font-size: 0.62rem; letter-spacing: 0.06em; }
+	.music-search-history__item { padding: 0.16rem 0.5rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 999px; background: transparent; color: var(--md-tone-body); font-size: 0.7rem; cursor: pointer; transition: border-color 150ms ease, color 150ms ease; }
+	.music-search-history__item:hover { border-color: var(--primary); color: var(--primary); }
+	.music-search-history__clear { margin-left: auto; padding: 0.1rem 0.4rem; border: 0; background: transparent; color: var(--md-tone-muted); font-size: 0.62rem; cursor: pointer; text-decoration: underline; }
+	.music-search-history__clear:hover { color: #c05640; }
 	.music-library-search input, .music-library-search select, .music-library-toolbar select { min-width: 0; min-height: 2.25rem; padding: 0.4rem 0.9rem 0.4rem 0.55rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.6rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.72rem; }
 	select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath fill='%2364748b' d='M7.41 8.58 12 13.17l4.59-4.59L18 10l-6 6-6-6z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.45rem center; padding-right: 1.5rem; }
 	.music-library-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-top: 0.65rem; }
@@ -2289,7 +2455,9 @@
 	.music-fullscreen .music-lyric--active { color: var(--primary); opacity: 1; }
 	.music-fullscreen .music-progress-row span { color: rgb(203 213 225); }
 	.music-fullscreen .music-progress-row input { accent-color: var(--primary); }
-	.music-fullscreen__empty { color: var(--md-tone-muted); font-size: 0.9rem; text-align: center; }
+	/* 全屏层是深色背景，但 --md-tone-muted 在浅色主题下是深灰——
+	   直接沿用会在深色底上几乎看不见。全屏内固定用浅色。 */
+	.music-fullscreen__empty { color: rgb(203 213 225 / 0.85); font-size: 0.9rem; text-align: center; }
 	@media (max-width: 860px) {
 		.music-fullscreen__content { grid-template-columns: 1fr; gap: 1.4rem; align-content: start; align-items: center; overflow-y: auto; text-align: center; }
 		.music-fullscreen__cover { width: min(14rem, 60vw); }
@@ -2333,6 +2501,9 @@
 	.music-cover--empty { display: grid; place-items: center; color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 1.5rem; }
 	.music-track-copy { min-width: 0; display: grid; gap: 0.12rem; }
 	.music-track-copy .music-track-status { margin-bottom: 0.1rem; }
+	/* 音质徽章：小尺寸、低干扰，与元数据行同层级 */
+	.music-quality-badge { align-self: flex-start; margin-top: 0.1rem; padding: 0.05rem 0.4rem; border: 1px solid color-mix(in oklch, var(--primary) 40%, transparent); border-radius: 999px; background: color-mix(in oklch, var(--primary) 12%, transparent); color: var(--primary); font-size: 0.6rem; font-weight: 600; letter-spacing: 0.04em; cursor: pointer; transition: background 160ms ease, color 160ms ease; }
+	.music-quality-badge:hover { background: color-mix(in oklch, var(--primary) 24%, transparent); }
 
 	.music-track-copy strong, .music-track-copy span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.music-track-copy strong { font-size: 0.85rem; }
