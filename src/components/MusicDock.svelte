@@ -2347,17 +2347,19 @@
 	.music-library-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 	.music-library-header h2 { margin: 0.15rem 0 0.1rem; font-size: 1.15rem; }
 	.music-library-search { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.4rem; margin-top: 0.9rem; }
-	.music-search-field { position: relative; min-width: 0; }
+	.music-search-field { min-width: 0; }
 	.music-search-field input { width: 100%; }
 	/* 搜索历史下拉：浮在结果区之上，不撑开弹窗高度 */
-	/* 与输入框拉开距离、对齐输入框宽度，并加一个小箭头，明确「这是从搜索框展开的」。 */
-	.music-search-history { position: absolute; z-index: 30; top: calc(100% + 0.55rem); left: 0; right: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(0, 1fr)); grid-auto-flow: dense; gap: 0.45rem; max-height: 11rem; overflow-y: auto; padding: 0.7rem 0.75rem 0.65rem; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 0.8rem; background: var(--card-bg, #fff); box-shadow: 0 16px 34px -20px rgb(15 23 42 / 0.45); }
-	.music-search-history::before { content: ""; position: absolute; top: -0.3rem; left: 1.1rem; width: 0.6rem; height: 0.6rem; border-left: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-top: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); background: var(--card-bg, #fff); transform: rotate(45deg); }
-	.music-search-history__label { grid-column: 1 / -1; margin-bottom: 0.1rem; color: var(--md-tone-muted); font-size: 0.64rem; font-weight: 600; letter-spacing: 0.08em; }
+	/* 面板必须留在文档流里（position: relative）——绝对定位会浮在下方工具栏之上，
+	   把排序/每页数遮住。流内展开时自然把工具栏推下去，结构上不可能遮盖。 */
+	.music-search-history { position: relative; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; max-height: 11rem; margin-top: 0.5rem; overflow-y: auto; padding: 0.6rem 0.75rem; border: 1px solid color-mix(in oklch, var(--primary) 20%, var(--card-border, #dce5e5)); border-left: 3px solid color-mix(in oklch, var(--primary) 45%, transparent); border-radius: 0.7rem; background: color-mix(in oklch, var(--primary) 5%, var(--card-bg, #fff)); }
+	.music-search-history__label { flex: 0 0 100%; margin-bottom: 0.15rem; color: var(--md-tone-muted); font-size: 0.64rem; font-weight: 600; letter-spacing: 0.08em; }
 	/* 胶囊改为左对齐整块占一行，长关键词不再把卡片撑宽。 */
-	.music-search-history__item { overflow: hidden; padding: 0.28rem 0.7rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 999px; background: transparent; color: var(--md-tone-body); font-size: 0.72rem; line-height: 1.4; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; transition: border-color 150ms ease, color 150ms ease, background 150ms ease; }
+	/* flex: 0 1 auto 让胶囊按文字宽度排；绝不用 grid 1fr，否则单条关键词会被
+	   拉成通栏（一个字的词看起来像一块宽条）。 */
+	.music-search-history__item { flex: 0 1 auto; max-width: 100%; overflow: hidden; padding: 0.28rem 0.7rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 999px; background: transparent; color: var(--md-tone-body); font-size: 0.72rem; line-height: 1.4; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; transition: border-color 150ms ease, color 150ms ease, background 150ms ease; }
 	.music-search-history__item:hover { border-color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); color: var(--primary); }
-	.music-search-history__clear { grid-column: 1 / -1; justify-self: start; margin-top: 0.1rem; padding: 0.1rem 0.2rem; border: 0; background: transparent; color: var(--md-tone-muted); font-size: 0.62rem; cursor: pointer; }
+	.music-search-history__clear { flex: 0 0 100%; align-self: flex-start; margin-top: 0.15rem; padding: 0.1rem 0.2rem; border: 0; background: transparent; color: var(--md-tone-muted); font-size: 0.62rem; cursor: pointer; }
 	.music-search-history__clear:hover { color: #c05640; text-decoration: underline; }
 	.music-library-search input, .music-library-search select, .music-library-toolbar select { min-width: 0; min-height: 2.25rem; padding: 0.4rem 0.9rem 0.4rem 0.55rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 0.6rem; color: inherit; background: var(--card-bg, #fff); font: inherit; font-size: 0.72rem; }
 	select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath fill='%2364748b' d='M7.41 8.58 12 13.17l4.59-4.59L18 10l-6 6-6-6z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.45rem center; padding-right: 1.5rem; }
