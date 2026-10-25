@@ -2062,22 +2062,22 @@
 							<button class="music-icon-button" type="button" aria-label="关闭歌曲库" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
 						</div>
 					</header>
-					<div class="music-library-search">
-						<div class="music-search-field">
+						<div class="music-library-search">
 							<input bind:value={searchQuery} aria-label="搜索歌曲库" placeholder="搜索歌曲名或歌手" on:keydown={(event) => event.key === "Enter" && void searchLibrary()} on:focus={() => (searchHistoryOpen = true)} on:blur={() => setTimeout(() => (searchHistoryOpen = false), 120)} on:input={() => (searchHistoryOpen = true)} />
-							{#if searchHistoryOpen && searchHistory.length > 0 && !searchQuery.trim()}
-								<div class="music-search-history" role="listbox" aria-label="最近搜索">
-										<span class="music-search-history__label">最近搜索</span>
-										{#each searchHistory as item (item)}
-											<button class="music-search-history__item" type="button" role="option" tabindex="-1" on:mousedown|preventDefault={() => useSearchHistory(item)}>{item}</button>
-										{/each}
-										<button class="music-search-history__clear" type="button" tabindex="-1" on:mousedown|preventDefault={clearSearchHistory}>清空历史</button>
-									</div>
-							{/if}
+							<select bind:value={searchScope} aria-label="搜索范围"><option value="playlist">当前歌单</option><option value="all">全网歌曲</option></select>
+							<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
 						</div>
-						<select bind:value={searchScope} aria-label="搜索范围"><option value="playlist">当前歌单</option><option value="all">全网歌曲</option></select>
-						<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
-					</div>
+						<!-- 历史面板必须在搜索行「外面」：搜索行是 3 列 grid，行内元素撑高会把右侧的
+						     搜索范围下拉和搜索按钮一起拉高，搜索框就被压成窄条（截图里的错位根源）。 -->
+						{#if searchHistoryOpen && searchHistory.length > 0 && !searchQuery.trim()}
+							<div class="music-search-history" role="listbox" aria-label="最近搜索">
+								<span class="music-search-history__label">最近搜索</span>
+								{#each searchHistory as item (item)}
+									<button class="music-search-history__item" type="button" role="option" tabindex="-1" on:mousedown|preventDefault={() => useSearchHistory(item)}>{item}</button>
+								{/each}
+								<button class="music-search-history__clear" type="button" tabindex="-1" on:mousedown|preventDefault={clearSearchHistory}>清空历史</button>
+							</div>
+						{/if}
 					<div class="music-library-toolbar">
 						<div class="music-library-toolbar__left">
 							<span class="music-muted">{searchQuery.trim() ? searchMessage : `${songs.length} 首歌曲`}</span>
@@ -2346,18 +2346,18 @@
 	.music-library-modal { display: flex; flex-direction: column; width: min(42rem, 100%); height: min(42rem, calc(100vh - 2rem)); max-height: calc(100vh - 2rem); padding: 1.1rem; overflow: hidden; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 1.2rem; color: inherit; background: var(--card-bg, #fff); box-shadow: 0 28px 80px -30px rgb(15 23 42 / 0.62); animation: music-modal-in 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-library-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 	.music-library-header h2 { margin: 0.15rem 0 0.1rem; font-size: 1.15rem; }
-	.music-library-search { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.4rem; margin-top: 0.9rem; }
-	.music-search-field { min-width: 0; }
-	.music-search-field input { width: 100%; }
+	.music-library-search { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.4rem; margin-top: 0.9rem; }
 	/* 搜索历史下拉：浮在结果区之上，不撑开弹窗高度 */
 	/* 面板必须留在文档流里（position: relative）——绝对定位会浮在下方工具栏之上，
 	   把排序/每页数遮住。流内展开时自然把工具栏推下去，结构上不可能遮盖。 */
-	.music-search-history { position: relative; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; max-height: 11rem; margin-top: 0.5rem; overflow-y: auto; padding: 0.6rem 0.75rem; border: 1px solid color-mix(in oklch, var(--primary) 20%, var(--card-border, #dce5e5)); border-left: 3px solid color-mix(in oklch, var(--primary) 45%, transparent); border-radius: 0.7rem; background: color-mix(in oklch, var(--primary) 5%, var(--card-bg, #fff)); }
-	.music-search-history__label { flex: 0 0 100%; margin-bottom: 0.15rem; color: var(--md-tone-muted); font-size: 0.64rem; font-weight: 600; letter-spacing: 0.08em; }
+	/* 独立成行、去掉卡片底色：只留一条虚线上边线，表明「这是搜索框的附属建议」，
+	   又不会在白色弹窗里像一块补丁。 */
+	.music-search-history { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed color-mix(in oklch, var(--card-border, #dce5e5) 90%, transparent); }
+	.music-search-history__label { flex: 0 0 100%; margin-bottom: 0.2rem; color: var(--md-tone-muted); font-size: 0.62rem; font-weight: 500; letter-spacing: 0.08em; }
 	/* 胶囊改为左对齐整块占一行，长关键词不再把卡片撑宽。 */
 	/* flex: 0 1 auto 让胶囊按文字宽度排；绝不用 grid 1fr，否则单条关键词会被
 	   拉成通栏（一个字的词看起来像一块宽条）。 */
-	.music-search-history__item { flex: 0 1 auto; max-width: 100%; overflow: hidden; padding: 0.28rem 0.7rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 999px; background: transparent; color: var(--md-tone-body); font-size: 0.72rem; line-height: 1.4; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; transition: border-color 150ms ease, color 150ms ease, background 150ms ease; }
+	.music-search-history__item { flex: 0 1 auto; max-width: 100%; overflow: hidden; padding: 0.22rem 0.6rem; border: 1px solid var(--card-border, #dce5e5); border-radius: 999px; background: transparent; color: var(--md-tone-body); font-size: 0.7rem; line-height: 1.35; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; transition: border-color 150ms ease, color 150ms ease, background 150ms ease; }
 	.music-search-history__item:hover { border-color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); color: var(--primary); }
 	.music-search-history__clear { flex: 0 0 100%; align-self: flex-start; margin-top: 0.15rem; padding: 0.1rem 0.2rem; border: 0; background: transparent; color: var(--md-tone-muted); font-size: 0.62rem; cursor: pointer; }
 	.music-search-history__clear:hover { color: #c05640; text-decoration: underline; }
