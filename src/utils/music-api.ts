@@ -237,7 +237,10 @@ export const normalizeSongs = (payload: unknown): MusicSong[] => {
 			const identity = parseSongIdentity(item);
 			return {
 				...item,
-				hash: String(item.hash ?? item.FileHash),
+				// 上游不同接口的大小写不一致：歌单曲目接口返回大写 hash、搜索接口返回
+				// 小写，直接比较会让搜索行的收藏状态永远匹配不上（空心）。
+				// 统一以小写为规范形态；下游比较全部经由这一处归一。
+				hash: String(item.hash ?? item.FileHash).toLowerCase(),
 				name: identity.name,
 				author: identity.author,
 				// 搜索结果经常没有封面对段；酷狗封面接口按 hash 取图，
@@ -302,7 +305,10 @@ export const coercePlayMode = (raw: string | null): PlayMode => {
 	return "list";
 };
 
-export const isSongInPlaylist = (hash: string, songs: MusicSong[]): boolean => songs.some((song) => song.hash === hash);
+export const isSongInPlaylist = (hash: string, songs: MusicSong[]): boolean => {
+	const needle = String(hash || "").toLowerCase();
+	return songs.some((song) => String(song.hash || "").toLowerCase() === needle);
+};
 
 /** Deterministic Fisher–Yates shuffle with optional seed. Never mutates the input. */
 export const shuffleSongs = <T,>(items: T[], seed = Math.floor(Math.random() * 2 ** 31)): T[] => {

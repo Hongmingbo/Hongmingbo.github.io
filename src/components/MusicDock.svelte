@@ -229,7 +229,8 @@
 			if (rawQueue) {
 				const parsed = JSON.parse(rawQueue) as { source?: typeof queueSource; songs?: MusicSong[] };
 				if (Array.isArray(parsed.songs) && parsed.songs.length > 0) {
-					queueSongs = parsed.songs;
+					// 旧版本可能持久化过大写 hash，恢复时归一。
+					queueSongs = parsed.songs.map((song) => ({ ...song, hash: String(song.hash ?? "").toLowerCase() }));
 					if (parsed.source === "daily" || parsed.source === "search" || parsed.source === "playlist") {
 						queueSource = parsed.source;
 					}
@@ -238,7 +239,7 @@
 			const rawLast = safeStorage.get(LAST_SONG_KEY);
 			if (rawLast) {
 				const parsed = JSON.parse(rawLast) as MusicSong;
-				if (parsed && typeof parsed.hash === "string") currentSong = parsed;
+				if (parsed && typeof parsed.hash === "string") currentSong = { ...parsed, hash: parsed.hash.toLowerCase() };
 			}
 		} catch {
 			/* 解析失败就当没有历史队列 */
@@ -1526,7 +1527,11 @@
 			const rawHistory = safeStorage.get(HISTORY_KEY);
 			if (rawHistory) {
 				const parsed = JSON.parse(rawHistory) as Array<{ song: MusicSong; at: number }>;
-				if (Array.isArray(parsed)) playHistory = parsed.filter((item) => item?.song?.hash).slice(0, HISTORY_LIMIT);
+				if (Array.isArray(parsed))
+					playHistory = parsed
+						.filter((item) => item?.song?.hash)
+						.map((item) => ({ ...item, song: { ...item.song, hash: String(item.song.hash).toLowerCase() } }))
+						.slice(0, HISTORY_LIMIT);
 			}
 		} catch {
 			/* 历史解析失败就当没有 */

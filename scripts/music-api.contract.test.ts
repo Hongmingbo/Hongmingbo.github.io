@@ -45,7 +45,23 @@ const tracks = {
 		info: [{ FileHash: "ABC", songname: "测试曲", singername: "测试者", pic: "https://img/{size}.jpg", timelen: 3210 }],
 	},
 };
-assert.deepEqual(normalizeSongs(tracks), [{ FileHash: "ABC", songname: "测试曲", singername: "测试者", pic: "https://img/{size}.jpg", timelen: 3210, hash: "ABC", name: "测试曲", author: "测试者", img: "https://img/480.jpg", timeLength: 3210, album: "" }]);
+assert.deepEqual(normalizeSongs(tracks), [{ FileHash: "ABC", songname: "测试曲", singername: "测试者", pic: "https://img/{size}.jpg", timelen: 3210, hash: "abc", name: "测试曲", author: "测试者", img: "https://img/480.jpg", timeLength: 3210, album: "" }]);
+// hash 必须统一为小写：歌单曲目接口返回大写、搜索接口返回小写，
+// 不归一会让搜索行收藏状态永远匹配不上（这正是搜索收藏空心的根因）。
+const caseTracks = {
+	status: 1,
+	data: {
+		info: [
+			{ hash: "ABC123def", songname: "大写混", singername: "x" },
+			{ FileHash: "FEDCBA", songname: "全大写", singername: "y" },
+		],
+	},
+};
+const caseNormalised = normalizeSongs(caseTracks);
+assert.equal(caseNormalised[0].hash, "abc123def");
+assert.equal(caseNormalised[1].hash, "fedcba");
+assert.equal(isSongInPlaylist("fedcba", caseNormalised), true);
+assert.equal(isSongInPlaylist("FEDCBA".toLowerCase(), caseNormalised), true);
 
 const filenameTracks = {
 	status: 1,
@@ -229,7 +245,7 @@ try {
 	const recommendations = await bff.getDailyRecommendations();
 	assert.equal(recommendationMethod, "GET");
 	assert.equal(recommendationUrl, "https://music.hmb2011.dpdns.org/recommendations/daily");
-	assert.equal(recommendations[0].hash, "REC_HASH");
+	assert.equal(recommendations[0].hash, "rec_hash"); // normalizeSongs 统一小写
 	assert.equal(recommendations[0].author, "推荐歌手");
 	assert.equal(recommendations[0].img, "https://img/480.jpg");
 	assert.equal(recommendations[0].timeLength, 187);
