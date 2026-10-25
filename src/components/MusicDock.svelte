@@ -123,7 +123,23 @@
 	const QUEUE_KEY = "hengduo-music-queue";
 	const LAST_SONG_KEY = "hengduo-music-last-song";
 	let queueSongs: MusicSong[] = [];
+	// 三个弹窗原本各用一个布尔，Svelte 5 里同一组件的多个兄弟 {#if} 由不同
+	// click handler 各自驱动时，一旦某个 effect 抛错就会被丢弃，出现
+	// 「按钮变色但面板不渲染」的状态与视图分叉。改成单一枚举，只留一条
+	// {#if} 链，避免跨 effect 干扰。
+	type ActiveModal = "library" | "queue" | "history" | null;
+	let activeModal: ActiveModal = null;
+	// 派生视图状态必须显式声明，否则 $: 赋值会落到未声明变量上。
 	let queueOpen = false;
+	let historyOpen = false;
+	let libraryOpen = false;
+	$: queueOpen = activeModal === "queue";
+	$: historyOpen = activeModal === "history";
+	$: libraryOpen = activeModal === "library";
+	// 兼容既有赋值点：所有 xxxOpen = true/false 都转成 activeModal 的切换。
+	const setModal = (next: ActiveModal) => {
+		activeModal = next;
+	};
 	// ===== D: 音质 / A: 歌词偏移 / C: 播放历史 =====
 	const QUALITY_KEY = "hengduo-music-quality";
 	const LYRIC_OFFSET_KEY = "hengduo-music-lyric-offset";
@@ -133,7 +149,6 @@
 	let audioQuality = "128";
 	let lyricOffsetMs = 0;
 	let playHistory: Array<{ song: MusicSong; at: number }> = [];
-	let historyOpen = false;
 
 	const persistHistory = () => {
 		try {
@@ -156,6 +171,48 @@
 	};
 	// 队列来源：歌单 / 每日推荐 / 搜索结果，仅用于界面标注。
 	let queueSource: "playlist" | "daily" | "search" = "playlist";
+
+	// ===== 队列编辑 =====
+	const removeFromQueue = (hash: string) => {
+		queueSongs = queueSongs.filter((song) => song.hash !== hash);
+		persistQueue();
+	};
+
+	const playNextInQueue = (hash: string) => {
+		const index = queueSongs.findIndex((song) => song.hash === hash);
+		if (index < 0 || !currentSong) return;
+		const picked = queueSongs[index];
+		const rest = queueSongs.filter((song) => song.hash !== hash);
+		const currentIndex = rest.findIndex((song) => song.hash === currentSong?.hash);
+		const insertAt = currentIndex >= 0 ? currentIndex + 1 : 0;
+		rest.splice(insertAt, 0, picked);
+		queueSongs = rest;
+		persistQueue();
+		setNotice(`「${picked.name}」将作为下一首播放`);
+	};
+
+	const appendCurrentPlaylistToQueue = () => {
+		if (songs.length === 0) {
+			setNotice("当前歌单没有歌曲可加入");
+			return;
+		}
+		const existing = new Set(queueSongs.map((song) => song.hash));
+		const added = songs.filter((song) => !existing.has(song.hash));
+		if (added.length === 0) {
+			setNotice("当前歌单的歌曲都已在队列中");
+			return;
+		}
+		queueSongs = [...queueSongs, ...added];
+		persistQueue();
+		setNotice(`已加入 ${added.length} 首到队列`);
+	};
+
+	const clearQueue = () => {
+		const keep = currentSong ? queueSongs.filter((song) => song.hash === currentSong?.hash) : [];
+		queueSongs = keep;
+		persistQueue();
+		setNotice(keep.length > 0 ? "已清空队列（保留当前播放）" : "队列已清空");
+	};
 
 	const persistQueue = () => {
 		try {
@@ -199,7 +256,6 @@
 	let lyricsLoading = false;
 	let panelTab: PanelTab = "songs";
 	let fullscreen = false;
-	let libraryOpen = false;
 	let libraryPage = 1;
 	let librarySort: LibrarySort = "default";
 	let libraryView: LibraryView = "library";
@@ -294,16 +350,20 @@
 	$: favoriteHashes = new Set(songs.map((song) => song.hash));
 	// songs 成为权威来源后，本地标记就没必要了；同时清掉已被移除的标记，
 	// 避免取消收藏后又被 locallyFavorited 顶回「已收藏」。
-	$: if (favoriteHashes.size > 0 || locallyFavorited.size > 0) {
+	// 清理「本地收藏标记」不能在响应式语句里做：那条语句既读又写
+	// locallyFavorited，Svelte 5 会判定为无限自依赖并中止整个组件的响应式图
+	// （表现为「点一次之后所有按钮失灵」，控制台只有一条空消息异常）。
+	// 改为在真正会改变状态的命令式路径里清理，见 pruneLocalFavorites。
+	const pruneLocalFavorites = () => {
+		if (locallyFavorited.size === 0) return;
 		const stale = [...locallyFavorited].filter(
 			(hash) => favoriteHashes.has(hash) || pendingRemovalHashes.has(hash),
 		);
-		if (stale.length > 0) {
-			const next = new Set(locallyFavorited);
-			for (const hash of stale) next.delete(hash);
-			locallyFavorited = next;
-		}
-	}
+		if (stale.length === 0) return;
+		const next = new Set(locallyFavorited);
+		for (const hash of stale) next.delete(hash);
+		locallyFavorited = next;
+	};
 	// 派生「最终显示为已收藏」的集合。模板必须直接读这个变量：
 	// Svelte 5 的编译期依赖分析看不到普通函数内部的响应式读取，
 	// 之前模板里写 effectiveFavorites.has(song.hash)，编译产物只把 song 记为依赖，
@@ -543,11 +603,12 @@
 	};
 
 	const openLibrary = () => {
+		setModal("library");
 		// 打开歌曲库时补建全歌单收藏索引，让搜索结果的爱心状态准确。
 		void buildAllFavoritesIndex();
 		// 重进弹窗 = 执行上一会话遗留的待删除并重载列表（用户确认过的行为）。
 		void flushPendingRemovals().then(() => {
-			libraryOpen = true;
+			setModal("library");
 			libraryView = "library";
 			libraryPage = 1;
 			dailyPage = 1;
@@ -557,7 +618,7 @@
 	};
 
 	const openDailyModal = () => {
-		libraryOpen = true;
+		setModal("library");
 		libraryView = "daily";
 		libraryPage = 1;
 		dailyPage = 1;
@@ -581,7 +642,7 @@
 	};
 
 	const closeLibrary = () => {
-		libraryOpen = false;
+		setModal(null);
 		addTargetSong = null;
 	};
 
@@ -810,6 +871,7 @@
 			pendingRemovalHashes = new Set(pendingRemovals.keys());
 			armRemovalCommit();
 			showToast("unfav", `取消收藏「${song.name}」，5 秒后生效`);
+			pruneLocalFavorites();
 			return;
 		}
 		void addSongToCurrentPlaylist(song);
@@ -936,6 +998,7 @@
 			// 立刻标记为已收藏：远端已接受，但 songs 要等重载才含这首歌。
 			locallyFavorited = new Set(locallyFavorited).add(song.hash);
 			allFavorites = new Set(allFavorites).add(song.hash);
+			pruneLocalFavorites();
 			showToast("fav", `已收藏「${song.name}」到当前歌单`);
 			await loadSongs();
 		} catch (error) {
@@ -1564,8 +1627,8 @@
 					{:else}
 						<button class="music-quiet music-quiet--tiny" type="button" on:click={() => (showLogin = true)}>登录</button>
 					{/if}
-					<button class:music-quiet--on={historyOpen} class="music-icon-button" type="button" aria-label="播放历史" title="播放历史" on:click={() => (historyOpen = !historyOpen)}><Icon icon="material-symbols:history-rounded" /></button>
-					<button class:music-quiet--on={queueOpen} class="music-icon-button" type="button" aria-label="播放队列" title={`播放队列${queueSongs.length > 0 ? `（${queueSongs.length} 首）` : ""}`} on:click={() => (queueOpen = !queueOpen)}><Icon icon="material-symbols:queue-music-rounded" /></button>
+					<button class:music-quiet--on={historyOpen} class="music-icon-button" type="button" aria-label="播放历史" title="播放历史" on:click={() => (setModal(historyOpen ? null : "history"))}><Icon icon="material-symbols:history-rounded" /></button>
+					<button class:music-quiet--on={queueOpen} class="music-icon-button" type="button" aria-label="播放队列" title={`播放队列${queueSongs.length > 0 ? `（${queueSongs.length} 首）` : ""}`} on:click={() => (setModal(queueOpen ? null : "queue"))}><Icon icon="material-symbols:queue-music-rounded" /></button>
 					<button class="music-icon-button" type="button" aria-label={apiStatus !== "ready" || showSettings ? "返回播放器" : "音乐服务设置"} title={apiStatus !== "ready" || showSettings ? "返回播放器" : "音乐服务设置"} on:click={toggleSettings}><Icon icon="material-symbols:tune-rounded" /></button>
 					<button class="music-icon-button" type="button" aria-label="关闭音乐面板" on:click={() => (expanded = false)}>
 						<Icon icon="material-symbols:close-rounded" />
@@ -1701,7 +1764,7 @@
 	{/if}
 
 	{#if historyOpen}
-		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (historyOpen = false)}>
+		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (setModal(null))}>
 			<section class="music-library-modal" role="dialog" aria-modal="true" aria-label="播放历史">
 				<header class="music-library-header">
 					<div>
@@ -1709,7 +1772,7 @@
 						<h2>播放历史</h2>
 						<span class="music-muted">{playHistory.length} 首</span>
 					</div>
-					<button class="music-icon-button" type="button" aria-label="关闭播放历史" on:click={() => (historyOpen = false)}><Icon icon="material-symbols:close-rounded" /></button>
+					<button class="music-icon-button" type="button" aria-label="关闭播放历史" on:click={() => (setModal(null))}><Icon icon="material-symbols:close-rounded" /></button>
 				</header>
 				<div class="music-library-toolbar">
 					<div class="music-library-toolbar__left"><span class="music-muted">最多保留最近 100 首</span></div>
@@ -1723,7 +1786,7 @@
 					{:else}
 						{#each playHistory as entry, i}
 							<div class="music-library-row">
-								<button class="music-song" type="button" on:click={() => { historyOpen = false; void playSong(entry.song); }}>
+								<button class="music-song" type="button" on:click={() => { setModal(null); void playSong(entry.song); }}>
 									<span class="music-song-index">{String(i + 1).padStart(2, "0")}</span>
 									{#if entry.song.img}<img class="music-song-cover" src={entry.song.img} alt="" loading="eager" decoding="async" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 									<span class="music-song-info"><strong>{entry.song.name}</strong><small>{entry.song.author}</small></span>
@@ -1738,7 +1801,7 @@
 	{/if}
 
 	{#if queueOpen}
-		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (queueOpen = false)}>
+		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (setModal(null))}>
 			<section class="music-library-modal" role="dialog" aria-modal="true" aria-label="播放队列">
 				<header class="music-library-header">
 					<div>
@@ -1746,7 +1809,7 @@
 						<h2>播放队列</h2>
 						<span class="music-muted">{queueSongs.length} 首 · 来源{queueSource === "daily" ? "每日推荐" : queueSource === "search" ? "搜索结果" : "当前歌单"}</span>
 					</div>
-					<button class="music-icon-button" type="button" aria-label="关闭播放队列" on:click={() => (queueOpen = false)}><Icon icon="material-symbols:close-rounded" /></button>
+					<button class="music-icon-button" type="button" aria-label="关闭播放队列" on:click={() => (setModal(null))}><Icon icon="material-symbols:close-rounded" /></button>
 				</header>
 				<div class="music-library-toolbar">
 					<div class="music-library-toolbar__left">
@@ -1763,7 +1826,7 @@
 					{:else}
 						{#each queueSongs as song, i}
 							<div class="music-library-row" class:music-queue-row--current={currentSong?.hash === song.hash}>
-								<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => { queueOpen = false; void playSong(song); }}>
+								<button class:music-song--active={currentSong?.hash === song.hash} class="music-song" type="button" on:click={() => { setModal(null); void playSong(song); }}>
 									<span class="music-song-index">{currentSong?.hash === song.hash ? "▶" : String(i + 1).padStart(2, "0")}</span>
 									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="eager" decoding="async" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}</small></span>
