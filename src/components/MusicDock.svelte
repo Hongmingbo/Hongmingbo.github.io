@@ -1605,8 +1605,9 @@
 			}
 			if (event.ctrlKey || event.metaKey || event.altKey) return;
 			// 面板还没播放过（无当前歌曲）时，除空格外的键没有意义。
+			// 用户裁定：只用空格与方向键，不绑字母键（避免和正常输入/页面快捷键冲突）。
 			const hasSong = Boolean(currentSong);
-			if (event.code === "Space" || event.key === "k") {
+			if (event.code === "Space") {
 				// togglePlay 自带「续播上次/首播列表第一首」兜底，这里只要有任何可播内容就放行。
 				if (!hasSong && !queueSongs.length && !songs.length) return;
 				event.preventDefault();
@@ -1614,22 +1615,22 @@
 				return;
 			}
 			if (!hasSong) return;
-			if (event.key === "ArrowRight" || event.key === "l") {
+			if (event.key === "ArrowRight") {
 				event.preventDefault();
 				void playNext();
 				return;
 			}
-			if (event.key === "ArrowLeft" || event.key === "j") {
+			if (event.key === "ArrowLeft") {
 				event.preventDefault();
 				void playPrevious();
 				return;
 			}
-			if (event.key === "ArrowUp" || event.key === "u") {
+			if (event.key === "ArrowUp") {
 				event.preventDefault();
 				adjustVolume(0.05);
 				return;
 			}
-			if (event.key === "ArrowDown" || event.key === "d") {
+			if (event.key === "ArrowDown") {
 				event.preventDefault();
 				adjustVolume(-0.05);
 			}
