@@ -1623,21 +1623,25 @@
 				<div class="music-panel-actions">
 					<span class="music-header-account">{auth ? (auth.nickname ?? `酷狗用户 ${auth.userid}`) : "未登录"}</span>
 					{#if vipState !== "idle"}
-						<span class:music-vip-badge--ok={vipState === "claimed"} class:music-vip-badge--risk={vipState === "risk" || vipState === "error"} class="music-vip-badge" title={vipMessage}>{vipState === "checking" ? "VIP…" : vipState === "claimed" ? "VIP OK" : "需验证"}</span>
-					{/if}
-					{#if currentSong}
-						<button class="music-icon-button" type="button" aria-label="全屏播放" title="全屏播放" on:click={toggleFullscreen}><Icon icon="material-symbols:fullscreen-rounded" /></button>
-					{/if}
+						<span class:music-vip-badge--ok={vipState === "claimed"} class:music-vip-badge--risk={vipState === "risk" || vipState === "error"} class="music-vip-badge" title={vipMessage}>{vipState === "checking" ? "VIP…" : vipState === "claimed" ? "VIP OK" : "需验证"}</span>{/if}
 					{#if auth}
 						{#if adminConfigured}<button class="music-quiet music-quiet--tiny" type="button" aria-label="保存当前登录凭据" title="保存当前登录，供管理员口令快速登录" on:click={() => { loginMode = "admin"; showLogin = true; }}>保存登录</button>{/if}
-						<button class="music-icon-button" type="button" aria-label="退出登录" title="退出登录" on:click={logout}><Icon icon="material-symbols:logout-rounded" /></button>
 					{:else}
 						<button class="music-quiet music-quiet--tiny" type="button" on:click={() => (showLogin = true)}>登录</button>
 					{/if}
 					<button class:music-quiet--on={historyOpen} class="music-icon-button" type="button" aria-label="播放历史" title="播放历史" on:click={() => (setModal(historyOpen ? null : "history"))}><Icon icon="material-symbols:history-rounded" /></button>
 					<button class:music-quiet--on={queueOpen} class="music-icon-button" type="button" aria-label="播放队列" title={`播放队列${queueSongs.length > 0 ? `（${queueSongs.length} 首）` : ""}`} on:click={() => (setModal(queueOpen ? null : "queue"))}><Icon icon="material-symbols:queue-music-rounded" /></button>
+					{#if currentSong}
+						<button class="music-icon-button" type="button" aria-label="全屏播放" title="全屏播放" on:click={toggleFullscreen}><Icon icon="material-symbols:fullscreen-rounded" /></button>
+					{/if}
 					<button class="music-icon-button" type="button" aria-label={apiStatus !== "ready" || showSettings ? "返回播放器" : "音乐服务设置"} title={apiStatus !== "ready" || showSettings ? "返回播放器" : "音乐服务设置"} on:click={toggleSettings}><Icon icon="material-symbols:tune-rounded" /></button>
+					{#if auth}
+						<button class="music-icon-button" type="button" aria-label="退出登录" title="退出登录" on:click={logout}><Icon icon="material-symbols:logout-rounded" /></button>
+					{/if}
 					<button class="music-icon-button" type="button" aria-label="关闭音乐面板" on:click={() => (expanded = false)}>
+						<Icon icon="material-symbols:close-rounded" />
+					</button>
+<button class="music-icon-button" type="button" aria-label="关闭音乐面板" on:click={() => (expanded = false)}>
 						<Icon icon="material-symbols:close-rounded" />
 					</button>
 				</div>
