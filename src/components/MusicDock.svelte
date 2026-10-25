@@ -1641,11 +1641,8 @@
 					<button class="music-icon-button" type="button" aria-label="关闭音乐面板" on:click={() => (expanded = false)}>
 						<Icon icon="material-symbols:close-rounded" />
 					</button>
-<button class="music-icon-button" type="button" aria-label="关闭音乐面板" on:click={() => (expanded = false)}>
-						<Icon icon="material-symbols:close-rounded" />
-					</button>
-				</div>
-			</header>
+					</div>
+					</header>
 
 			{#if apiStatus !== "ready" || showSettings}
 				<div class="music-config-block music-config-block--full">
