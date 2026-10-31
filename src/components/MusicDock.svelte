@@ -10,6 +10,8 @@
 		normalizeAudioQuality,
 		pushSearchHistory,
 		qualityLabel,
+		audioExtensionFor,
+		buildDownloadName,
 		MusicApiClient,
 		MusicApiError,
 		MusicRiskVerifyError,
@@ -107,6 +109,8 @@
 	const SEARCH_HISTORY_KEY = "hengduo-music-search-history";
 	let searchHistory: string[] = [];
 	let searchHistoryOpen = false;
+	// 下载是串行的一次一个：并发大文件会同时占内存与带宽，体验反而更差。
+	let downloadingHash: string | null = null;
 	let dailySongs: MusicSong[] = [];
 	let dailyLoading = false;
 	let dailyMessage = "点击加载今日推荐";
@@ -693,6 +697,43 @@
 				}
 			}
 			setNotice(errorMessage(error, "音质切换失败"));
+		}
+	};
+
+	// 把 Blob 存成文件：object URL 只在本次点击期间有效，用完即释放。
+	const saveBlobAsFile = (blob: Blob, filename: string) => {
+		const href = URL.createObjectURL(blob);
+		const anchor = document.createElement("a");
+		anchor.href = href;
+		anchor.download = filename;
+		anchor.rel = "noopener";
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+		setTimeout(() => URL.revokeObjectURL(href), 4000);
+	};
+
+	const downloadSong = async (song: MusicSong) => {
+		if (!client || !auth) {
+			setNotice("请先登录后再下载");
+			showLogin = true;
+			return;
+		}
+		if (downloadingHash) {
+			setNotice("已有下载任务进行中，请稍候");
+			return;
+		}
+		downloadingHash = song.hash;
+		setNotice(`正在下载「${song.name}」…`);
+		try {
+			const blob = await client.getTrackBlob(song.hash, audioQuality);
+			const ext = audioExtensionFor(blob.type, audioQuality);
+			saveBlobAsFile(blob, buildDownloadName(song.name, song.author, ext));
+			setNotice(`已保存「${song.name}」（${Math.max(1, Math.round(blob.size / 1024))} KB）`);
+		} catch (error) {
+			setNotice(errorMessage(error, "下载失败"));
+		} finally {
+			downloadingHash = null;
 		}
 	};
 
@@ -1858,6 +1899,9 @@
 							{/if}
 							</div>
 							{#if currentSong}
+							<button class="music-icon-button music-download-button" type="button" disabled={downloadingHash === currentSong.hash} aria-label={`下载「${currentSong.name}」`} title={`下载到本地（${qualityLabel(audioQuality)}）`} on:click={() => void downloadSong(currentSong)}>
+								<Icon icon={downloadingHash === currentSong.hash ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} />
+							</button>
 							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? `取消收藏「${currentSong.name}」` : `收藏「${currentSong.name}」到当前歌单`} title={isFavorite ? "点击取消收藏（5 秒后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}>
 								<Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} />
 							</button>
@@ -1881,6 +1925,11 @@
 							</button>
 				
 						</span>
+						{#if currentSong}
+							<button class="music-icon-button music-fullscreen__download" type="button" disabled={downloadingHash === currentSong.hash} aria-label={`下载「${currentSong.name}」`} title={`下载到本地（${qualityLabel(audioQuality)}）`} on:click={() => void downloadSong(currentSong)}>
+								<Icon icon={downloadingHash === currentSong.hash ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} />
+							</button>
+						{/if}
 					</div>
 					<div class="music-volume-row">
 						<label class="music-volume" aria-label="音量">
@@ -2035,6 +2084,7 @@
 										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 									</button>
 									<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（5 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（5 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，5 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
+								<button class="music-search-download" type="button" disabled={downloadingHash === song.hash} aria-label={`下载 ${song.name}`} title="下载到本地" on:click={() => void downloadSong(song)}><Icon icon={downloadingHash === song.hash ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} /></button>
 								</div>
 							{/each}
 						{:else}
@@ -2374,6 +2424,16 @@
 	.music-library-row { display: flex; align-items: center; gap: 0.25rem; min-width: 0; padding-right: 0.35rem; }
 	.music-library-row > .music-song { min-width: 0; flex: 1; }
 	.music-library-row .music-search-favorite { flex: 0 0 2.1rem; margin-left: 0.45rem; }
+	/* 行内下载按钮与收藏按钮同尺寸同风格，避免多出一个视觉重量。 */
+	.music-search-download { display: grid; place-items: center; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 45%, transparent); border-radius: 0.6rem; color: var(--md-tone-muted); background: transparent; cursor: pointer; transition: color 160ms ease, border-color 160ms ease, background 160ms ease; }
+	.music-search-download:hover:not(:disabled) { border-color: color-mix(in oklch, var(--primary) 30%, transparent); color: var(--primary); background: color-mix(in oklch, var(--primary) 8%, transparent); }
+	.music-search-download:disabled { opacity: 0.55; cursor: progress; }
+	.music-download-button { flex: 0 0 auto; }
+	/* 面板里下载与爱心都在右侧：只让「第一个」吃 auto 边距，否则两个 auto
+	   会把空白平分、按钮被推到中间去。 */
+	.music-now-playing .music-download-button { margin-left: auto; }
+	.music-now-playing .music-download-button + .music-favorite { margin-left: 0.35rem; }
+	.music-fullscreen__download { color: rgb(226 232 240); }
 	.music-pending-hint { padding: 0.12rem 0.45rem; border-radius: 999px; color: #c05640; background: color-mix(in oklch, #c05640 9%, transparent); font-size: 0.6rem; white-space: nowrap; }
 	.music-library-empty { display: grid; min-height: 12rem; place-items: center; padding: 1rem; text-align: center; }
 	.music-quiet--danger { color: #c05640; border-color: color-mix(in oklch, #c05640 36%, transparent); }
@@ -2656,6 +2716,7 @@
 		.music-song-index { width: 1.15rem; font-size: 0.56rem; }
 		.music-song-cover { flex: 0 0 1.8rem; width: 1.8rem; height: 1.8rem; }
 		.music-search-favorite { flex: 0 0 1.9rem; width: 1.9rem; height: 1.9rem; font-size: 1rem; }
+	.music-search-download { flex: 0 0 1.9rem; width: 1.9rem; height: 1.9rem; font-size: 1rem; }
 		.music-song-info strong { font-size: 0.72rem; }
 		.music-song-info small { font-size: 0.6rem; }
 

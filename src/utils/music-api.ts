@@ -322,6 +322,40 @@ export const qualityLabel = (value: AudioQuality | string): string =>
 
 /** 搜索历史：去重（trim + 大小写不敏感）、新词置顶、上限 10 条。
  * 存储里可能是任何形状（旧数据/损坏 JSON），一律容错。 */
+/** 下载文件名：过滤文件系统保留字符与控制符，压平空白，去掉开头的点
+ * （避免生成隐藏文件或相对路径），并限制长度。全空时给一个占位名。 */
+export const sanitizeDownloadFilename = (raw: string, fallback = "track"): string => {
+	const cleaned = String(raw ?? "")
+		.replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/^\.+/, "")
+		.trim()
+		.slice(0, 120)
+		.trim();
+	return cleaned || fallback;
+};
+
+/** 依据上游 Content-Type 判定扩展名；拿不到类型时回落到音质档位。 */
+export const audioExtensionFor = (contentType: string | undefined, quality?: string): string => {
+	const type = String(contentType || "").toLowerCase();
+	if (type.includes("flac")) return "flac";
+	if (type.includes("mp4") || type.includes("m4a") || type.includes("aac")) return "m4a";
+	if (type.includes("mpeg") || type.includes("mp3")) return "mp3";
+	return String(quality || "").toLowerCase() === "flac" ? "flac" : "mp3";
+};
+
+const DOWNLOAD_EXTENSIONS = ["mp3", "flac", "m4a"] as const;
+
+/** 组合「歌名 - 歌手.扩展名」；扩展名只允许白名单，歌手为空时不留尾随分隔符。 */
+export const buildDownloadName = (name: string, author: string, ext: string): string => {
+	const safeExt = (DOWNLOAD_EXTENSIONS as readonly string[]).includes(String(ext).toLowerCase())
+		? String(ext).toLowerCase()
+		: "mp3";
+	const title = [String(name ?? "").trim(), String(author ?? "").trim()].filter(Boolean).join(" - ");
+	return `${sanitizeDownloadFilename(title, "track")}.${safeExt}`;
+};
+
 export const SEARCH_HISTORY_LIMIT = 10;
 export const pushSearchHistory = (stored: unknown, keyword: string): string[] => {
 	const trimmed = String(keyword || "").trim();
@@ -612,6 +646,58 @@ export class MusicApiClient {
 		// authenticates the request; this never resolves or exposes an upstream media URL.
 		const streamQuery = quality ? `?quality=${encodeURIComponent(quality)}` : "";
 		return `${this.baseUrl}/tracks/${encodeURIComponent(hash)}/stream${streamQuery}`;
+	}
+
+	/** 取整首歌的二进制（下载用）。鉴权与播放一致，走同一个 BFF 会话 Cookie；
+	 * 上游拒绝/风控/未登录都会以 JSON 错误体返回，这里统一转成可读异常，
+	 * 避免把错误 JSON 当成音频存成损坏文件。
+	 *
+	 * 优先走 /download（专用路由，超时 180s，适合无损大文件）。旧版 BFF 还没有
+	 * 该路由时会 404——此时回落到 /stream 取整首，功能立刻可用；后端重启后
+	 * 自动改用下载路由，无需再改前端。 */
+	async getTrackBlob(hash: string, quality?: string): Promise<Blob> {
+		if (!this.baseUrl) throw new MusicApiError("音乐服务尚未配置");
+		try {
+			return await this.fetchTrackBytes(hash, quality, "download");
+		} catch (error) {
+			if (error instanceof MusicApiError && error.status === 404) {
+				return await this.fetchTrackBytes(hash, quality, "stream");
+			}
+			throw error;
+		}
+	}
+
+	private async fetchTrackBytes(hash: string, quality: string | undefined, route: "download" | "stream"): Promise<Blob> {
+		const url = new URL(`${this.baseUrl}/tracks/${encodeURIComponent(hash)}/${route}`);
+		if (quality) url.searchParams.set("quality", quality);
+		const response = await fetch(url, { credentials: "include", cache: "no-store" });
+		if (!response.ok) {
+			let payload: any = null;
+			try {
+				payload = await response.json();
+			} catch {
+				/* 错误体不是 JSON（例如网关返回 HTML）时保持 payload 为空 */
+			}
+			if (response.status === 423 && payload?.error_code === "RISK_VERIFY_REQUIRED") {
+				const data = payload?.data ?? {};
+				throw new MusicRiskVerifyError(String(payload?.message || "需要完成安全验证"), payload, {
+					eventid: String(data.eventid || data.ssaCode || ""),
+					ssaCode: data.ssaCode ? String(data.ssaCode) : undefined,
+					edt: String(data.edt || ""),
+					sid: String(data.sid || ""),
+					hash: String(data.hash || hash),
+				});
+			}
+			throw new MusicApiError(
+				responseMessage(payload) || `下载失败（HTTP ${response.status}）`,
+				payload,
+				response.status,
+				responseErrorCode(payload),
+			);
+		}
+		const blob = await response.blob();
+		if (blob.size === 0) throw new MusicApiError("下载内容为空，可能是该歌曲无可用音源");
+		return blob;
 	}
 
 	async getLyrics(hash: string, durationMs = 0): Promise<string> {

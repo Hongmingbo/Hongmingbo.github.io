@@ -23,6 +23,9 @@ import {
 	isSongInPlaylist,
 	normalizeAudioQuality,
 	qualityLabel,
+	sanitizeDownloadFilename,
+	audioExtensionFor,
+	buildDownloadName,
 	pushSearchHistory,
 	responseData,
 	responseSucceeded,
@@ -90,6 +93,34 @@ assert.equal(h4.length, 10);
 assert.equal(h4[0], "k14");
 assert.deepEqual(pushSearchHistory(["a"], "   "), ["a"]); // 空白忽略
 assert.deepEqual(pushSearchHistory(null as unknown as string[], "x"), ["x"]); // 坏存储容错
+
+// 下载文件名：必须过滤文件系统保留字符/控制符，且不能以点开头（隐藏文件/相对路径）。
+assert.equal(sanitizeDownloadFilename("晴天"), "晴天");
+assert.equal(sanitizeDownloadFilename("AC/DC - Back"), "AC DC - Back");
+assert.equal(sanitizeDownloadFilename('a\\b:c*d?e"f<g>h|i'), "a b c d e f g h i");
+assert.equal(sanitizeDownloadFilename("  ..hidden  "), "hidden");
+assert.equal(sanitizeDownloadFilename(""), "track");
+assert.equal(sanitizeDownloadFilename("   "), "track");
+assert.equal(sanitizeDownloadFilename("x".repeat(200)).length, 120);
+assert.equal(sanitizeDownloadFilename("a\u0000b\u001fc"), "a b c");
+
+// 扩展名：按上游 Content-Type 判定，未知时回落到音质档位。
+assert.equal(audioExtensionFor("audio/mpeg"), "mp3");
+assert.equal(audioExtensionFor("audio/flac"), "flac");
+assert.equal(audioExtensionFor("audio/x-flac"), "flac");
+assert.equal(audioExtensionFor("audio/mp4"), "m4a");
+assert.equal(audioExtensionFor("audio/aac"), "m4a");
+assert.equal(audioExtensionFor(undefined, "flac"), "flac");
+assert.equal(audioExtensionFor("", "128"), "mp3");
+assert.equal(audioExtensionFor("application/octet-stream", "320"), "mp3");
+
+// 组合文件名：歌手缺失时不留尾随分隔符；扩展名只允许白名单。
+assert.equal(buildDownloadName("晴天", "周杰伦", "mp3"), "晴天 - 周杰伦.mp3");
+assert.equal(buildDownloadName("晴天", "", "mp3"), "晴天.mp3");
+assert.equal(buildDownloadName("", "", "mp3"), "track.mp3");
+assert.equal(buildDownloadName("晴天", "周杰伦", "FLAC"), "晴天 - 周杰伦.flac");
+assert.equal(buildDownloadName("晴天", "周杰伦", "exe"), "晴天 - 周杰伦.mp3");
+assert.equal(buildDownloadName("A/B", "C:D", "flac"), "A B - C D.flac");
 
 const filenameTracks = {
 	status: 1,
