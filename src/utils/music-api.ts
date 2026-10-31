@@ -356,6 +356,205 @@ export const buildDownloadName = (name: string, author: string, ext: string): st
 	return `${sanitizeDownloadFilename(title, "track")}.${safeExt}`;
 };
 
+// ===== 下载队列模型 =====
+// 纯逻辑，不碰网络与 DOM：并发调度、进度推进、去重、历史裁剪都在这里定死，
+// 由契约测试锁定，UI 只负责渲染。
+export type DownloadStatus = "queued" | "running" | "done" | "failed" | "canceled";
+
+export interface DownloadRecord {
+	id: string;
+	hash: string;
+	name: string;
+	author: string;
+	quality: string;
+	status: DownloadStatus;
+	loaded: number;
+	total: number;
+	/** 完成后的实际字节数；未完成时为 0。 */
+	size: number;
+	attempt: number;
+	error?: string;
+	createdAt: number;
+	finishedAt?: number;
+}
+
+export const DOWNLOAD_QUEUE_LIMIT = 100;
+export const DOWNLOAD_HISTORY_LIMIT = 50;
+export const DOWNLOAD_CONCURRENCY_MIN = 1;
+export const DOWNLOAD_CONCURRENCY_MAX = 4;
+export const DOWNLOAD_CONCURRENCY_DEFAULT = 2;
+
+/** 并发数白名单化：非法输入回落到默认值，越界夹到边界。 */
+export const clampDownloadConcurrency = (value: unknown): number => {
+	const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+	if (!Number.isFinite(parsed)) return DOWNLOAD_CONCURRENCY_DEFAULT;
+	const floored = Math.trunc(parsed);
+	if (floored < DOWNLOAD_CONCURRENCY_MIN) return DOWNLOAD_CONCURRENCY_MIN;
+	if (floored > DOWNLOAD_CONCURRENCY_MAX) return DOWNLOAD_CONCURRENCY_MAX;
+	return floored;
+};
+
+export const formatBytes = (bytes: number): string => {
+	const value = Number(bytes);
+	if (!Number.isFinite(value) || value <= 0) return "0 B";
+	if (value < 1024) return `${Math.round(value)} B`;
+	if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+	if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+	return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+};
+
+/** 百分比：总长未知返回 null（UI 用不确定态），否则夹在 0..100。 */
+export const downloadProgressPercent = (loaded: number, total: number): number | null => {
+	const l = Number(loaded);
+	const t = Number(total);
+	if (!Number.isFinite(t) || t <= 0) return null;
+	if (!Number.isFinite(l) || l <= 0) return 0;
+	if (l >= t) return 100;
+	return Math.round((l / t) * 100);
+};
+
+export const isDownloadActive = (record: { status: DownloadStatus }): boolean =>
+	record.status === "queued" || record.status === "running";
+
+let downloadSeq = 0;
+const nextDownloadId = (): string => {
+	downloadSeq += 1;
+	return `dl-${Date.now().toString(36)}-${downloadSeq.toString(36)}`;
+};
+
+/** 同一首歌可以有多条历史记录（重下/换音质），因此 id 必须独立于 hash。 */
+export const createDownloadRecord = (
+	song: { hash: string; name: string; author: string; quality: string },
+	attempt = 1,
+): DownloadRecord => ({
+	id: nextDownloadId(),
+	hash: String(song.hash || "").toLowerCase(),
+	name: String(song.name || ""),
+	author: String(song.author || ""),
+	quality: String(song.quality || "128"),
+	status: "queued",
+	loaded: 0,
+	total: 0,
+	size: 0,
+	attempt,
+	createdAt: Date.now(),
+});
+
+/** 状态推进唯一入口：进度单调、终态粘滞。 */
+export const updateDownloadRecord = (
+	record: DownloadRecord,
+	patch: Partial<Pick<DownloadRecord, "loaded" | "total" | "size" | "status" | "error">>,
+): DownloadRecord => {
+	const next: DownloadRecord = { ...record };
+	// 终态不可被迟到回调改写：只有当前仍是活动态时才接受 running/queued。
+	const incomingStatus = patch.status;
+	const isTerminal = (status?: DownloadStatus) =>
+		status === "done" || status === "failed" || status === "canceled";
+	if (incomingStatus && isTerminal(record.status) && !isTerminal(incomingStatus)) {
+		return next;
+	}
+	if (patch.total !== undefined && Number.isFinite(patch.total) && patch.total > 0) {
+		next.total = patch.total;
+	}
+	if (patch.loaded !== undefined && Number.isFinite(patch.loaded)) {
+		next.loaded = Math.max(next.loaded, patch.loaded, 0);
+		// 已经有进度却还标着 queued 是自相矛盾的：自动进入 running，
+		// 免得每个进度回调都要额外传一次 status。
+		if (next.status === "queued" && next.loaded > 0) next.status = "running";
+	}
+	if (patch.size !== undefined && Number.isFinite(patch.size) && patch.size > 0) {
+		next.size = patch.size;
+	}
+	if (patch.error !== undefined) next.error = String(patch.error);
+	if (incomingStatus) {
+		next.status = incomingStatus;
+		if (incomingStatus === "running" && next.loaded === 0 && !next.error) {
+			// 开跑时清掉上一轮的错误，避免重试成功后仍显示旧错误。
+			delete next.error;
+		}
+		if (isTerminal(incomingStatus)) {
+			next.finishedAt = Date.now();
+			if (incomingStatus === "done" && next.size === 0 && next.loaded > 0) {
+				next.size = next.loaded;
+			}
+		}
+	}
+	return next;
+};
+
+/** 入队：同 hash 已在活动态则跳过；已完成的不阻塞（换音质重下是合法的）。 */
+export const enqueueDownloads = (
+	existing: DownloadRecord[],
+	songs: Array<{ hash: string; name: string; author: string; quality: string }>,
+	attempt = 1,
+): { added: DownloadRecord[]; skipped: Array<{ hash: string }>; rejected: Array<{ hash: string }>; records: DownloadRecord[] } => {
+	const records = [...existing];
+	const added: DownloadRecord[] = [];
+	const skipped: Array<{ hash: string }> = [];
+	const rejected: Array<{ hash: string }> = [];
+	for (const song of songs) {
+		const hash = String(song.hash || "").toLowerCase();
+		if (!hash) continue;
+		const active = records.some((r) => r.hash === hash && isDownloadActive(r));
+		if (active) {
+			skipped.push({ hash });
+			continue;
+		}
+		const activeCount = records.filter(isDownloadActive).length;
+		if (activeCount >= DOWNLOAD_QUEUE_LIMIT) {
+			rejected.push({ hash });
+			continue;
+		}
+		const record = createDownloadRecord({ ...song, hash, quality: song.quality ?? "128" }, attempt);
+		records.push(record);
+		added.push(record);
+	}
+	return { added, skipped, rejected, records };
+};
+
+/** 按剩余槽位取下一批待跑任务（先入先出），纯函数不发起任何请求。 */
+export const nextDownloadBatch = (records: DownloadRecord[], freeSlots: number): DownloadRecord[] => {
+	const slots = Math.max(0, Math.trunc(Number(freeSlots) || 0));
+	if (slots === 0) return [];
+	return records.filter((r) => r.status === "queued").slice(0, slots);
+};
+
+export const summarizeDownloads = (records: DownloadRecord[]) => {
+	const summary = { total: records.length, done: 0, failed: 0, canceled: 0, running: 0, queued: 0, active: 0 };
+	for (const record of records) {
+		switch (record.status) {
+			case "done":
+				summary.done += 1;
+				break;
+			case "failed":
+				summary.failed += 1;
+				break;
+			case "canceled":
+				summary.canceled += 1;
+				break;
+			case "running":
+				summary.running += 1;
+				break;
+			default:
+				summary.queued += 1;
+		}
+	}
+	summary.active = summary.running + summary.queued;
+	return summary;
+};
+
+/** 按创建时间保留最近 N 条，但活动任务一律保留（否则下载还在跑却没有 UI 入口）。 */
+export const pruneDownloadHistory = (records: DownloadRecord[], limit = DOWNLOAD_HISTORY_LIMIT): DownloadRecord[] => {
+	if (records.length <= limit) return records;
+	const active = records.filter(isDownloadActive);
+	const finished = records
+		.filter((r) => !isDownloadActive(r))
+		.slice()
+		.sort((a, b) => b.createdAt - a.createdAt)
+		.slice(0, Math.max(0, limit - active.length));
+	return [...active, ...finished];
+};
+
 export const SEARCH_HISTORY_LIMIT = 10;
 export const pushSearchHistory = (stored: unknown, keyword: string): string[] => {
 	const trimmed = String(keyword || "").trim();
@@ -655,22 +854,38 @@ export class MusicApiClient {
 	 * 优先走 /download（专用路由，超时 180s，适合无损大文件）。旧版 BFF 还没有
 	 * 该路由时会 404——此时回落到 /stream 取整首，功能立刻可用；后端重启后
 	 * 自动改用下载路由，无需再改前端。 */
-	async getTrackBlob(hash: string, quality?: string): Promise<Blob> {
+	async getTrackBlob(
+		hash: string,
+		quality?: string,
+		options: {
+			/** 每收到一段数据回调一次，用于进度条。total 未知时为 0。 */
+			onProgress?: (loaded: number, total: number) => void;
+			/** 取消信号：中止后 fetch 与流读取都会立刻停止。 */
+			signal?: AbortSignal;
+		} = {},
+	): Promise<Blob> {
 		if (!this.baseUrl) throw new MusicApiError("音乐服务尚未配置");
 		try {
-			return await this.fetchTrackBytes(hash, quality, "download");
+			return await this.fetchTrackBytes(hash, quality, "download", options);
 		} catch (error) {
+			// 只有「路由不存在」才回落到 stream；真实业务错误（401/423/502）不能重试，
+			// 否则会把一次风控挑战变成两次上游请求。
 			if (error instanceof MusicApiError && error.status === 404) {
-				return await this.fetchTrackBytes(hash, quality, "stream");
+				return await this.fetchTrackBytes(hash, quality, "stream", options);
 			}
 			throw error;
 		}
 	}
 
-	private async fetchTrackBytes(hash: string, quality: string | undefined, route: "download" | "stream"): Promise<Blob> {
+	private async fetchTrackBytes(
+		hash: string,
+		quality: string | undefined,
+		route: "download" | "stream",
+		options: { onProgress?: (loaded: number, total: number) => void; signal?: AbortSignal } = {},
+	): Promise<Blob> {
 		const url = new URL(`${this.baseUrl}/tracks/${encodeURIComponent(hash)}/${route}`);
 		if (quality) url.searchParams.set("quality", quality);
-		const response = await fetch(url, { credentials: "include", cache: "no-store" });
+		const response = await fetch(url, { credentials: "include", cache: "no-store", signal: options.signal });
 		if (!response.ok) {
 			let payload: any = null;
 			try {
@@ -695,9 +910,40 @@ export class MusicApiClient {
 				responseErrorCode(payload),
 			);
 		}
-		const blob = await response.blob();
-		if (blob.size === 0) throw new MusicApiError("下载内容为空，可能是该歌曲无可用音源");
-		return blob;
+
+		const declaredTotal = Number(response.headers.get("content-length") || 0) || 0;
+		// 没有可读流（老浏览器/被代理包装）时退回一次性读取，功能不退化。
+		if (!response.body) {
+			const fallback = await response.blob();
+			if (fallback.size === 0) throw new MusicApiError("下载内容为空，可能是该歌曲无可用音源");
+			options.onProgress?.(fallback.size, fallback.size);
+			return fallback;
+		}
+
+		const reader = response.body.getReader();
+		const chunks: Uint8Array[] = [];
+		let loaded = 0;
+		try {
+			for (;;) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				if (value) {
+					chunks.push(value);
+					loaded += value.byteLength;
+					options.onProgress?.(loaded, declaredTotal);
+				}
+			}
+		} catch (error) {
+			// 取消或网络中断：显式释放 reader，避免连接悬挂。
+			try {
+				await reader.cancel();
+			} catch {
+				/* 已经断开时 cancel 会抛，忽略 */
+			}
+			throw error;
+		}
+		if (loaded === 0) throw new MusicApiError("下载内容为空，可能是该歌曲无可用音源");
+		return new Blob(chunks as BlobPart[], { type: response.headers.get("content-type") || "audio/mpeg" });
 	}
 
 	async getLyrics(hash: string, durationMs = 0): Promise<string> {

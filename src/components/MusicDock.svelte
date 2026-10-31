@@ -12,6 +12,19 @@
 		qualityLabel,
 		audioExtensionFor,
 		buildDownloadName,
+		clampDownloadConcurrency,
+		createDownloadRecord,
+		enqueueDownloads,
+		nextDownloadBatch,
+		updateDownloadRecord,
+		pruneDownloadHistory,
+		summarizeDownloads,
+		downloadProgressPercent,
+		formatBytes,
+		isDownloadActive,
+		DOWNLOAD_CONCURRENCY_DEFAULT,
+		DOWNLOAD_HISTORY_LIMIT,
+		type DownloadRecord,
 		MusicApiClient,
 		MusicApiError,
 		MusicRiskVerifyError,
@@ -109,8 +122,7 @@
 	const SEARCH_HISTORY_KEY = "hengduo-music-search-history";
 	let searchHistory: string[] = [];
 	let searchHistoryOpen = false;
-	// 下载是串行的一次一个：并发大文件会同时占内存与带宽，体验反而更差。
-	let downloadingHash: string | null = null;
+	// 下载状态见下方 downloadRecords 队列（并发可配，支持取消与历史）。
 	let dailySongs: MusicSong[] = [];
 	let dailyLoading = false;
 	let dailyMessage = "点击加载今日推荐";
@@ -138,15 +150,17 @@
 	// click handler 各自驱动时，一旦某个 effect 抛错就会被丢弃，出现
 	// 「按钮变色但面板不渲染」的状态与视图分叉。改成单一枚举，只留一条
 	// {#if} 链，避免跨 effect 干扰。
-	type ActiveModal = "library" | "queue" | "history" | null;
+	type ActiveModal = "library" | "queue" | "history" | "downloads" | null;
 	let activeModal: ActiveModal = null;
 	// 派生视图状态必须显式声明，否则 $: 赋值会落到未声明变量上。
 	let queueOpen = false;
 	let historyOpen = false;
 	let libraryOpen = false;
+	let downloadsOpen = false;
 	$: queueOpen = activeModal === "queue";
 	$: historyOpen = activeModal === "history";
 	$: libraryOpen = activeModal === "library";
+	$: downloadsOpen = activeModal === "downloads";
 	// 兼容既有赋值点：所有 xxxOpen = true/false 都转成 activeModal 的切换。
 	const setModal = (next: ActiveModal) => {
 		activeModal = next;
@@ -713,28 +727,179 @@
 		setTimeout(() => URL.revokeObjectURL(href), 4000);
 	};
 
-	const downloadSong = async (song: MusicSong) => {
+	// ===== 下载队列引擎 =====
+	// 状态与规则全部来自 music-api 的纯函数（已由契约测试锁定），这里只做接线。
+	const DOWNLOADS_KEY = "hengduo-music-downloads";
+	const DOWNLOAD_CONCURRENCY_KEY = "hengduo-music-download-concurrency";
+	let downloadRecords: DownloadRecord[] = [];
+	let downloadConcurrency = DOWNLOAD_CONCURRENCY_DEFAULT;
+	let downloadSummary = summarizeDownloads([]);
+	// 每个任务的取消入口；用 Map 而不是塞进记录里，避免把 AbortController
+	// 写进 localStorage（不可序列化）。
+	const downloadAborts = new Map<string, AbortController>();
+	// 正在跑的任务 id：$: 反复执行时用来防重复启动。
+	const downloadInflight = new Set<string>();
+
+	$: downloadSummary = summarizeDownloads(downloadRecords);
+
+	const persistDownloads = () => {
+		downloadRecords = pruneDownloadHistory(downloadRecords, DOWNLOAD_HISTORY_LIMIT);
+		try {
+			safeStorage.set(DOWNLOADS_KEY, JSON.stringify(downloadRecords));
+		} catch {
+			/* 历史只是便利功能，存储失败不影响下载 */
+		}
+	};
+
+	const loadDownloadState = () => {
+		const savedConcurrency = safeStorage.get(DOWNLOAD_CONCURRENCY_KEY);
+		if (savedConcurrency !== null) downloadConcurrency = clampDownloadConcurrency(savedConcurrency);
+		try {
+			const raw = safeStorage.get(DOWNLOADS_KEY);
+			const parsed = raw ? JSON.parse(raw) : [];
+			if (!Array.isArray(parsed)) return;
+			// 上次会话里没跑完的任务不该显示成「进行中」：统一标成已中断，
+			// 让用户能明确地重新点击下载，而不是看着一个永远不动的进度条。
+			downloadRecords = parsed
+				.filter((item) => item && typeof item.hash === "string")
+				.map((item) => (isDownloadActive(item) ? updateDownloadRecord(item, { status: "failed", error: "上次会话被中断" }) : item));
+		} catch {
+			downloadRecords = [];
+		}
+	};
+
+	const setDownloadConcurrency = (next: unknown) => {
+		downloadConcurrency = clampDownloadConcurrency(next);
+		safeStorage.set(DOWNLOAD_CONCURRENCY_KEY, String(downloadConcurrency));
+		setNotice(`同时下载数已设为 ${downloadConcurrency}`);
+		pumpDownloads();
+	};
+
+	const replaceDownloadRecord = (id: string, next: DownloadRecord) => {
+		downloadRecords = downloadRecords.map((record) => (record.id === id ? next : record));
+	};
+
+	const findDownloadRecord = (id: string): DownloadRecord | undefined => downloadRecords.find((record) => record.id === id);
+
+	/** 某一首歌当前的下载记录（用于按钮显示转圈/进度）。 */
+	const downloadRecordFor = (hash: string): DownloadRecord | undefined =>
+		downloadRecords.find((record) => record.hash === String(hash).toLowerCase() && isDownloadActive(record));
+
+	/** 真正的单个任务执行体：取字节 → 存文件 → 落状态。 */
+	const runDownload = async (record: DownloadRecord) => {
+		if (!client) return;
+		const controller = new AbortController();
+		downloadAborts.set(record.id, controller);
+		downloadInflight.add(record.id);
+		const patch = (next: Partial<DownloadRecord>) => {
+			const current = findDownloadRecord(record.id);
+			if (!current) return;
+			replaceDownloadRecord(record.id, updateDownloadRecord(current, next));
+		};
+		patch({ status: "running" });
+		try {
+			const blob = await client.getTrackBlob(record.hash, record.quality, {
+				signal: controller.signal,
+				onProgress: (loaded, total) => patch({ loaded, total }),
+			});
+			const ext = audioExtensionFor(blob.type, record.quality);
+			saveBlobAsFile(blob, buildDownloadName(record.name, record.author, ext));
+			patch({ status: "done", size: blob.size, loaded: blob.size, total: blob.size || record.total });
+		} catch (error) {
+			const current = findDownloadRecord(record.id);
+			// 用户主动取消：保留 canceled 语义，不当作失败弹提示。
+			if (current?.status === "canceled") {
+				/* 已在 cancelDownload 里落状态 */
+			} else if ((error as { name?: string })?.name === "AbortError") {
+				patch({ status: "canceled" });
+			} else {
+				patch({ status: "failed", error: errorMessage(error, "下载失败") });
+			}
+		} finally {
+			downloadAborts.delete(record.id);
+			downloadInflight.delete(record.id);
+			persistDownloads();
+			// 空出槽位后立刻让下一首补上。
+			pumpDownloads();
+		}
+	};
+
+	/** 调度器：按剩余槽位启动排队任务。可重入，靠 downloadInflight 兜底。 */
+	const pumpDownloads = () => {
+		if (!client) return;
+		const running = downloadRecords.filter((record) => record.status === "running" && downloadInflight.has(record.id)).length;
+		const free = Math.max(0, downloadConcurrency - running);
+		if (free === 0) return;
+		const candidates = nextDownloadBatch(downloadRecords, free).filter((record) => !downloadInflight.has(record.id));
+		for (const record of candidates) {
+			void runDownload(record);
+		}
+	};
+
+	const cancelDownload = (id: string) => {
+		const record = findDownloadRecord(id);
+		if (!record || !isDownloadActive(record)) return;
+		// 排队中的直接落终态；跑着的发 abort，交给 runDownload 的 catch 收尾。
+		replaceDownloadRecord(id, updateDownloadRecord(record, { status: "canceled" }));
+		downloadAborts.get(id)?.abort();
+		persistDownloads();
+		pumpDownloads();
+	};
+
+	const retryDownload = (id: string) => {
+		const record = findDownloadRecord(id);
+		if (!record) return;
+		replaceDownloadRecord(
+			id,
+			updateDownloadRecord(
+				{ ...record, loaded: 0, total: 0, size: 0, finishedAt: undefined, error: undefined, attempt: record.attempt + 1 },
+				{ status: "queued" },
+			),
+		);
+		persistDownloads();
+		pumpDownloads();
+	};
+
+	const clearFinishedDownloads = () => {
+		downloadRecords = downloadRecords.filter(isDownloadActive);
+		persistDownloads();
+		setNotice("已清理已完成的下载记录");
+	};
+
+	/** 对外入口：把一首或多首歌加入下载队列（去重、受上限约束）。 */
+	const enqueueDownload = (songs: MusicSong[]) => {
 		if (!client || !auth) {
 			setNotice("请先登录后再下载");
 			showLogin = true;
 			return;
 		}
-		if (downloadingHash) {
-			setNotice("已有下载任务进行中，请稍候");
+		const payload = songs
+			.filter((song) => song && song.hash)
+			.map((song) => ({ hash: song.hash, name: song.name, author: song.author, quality: audioQuality }));
+		if (payload.length === 0) return;
+		const result = enqueueDownloads(downloadRecords, payload, 1);
+		if (result.added.length > 0) {
+			downloadRecords = result.records;
+			persistDownloads();
+		}
+		const parts: string[] = [];
+		if (result.added.length) parts.push(`已加入 ${result.added.length} 首`);
+		if (result.skipped.length) parts.push(`${result.skipped.length} 首已在队列中`);
+		if (result.rejected.length) parts.push(`${result.rejected.length} 首超出队列上限`);
+		setNotice(parts.join("；") || "没有可下载的歌曲");
+		pumpDownloads();
+	};
+
+	const downloadSong = (song: MusicSong) => enqueueDownload([song]);
+
+	/** 批量下载：复用歌曲库已有的多选（batchMode / batchSelected）。 */
+	const downloadSelectedSongs = () => {
+		const picked = songs.filter((song) => batchSelected.has(songFileId(song) ?? song.hash));
+		if (picked.length === 0) {
+			setNotice("请先勾选要下载的歌曲");
 			return;
 		}
-		downloadingHash = song.hash;
-		setNotice(`正在下载「${song.name}」…`);
-		try {
-			const blob = await client.getTrackBlob(song.hash, audioQuality);
-			const ext = audioExtensionFor(blob.type, audioQuality);
-			saveBlobAsFile(blob, buildDownloadName(song.name, song.author, ext));
-			setNotice(`已保存「${song.name}」（${Math.max(1, Math.round(blob.size / 1024))} KB）`);
-		} catch (error) {
-			setNotice(errorMessage(error, "下载失败"));
-		} finally {
-			downloadingHash = null;
-		}
+		enqueueDownload(picked);
 	};
 
 	const loadSearchHistory = () => {
@@ -1774,6 +1939,7 @@
 
 		// 搜索历史与 BFF 无关，任何时候都要恢复（放在 apiUrl 判断之外）。
 		loadSearchHistory();
+		loadDownloadState();
 		if (apiUrl) {
 			void connectApi();
 		}
@@ -1814,6 +1980,7 @@
 					{/if}
 					<button class:music-quiet--on={historyOpen} class="music-icon-button" type="button" aria-label="播放历史" title="播放历史" on:click={() => (setModal(historyOpen ? null : "history"))}><Icon icon="material-symbols:history-rounded" /></button>
 					<button class:music-quiet--on={queueOpen} class="music-icon-button" type="button" aria-label="播放队列" title={`播放队列${queueSongs.length > 0 ? `（${queueSongs.length} 首）` : ""}`} on:click={() => (setModal(queueOpen ? null : "queue"))}><Icon icon="material-symbols:queue-music-rounded" /></button>
+					<button class:music-quiet--on={downloadsOpen} class="music-icon-button music-downloads-entry" type="button" aria-label={`下载中心${downloadSummary.active ? `（${downloadSummary.active} 进行中）` : ""}`} title={`下载中心${downloadSummary.total ? `：${downloadSummary.done}/${downloadSummary.total} 已完成` : ""}`} on:click={() => setModal(downloadsOpen ? null : "downloads")}><Icon icon="material-symbols:download-for-offline-rounded" />{#if downloadSummary.active}<span class="music-downloads-badge">{downloadSummary.active}</span>{/if}</button>
 					{#if currentSong}
 						<button class="music-icon-button" type="button" aria-label="全屏播放" title="全屏播放" on:click={toggleFullscreen}><Icon icon="material-symbols:fullscreen-rounded" /></button>
 					{/if}
@@ -1899,8 +2066,8 @@
 							{/if}
 							</div>
 							{#if currentSong}
-							<button class="music-icon-button music-download-button" type="button" disabled={downloadingHash === currentSong.hash} aria-label={`下载「${currentSong.name}」`} title={`下载到本地（${qualityLabel(audioQuality)}）`} on:click={() => void downloadSong(currentSong)}>
-								<Icon icon={downloadingHash === currentSong.hash ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} />
+							<button class="music-icon-button music-download-button" type="button" disabled={Boolean(downloadRecordFor(currentSong.hash))} aria-label={`下载「${currentSong.name}」`} title={`下载到本地（${qualityLabel(audioQuality)}）`} on:click={() => void downloadSong(currentSong)}>
+								<Icon icon={downloadRecordFor(currentSong.hash) ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} />
 							</button>
 							<button class:music-favorite--active={isFavorite} class="music-favorite" type="button" aria-label={isFavorite ? `取消收藏「${currentSong.name}」` : `收藏「${currentSong.name}」到当前歌单`} title={isFavorite ? "点击取消收藏（5 秒后生效）" : "点击收藏到当前歌单"} on:click={toggleFavorite}>
 								<Icon icon={isFavorite ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} />
@@ -1926,8 +2093,8 @@
 				
 						</span>
 						{#if currentSong}
-							<button class="music-icon-button music-fullscreen__download" type="button" disabled={downloadingHash === currentSong.hash} aria-label={`下载「${currentSong.name}」`} title={`下载到本地（${qualityLabel(audioQuality)}）`} on:click={() => void downloadSong(currentSong)}>
-								<Icon icon={downloadingHash === currentSong.hash ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} />
+							<button class="music-icon-button music-fullscreen__download" type="button" disabled={Boolean(downloadRecordFor(currentSong.hash))} aria-label={`下载「${currentSong.name}」`} title={`下载到本地（${qualityLabel(audioQuality)}）`} on:click={() => void downloadSong(currentSong)}>
+								<Icon icon={downloadRecordFor(currentSong.hash) ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} />
 							</button>
 						{/if}
 					</div>
@@ -2053,6 +2220,66 @@
 		</div>
 	{/if}
 
+	{#if downloadsOpen}
+		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && setModal(null)}>
+			<section class="music-library-modal" role="dialog" aria-modal="true" aria-label="下载中心">
+				<header class="music-library-header">
+					<div>
+						<p class="music-kicker">OFFLINE</p>
+						<h2>下载中心</h2>
+						<span class="music-muted">{#if downloadSummary.total === 0}还没有下载记录{:else}{downloadSummary.done}/{downloadSummary.total} 已完成{#if downloadSummary.failed} · {downloadSummary.failed} 失败{/if}{#if downloadSummary.active} · {downloadSummary.active} 进行中{/if}{/if}</span>
+					</div>
+					<button class="music-icon-button" type="button" aria-label="关闭下载中心" on:click={() => setModal(null)}><Icon icon="material-symbols:close-rounded" /></button>
+				</header>
+				<div class="music-library-toolbar">
+					<div class="music-library-toolbar__left">
+						<label class="music-concurrency">
+							<span>同时下载</span>
+							<select value={String(downloadConcurrency)} aria-label="同时下载数量" on:change={(event) => setDownloadConcurrency((event.currentTarget as HTMLSelectElement).value)}>
+								<option value="1">1 个</option>
+								<option value="2">2 个</option>
+								<option value="3">3 个</option>
+								<option value="4">4 个</option>
+							</select>
+						</label>
+					</div>
+					<div class="music-library-toolbar__controls">
+						<button class="music-quiet music-quiet--tiny" type="button" disabled={downloadSummary.total === downloadSummary.active} on:click={clearFinishedDownloads}>清理已完成</button>
+						<button class="music-quiet music-quiet--danger" type="button" disabled={downloadSummary.active === 0} on:click={() => downloadRecords.filter(isDownloadActive).forEach((record) => cancelDownload(record.id))}>全部取消</button>
+					</div>
+				</div>
+				<div class="music-library-list" aria-label="下载列表">
+					{#if downloadRecords.length === 0}
+						<p class="music-muted music-library-empty">还没有下载记录。播放任意歌曲后点下载图标即可加入队列。</p>
+					{:else}
+						{#each [...downloadRecords].sort((a, b) => b.createdAt - a.createdAt) as record (record.id)}
+							<div class="music-download-row" class:music-download-row--failed={record.status === "failed" || record.status === "canceled"}>
+								<div class="music-download-row__copy">
+									<strong title={record.name}>{record.name}</strong>
+									<small>{#if record.author}{record.author} · {/if}{record.quality === "flac" ? "无损" : `${record.quality}k`}{#if record.status === "done"} · {formatBytes(record.size)}{:else if record.status === "failed"} · <span class="music-download-row__error" title={record.error}>{record.error ?? "失败"}</span>{:else if record.status === "canceled"} · 已取消{:else} · {formatBytes(record.loaded)}{record.total > 0 ? ` / ${formatBytes(record.total)}` : ""}{/if}</small>
+									{#if record.status === "running" || record.status === "queued"}
+										<div class="music-download-bar" role="progressbar" aria-label={`下载进度 ${record.name}`} aria-valuemin="0" aria-valuemax="100">
+											<span class:music-download-bar__fill--indeterminate={downloadProgressPercent(record.loaded, record.total) === null} class="music-download-bar__fill" style={`width:${downloadProgressPercent(record.loaded, record.total) ?? 100}%`}></span>
+										</div>
+									{/if}
+								</div>
+								<div class="music-download-row__actions">
+									{#if record.status === "running" || record.status === "queued"}
+										<button class="music-icon-button music-icon-button--small" type="button" aria-label={`取消下载 ${record.name}`} title="取消下载" on:click={() => cancelDownload(record.id)}><Icon icon="material-symbols:close-rounded" /></button>
+									{:else if record.status === "failed" || record.status === "canceled"}
+										<button class="music-icon-button music-icon-button--small" type="button" aria-label={`重新下载 ${record.name}`} title="重新下载" on:click={() => retryDownload(record.id)}><Icon icon="material-symbols:refresh-rounded" /></button>
+									{:else}
+										<span class="music-download-row__tick"><Icon icon="material-symbols:check-circle-rounded" /></span>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					{/if}
+				</div>
+			</section>
+		</div>
+	{/if}
+
 	{#if libraryOpen}
 		<div class="music-library-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && closeLibrary()}>
 			<section class="music-library-modal" role="dialog" aria-modal="true" aria-label={libraryView === "daily" ? "每日推荐" : "歌曲库"}>
@@ -2084,7 +2311,7 @@
 										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 									</button>
 									<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（5 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（5 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，5 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
-								<button class="music-search-download" type="button" disabled={downloadingHash === song.hash} aria-label={`下载 ${song.name}`} title="下载到本地" on:click={() => void downloadSong(song)}><Icon icon={downloadingHash === song.hash ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} /></button>
+								<button class="music-search-download" type="button" disabled={Boolean(downloadRecordFor(song.hash))} aria-label={`下载 ${song.name}`} title="下载到本地" on:click={() => void downloadSong(song)}><Icon icon={downloadRecordFor(song.hash) ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} /></button>
 								</div>
 							{/each}
 						{:else}

@@ -26,6 +26,18 @@ import {
 	sanitizeDownloadFilename,
 	audioExtensionFor,
 	buildDownloadName,
+	clampDownloadConcurrency,
+	createDownloadRecord,
+	enqueueDownloads,
+	nextDownloadBatch,
+	updateDownloadRecord,
+	pruneDownloadHistory,
+	summarizeDownloads,
+	downloadProgressPercent,
+	formatBytes,
+	isDownloadActive,
+	DOWNLOAD_QUEUE_LIMIT,
+	DOWNLOAD_HISTORY_LIMIT,
 	pushSearchHistory,
 	responseData,
 	responseSucceeded,
@@ -121,6 +133,119 @@ assert.equal(buildDownloadName("", "", "mp3"), "track.mp3");
 assert.equal(buildDownloadName("晴天", "周杰伦", "FLAC"), "晴天 - 周杰伦.flac");
 assert.equal(buildDownloadName("晴天", "周杰伦", "exe"), "晴天 - 周杰伦.mp3");
 assert.equal(buildDownloadName("A/B", "C:D", "flac"), "A B - C D.flac");
+
+// ===== 下载队列模型 =====
+// 并发上限：只允许 1..4，越界一律归一到边界值（0/负数/小数/NaN 都不能变成 0 并发）。
+assert.equal(clampDownloadConcurrency(2), 2);
+assert.equal(clampDownloadConcurrency(1), 1);
+assert.equal(clampDownloadConcurrency(4), 4);
+assert.equal(clampDownloadConcurrency(0), 1);
+assert.equal(clampDownloadConcurrency(-3), 1);
+assert.equal(clampDownloadConcurrency(99), 4);
+assert.equal(clampDownloadConcurrency("3"), 3);
+assert.equal(clampDownloadConcurrency("abc"), 2);
+assert.equal(clampDownloadConcurrency(undefined), 2);
+assert.equal(clampDownloadConcurrency(2.7), 2);
+
+// 字节可读化
+assert.equal(formatBytes(0), "0 B");
+assert.equal(formatBytes(512), "512 B");
+assert.equal(formatBytes(2048), "2.0 KB");
+assert.equal(formatBytes(4003831), "3.8 MB");
+assert.equal(formatBytes(-5), "0 B");
+
+// 进度百分比：未知总长时返回 null（UI 显示 indeterminate），并且始终夹在 0..100。
+assert.equal(downloadProgressPercent(0, 0), null);
+assert.equal(downloadProgressPercent(50, 100), 50);
+assert.equal(downloadProgressPercent(100, 100), 100);
+assert.equal(downloadProgressPercent(150, 100), 100);
+assert.equal(downloadProgressPercent(-5, 100), 0);
+
+// 记录创建：同一首歌重复下载时 hash 相同但 id 必须不同（历史要能保留多条）。
+const rec1 = createDownloadRecord({ hash: "abc123", name: "晴天", author: "周杰伦", quality: "320" }, 1);
+const rec2 = createDownloadRecord({ hash: "abc123", name: "晴天", author: "周杰伦", quality: "320" }, 2);
+assert.equal(rec1.status, "queued");
+assert.equal(rec1.attempt, 1);
+assert.equal(rec1.loaded, 0);
+assert.equal(rec1.total, 0);
+assert.notEqual(rec1.id, rec2.id);
+assert.equal(rec1.hash, "abc123");
+assert.equal(rec1.name, "晴天");
+assert.equal(rec1.quality, "320");
+
+// 状态机：只有 progressed/failed/done 这些显式事件才能推进；进度只增不减。
+const recProg = updateDownloadRecord(rec1, { loaded: 100, total: 400 });
+assert.equal(recProg.loaded, 100);
+assert.equal(recProg.status, "running");
+const recBack = updateDownloadRecord(recProg, { loaded: 40 });
+assert.equal(recBack.loaded, 100, "进度不能倒退");
+const recDone = updateDownloadRecord(recProg, { status: "done", size: 400 });
+assert.equal(recDone.status, "done");
+assert.ok(recDone.finishedAt > 0);
+const recFail = updateDownloadRecord(recProg, { status: "failed", error: "NO_URL" });
+assert.equal(recFail.status, "failed");
+assert.equal(recFail.error, "NO_URL");
+// 终态不可再被改成 running（避免迟到回调把失败覆盖成进行中）
+assert.equal(updateDownloadRecord(recDone, { status: "running" }).status, "done");
+
+// isDownloadActive：排队中与进行中都算「占槽」
+assert.equal(isDownloadActive({ status: "queued" }), true);
+assert.equal(isDownloadActive({ status: "running" }), true);
+assert.equal(isDownloadActive({ status: "done" }), false);
+assert.equal(isDownloadActive({ status: "failed" }), false);
+assert.equal(isDownloadActive({ status: "canceled" }), false);
+
+// enqueueDownloads：去重（同 hash 已在校验/队列中则跳过）、跳过已完成、受上限截断。
+const existing = [createDownloadRecord({ hash: "aaa", name: "A", author: "", quality: "128" }, 1)];
+const queued = enqueueDownloads(existing, [
+	{ hash: "aaa", name: "A", author: "", quality: "128" },
+	{ hash: "bbb", name: "B", author: "", quality: "128" },
+], 10);
+assert.equal(queued.added.length, 1);
+assert.equal(queued.added[0].hash, "bbb");
+assert.equal(queued.skipped.length, 1);
+assert.equal(queued.skipped[0].hash, "aaa");
+
+// 队列上限：超出 DOWNLOAD_QUEUE_LIMIT 的部分不入队并计入 rejected。
+const many = Array.from({ length: DOWNLOAD_QUEUE_LIMIT + 5 }, (_, i) => ({ hash: `h${i}`, name: `n${i}`, author: "", quality: "128" }));
+const capped = enqueueDownloads([], many, 10);
+assert.equal(capped.added.length, DOWNLOAD_QUEUE_LIMIT);
+assert.equal(capped.rejected.length, 5);
+
+// nextDownloadBatch：按剩余槽位取出待跑任务（先入先出），不做任何网络动作。
+const q = [
+	createDownloadRecord({ hash: "q1", name: "1", author: "", quality: "128" }, 1),
+	createDownloadRecord({ hash: "q2", name: "2", author: "", quality: "128" }, 2),
+	createDownloadRecord({ hash: "q3", name: "3", author: "", quality: "128" }, 3),
+];
+assert.deepEqual(nextDownloadBatch(q, 2).map((r) => r.hash), ["q1", "q2"]);
+assert.deepEqual(nextDownloadBatch(q, 0).map((r) => r.hash), []);
+const mixed = [updateDownloadRecord(q[0], { status: "done" }), q[1], q[2]];
+assert.deepEqual(nextDownloadBatch(mixed, 2).map((r) => r.hash), ["q2", "q3"]);
+
+// summarizeDownloads：给面板显示 x/y 与活动数
+const summary = summarizeDownloads([
+	updateDownloadRecord(q[0], { status: "done", size: 100 }),
+	updateDownloadRecord(q[1], { status: "running", loaded: 50, total: 100 }),
+	q[2],
+]);
+assert.equal(summary.total, 3);
+assert.equal(summary.done, 1);
+assert.equal(summary.active, 2);
+assert.equal(summary.running, 1);
+assert.equal(summary.queued, 1);
+assert.equal(summary.failed, 0);
+
+// 历史裁剪：只保留最近 DOWNLOAD_HISTORY_LIMIT 条，且优先保留未完成的
+let hist = [];
+for (let i = 0; i < DOWNLOAD_HISTORY_LIMIT + 8; i += 1) {
+	hist.push(updateDownloadRecord(createDownloadRecord({ hash: `h${i}`, name: `n${i}`, author: "", quality: "128" }, i), { status: "done" }));
+}
+const active = createDownloadRecord({ hash: "still-going", name: "x", author: "", quality: "128" }, 999);
+hist.push(active);
+const pruned = pruneDownloadHistory(hist);
+assert.equal(pruned.length, DOWNLOAD_HISTORY_LIMIT);
+assert.ok(pruned.some((r) => r.hash === "still-going"), "未完成任务不能被裁剪掉");
 
 const filenameTracks = {
 	status: 1,
