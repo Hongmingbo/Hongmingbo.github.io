@@ -1964,14 +1964,13 @@
 	{#if expanded}
 		<section class="music-panel" aria-label="音乐播放器">
 			<header class="music-panel__header">
-				<div class="music-panel-title">
-					<p class="music-kicker">PERSONAL RADIO</p>
+				<div class="music-panel-heading">
 					<h2>音乐空间</h2>
+					{#if vipState !== "idle"}
+						<span class:music-vip-badge--ok={vipState === "claimed"} class:music-vip-badge--risk={vipState === "risk" || vipState === "error"} class="music-vip-badge" title={vipMessage}>{vipState === "checking" ? "VIP…" : vipState === "claimed" ? "VIP OK" : "需验证"}</span>{/if}
 				</div>
 				<div class="music-panel-actions">
 					<span class="music-header-account">{auth ? (auth.nickname ?? `酷狗用户 ${auth.userid}`) : "未登录"}</span>
-					{#if vipState !== "idle"}
-						<span class:music-vip-badge--ok={vipState === "claimed"} class:music-vip-badge--risk={vipState === "risk" || vipState === "error"} class="music-vip-badge" title={vipMessage}>{vipState === "checking" ? "VIP…" : vipState === "claimed" ? "VIP OK" : "需验证"}</span>{/if}
 					{#if auth}
 						{#if adminConfigured}<button class="music-quiet music-quiet--tiny" type="button" aria-label="保存当前登录凭据" title="保存当前登录，供管理员口令快速登录" on:click={() => { loginMode = "admin"; showLogin = true; }}>保存登录</button>{/if}
 					{:else}
@@ -2603,14 +2602,12 @@
 	   右侧不再有一块悬空的留白。 */
 	/* 与右侧标题同一基线：用 flex 列对齐并统一行高，避免 SERVICE ONLINE
 	   被自己的 line-height 顶偏。 */
-	/* 标题原本三行竖排，被压成 ~101px 窄条，而右侧按钮行有 285px，
-	   两者之间空出 ~88px 的视觉留白。改为 kicker 与名称同基线横排，
-	   标题块宽度接近按钮行，中间不再出现大片空隙。 */
-	.music-panel-title { display: flex; flex: 1 1 auto; flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 0.45rem; min-width: 0; overflow: hidden; }
-	.music-panel-title .music-kicker { margin-bottom: 0; line-height: 1.15; white-space: nowrap; }
+	/* 标题与 VIP 徽章同组：保证「音乐空间」始终紧邻「VIP OK」，
+	   换行时两者也不会被拆到不同行。 */
+	.music-panel-heading { display: flex; flex: 0 0 auto; align-items: center; gap: 0.45rem; min-width: 0; }
 	/* h2 没有专属类，默认 line-height 1.2 + margin-top 让三行块到 58px，
 	   比右侧按钮行高出 22px。压紧到 1.1 并清掉外边距，整体降到约 48px。 */
-	.music-panel-title h2 { margin: 0; line-height: 1.1; }
+	.music-panel-heading h2 { margin: 0; line-height: 1.15; }
 	.music-panel-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.28rem; margin-left: auto; }
 	.music-header-account { max-width: 4.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--md-tone-muted); font-size: 0.66rem; }
 	.music-vip-badge { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0.1rem 0.38rem; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 30%, transparent); border-radius: 999px; color: var(--md-tone-muted); font-size: 0.56rem; letter-spacing: 0.02em; white-space: nowrap; }
