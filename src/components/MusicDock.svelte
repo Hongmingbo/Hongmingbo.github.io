@@ -2091,7 +2091,7 @@
 				
 						</span>
 						{#if currentSong}
-							<button class="music-icon-button music-fullscreen__download" type="button" disabled={Boolean(downloadRecordFor(currentSong.hash))} aria-label={`下载「${currentSong.name}」`} title={`下载到本地（${qualityLabel(audioQuality)}）`} on:click={() => void downloadSong(currentSong)}>
+							<button class="music-icon-button music-download-inline" type="button" disabled={Boolean(downloadRecordFor(currentSong.hash))} aria-label={`下载「${currentSong.name}」`} title={`下载到本地（${qualityLabel(audioQuality)}）`} on:click={() => void downloadSong(currentSong)}>
 								<Icon icon={downloadRecordFor(currentSong.hash) ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} />
 							</button>
 						{/if}
@@ -2677,7 +2677,6 @@
 	   会把空白平分、按钮被推到中间去。 */
 	.music-now-playing .music-download-button { margin-left: auto; }
 	.music-now-playing .music-download-button + .music-favorite { margin-left: 0.35rem; }
-	.music-fullscreen__download { color: rgb(226 232 240); }
 	.music-pending-hint { padding: 0.12rem 0.45rem; border-radius: 999px; color: #c05640; background: color-mix(in oklch, #c05640 9%, transparent); font-size: 0.6rem; white-space: nowrap; }
 	.music-library-empty { display: grid; min-height: 12rem; place-items: center; padding: 1rem; text-align: center; }
 	.music-quiet--danger { color: #c05640; border-color: color-mix(in oklch, #c05640 36%, transparent); }
@@ -2844,7 +2843,12 @@
 	   让这一列与普通按钮同高同宽。 */
 	.music-mode-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 2.6rem; height: 2.6rem; }
 
-	.music-controls { margin-top: 0.55rem; display: flex; align-items: center; justify-content: center; gap: 0.35rem; }
+	/* 这一行必须只有「上一首 / 播放 / 下一首 / 播放模式」四个控件——
+	   它们是居中对齐的，多塞一个元素会把播放键顶偏、让整行失衡。
+	   下载键改为绝对定位贴右缘，与上方爱心、头部图标对齐成同一列。 */
+	.music-controls { position: relative; margin-top: 0.55rem; display: flex; align-items: center; justify-content: center; gap: 0.35rem; }
+	.music-controls > .music-download-inline { position: absolute; top: 50%; right: 0; transform: translateY(-50%); color: var(--md-tone-muted); }
+	.music-controls > .music-download-inline:hover:not(:disabled) { color: var(--primary); }
 	.music-play-button { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border: 0; border-radius: 50%; color: #fff; background: var(--primary); cursor: pointer; font-size: 1.5rem; transition: transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), box-shadow 180ms ease; }
 	.music-play-button:hover { transform: scale(1.05); }
 	.music-play-button:active { transform: scale(0.94); }
