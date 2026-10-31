@@ -2593,7 +2593,10 @@
 	   内容多时又直接裁掉（实测内容 597px / 容器 473px，溢出 124px 被切）。
 	   max-height 既保证不超出视口，又不会凭空制造空白。 */
 	.music-panel { position: relative; width: 100%; flex: 0 0 auto; max-height: calc(100vh - 4rem); min-height: 0; margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
-	.music-panel__header { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.85rem; }
+	/* 登录态下按钮行（VIP+保存登录+6 图标 ≈325px）与标题（≈179px）在 440px 的
+	   面板里放不下，flex 会把标题块压到 65px 而内容不缩，文字溢出后被 VIP 徽章
+	   压住。允许换行后，放不下时按钮行整体落到第二行，结构上不可能重叠。 */
+	.music-panel__header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.45rem 0.6rem; margin-bottom: 0.85rem; }
 	/* 标题块是三行（PERSONAL RADIO / 音乐空间 / SERVICE ONLINE）共 58px，而右侧按钮行
 	   只有 36px。header 用 flex-start 时按钮贴顶，右下角就空出 22px 的死区
 	   （实测 actionsBottomGap=22）。让按钮行在整行高度内垂直居中，空白均分到上下，
@@ -2603,12 +2606,12 @@
 	/* 标题原本三行竖排，被压成 ~101px 窄条，而右侧按钮行有 285px，
 	   两者之间空出 ~88px 的视觉留白。改为 kicker 与名称同基线横排，
 	   标题块宽度接近按钮行，中间不再出现大片空隙。 */
-	.music-panel-title { display: flex; flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 0.45rem; min-width: 0; }
+	.music-panel-title { display: flex; flex: 1 1 auto; flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 0.45rem; min-width: 0; overflow: hidden; }
 	.music-panel-title .music-kicker { margin-bottom: 0; line-height: 1.15; white-space: nowrap; }
 	/* h2 没有专属类，默认 line-height 1.2 + margin-top 让三行块到 58px，
 	   比右侧按钮行高出 22px。压紧到 1.1 并清掉外边距，整体降到约 48px。 */
 	.music-panel-title h2 { margin: 0; line-height: 1.1; }
-	.music-panel-actions { display: flex; align-items: center; gap: 0.3rem; }
+	.music-panel-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.28rem; margin-left: auto; }
 	.music-header-account { max-width: 4.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--md-tone-muted); font-size: 0.66rem; }
 	.music-vip-badge { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0.1rem 0.38rem; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 30%, transparent); border-radius: 999px; color: var(--md-tone-muted); font-size: 0.56rem; letter-spacing: 0.02em; white-space: nowrap; }
 	.music-vip-badge--ok { border-color: color-mix(in oklch, #2f9e72 36%, transparent); color: #2f9e72; background: color-mix(in oklch, #2f9e72 8%, transparent); }
@@ -2775,7 +2778,7 @@
 		.music-fullscreen__lyrics { max-height: none; padding: 1.2rem 0.4rem; }
 		.music-lyric--fullscreen { font-size: 1.08rem; }
 	}
-	.music-panel__header h2 { margin: 0; font-size: 1.1rem; line-height: 1.2; white-space: nowrap; }
+	.music-panel__header h2 { margin: 0; overflow: hidden; font-size: 1.1rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 	.music-kicker, .music-section-label { margin: 0; color: var(--primary); font-family: var(--font-mono, monospace); font-size: 0.62rem; letter-spacing: 0.13em; }
 	.music-section-label { display: block; margin-bottom: 0.35rem; color: var(--md-tone-muted); }
 	.music-icon-button { display: inline-grid; place-items: center; width: 2.2rem; height: 2.2rem; padding: 0; border: 0; border-radius: 0.65rem; color: var(--md-tone-body); background: transparent; cursor: pointer; font-size: 1.25rem; transition: color 180ms ease, background 180ms ease, transform 180ms ease; }
