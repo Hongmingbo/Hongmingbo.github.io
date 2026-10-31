@@ -2109,7 +2109,7 @@
 
 				<div class="music-entry-grid">
 					<div class="music-entry-card">
-						<div><span class="music-section-label">LIBRARY</span><strong>我的歌单</strong><small class="music-muted">{songsLoading ? "正在读取…" : `${songs.length} 首歌曲`}</small></div>
+						<div><span class="music-section-label">LIBRARY</span><strong>我的歌单</strong><small class="music-muted">{songsLoading ? "正在读取…" : auth ? `${songs.length} 首歌曲` : "登录后读取你的歌单"}</small></div>
 						{#if auth}
 							<div class="music-entry-card__body">
 								<select bind:value={selectedPlaylistId} on:change={onPlaylistChange} aria-label="选择当前歌单">
@@ -2121,16 +2121,14 @@
 							</div>
 						{:else}
 							<div class="music-entry-card__body">
-								<span class="music-muted">登录后管理歌单</span>
-								<button class="music-primary music-primary--small" type="button" on:click={() => (showLogin = true)}>登录酷狗</button>
+								<button class="music-primary music-primary--small music-entry-card__cta" type="button" on:click={() => (showLogin = true)}>登录酷狗</button>
 							</div>
 						{/if}
 					</div>
 					<div class="music-entry-card">
 						<div><span class="music-section-label">DISCOVER / TODAY</span><strong>每日推荐</strong><small class="music-muted">{dailySongs.length > 0 ? `${dailySongs.length} 首今日推荐` : "每天 30 首新歌"}</small></div>
 						<div class="music-entry-card__body">
-							<span class="music-muted">{dailyLoading ? "正在读取…" : "为你挑选的每日新歌"}</span>
-							<button class="music-primary music-primary--small" type="button" disabled={dailyLoading} on:click={openDailyModal}>{dailyLoading ? "加载中…" : "打开推荐"}</button>
+							<button class="music-primary music-primary--small music-entry-card__cta" type="button" disabled={dailyLoading} on:click={openDailyModal}>{dailyLoading ? "加载中…" : "打开推荐"}</button>
 						</div>
 					</div>
 				</div>
@@ -2591,7 +2589,11 @@
 
 	/* 高度固定：面板在「播放」和「设置/歌曲库」之间切换时不应改变尺寸，
 	   否则整块 UI 会跟着内容跳动。用同一个高度 + 内部滚动。 */
-	.music-panel { position: relative; width: 100%; flex: 0 0 auto; height: min(38rem, calc(100vh - 6rem)); min-height: 0; margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	/* 面板高度自适应内容，只在超过视口时才封顶并内部滚动。
+	   之前写死 height: min(38rem, 100vh-6rem)：内容少时底部留一大片空白，
+	   内容多时又直接裁掉（实测内容 597px / 容器 473px，溢出 124px 被切）。
+	   max-height 既保证不超出视口，又不会凭空制造空白。 */
+	.music-panel { position: relative; width: 100%; flex: 0 0 auto; max-height: calc(100vh - 4rem); min-height: 0; margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; }
 	/* 与右侧标题同一基线：用 flex 列对齐并统一行高，避免 SERVICE ONLINE
 	   被自己的 line-height 顶偏。 */
@@ -2611,9 +2613,16 @@
 	.music-tab:hover { color: var(--primary); }
 	.music-tab--active { color: var(--primary); background: var(--card-bg, #fff); box-shadow: 0 2px 8px -4px rgb(15 23 42 / 0.35); }
 	.music-lyrics-tab { margin-top: 0.65rem; }
-	.music-entry-grid { display: grid; gap: 0.6rem; margin-top: 0.8rem; }
-	.music-entry-card { display: grid; gap: 0.55rem; padding: 0.85rem; border: 1px solid color-mix(in oklch, var(--primary) 14%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: color-mix(in oklch, var(--primary) 5%, var(--card-bg, #fff)); }
-	.music-entry-card > div:first-child { display: grid; gap: 0.1rem; }
+	.music-entry-grid { display: grid; gap: 0.5rem; margin-top: 0.65rem; }
+	/* 卡片内容只有「标签+标题+副标题 / 一个按钮」两行，0.85rem 内边距 + 0.55rem 间距
+	   会让每张卡到 132px，两张卡就撑出 274px，是面板留白的主要来源。 */
+	.music-entry-card { display: grid; gap: 0.4rem; padding: 0.7rem 0.8rem; border: 1px solid color-mix(in oklch, var(--primary) 14%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: color-mix(in oklch, var(--primary) 5%, var(--card-bg, #fff)); }
+	/* 按钮贴右，不再和一段重复说明文字平分一行。 */
+	.music-entry-card__cta { justify-self: end; }
+	/* 卡片头部三行（LIBRARY 标签 / 标题 / 副标题）原本 61px：标签自带 0.35rem 下边距
+	   又叠一层 gap，视觉上是两条空隙。压紧后整卡从 125px 降到约 108px。 */
+	.music-entry-card > div:first-child { display: grid; gap: 0.05rem; }
+	.music-entry-card > div:first-child .music-section-label { margin-bottom: 0; }
 	.music-entry-card strong { font-size: 0.86rem; }
 	.music-entry-card small { font-size: 0.66rem; }
 	.music-entry-card__body { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
