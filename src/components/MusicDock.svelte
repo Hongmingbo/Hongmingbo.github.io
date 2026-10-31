@@ -2090,11 +2090,6 @@
 							</button>
 				
 						</span>
-						{#if currentSong}
-							<button class="music-icon-button music-download-inline" type="button" disabled={Boolean(downloadRecordFor(currentSong.hash))} aria-label={`下载「${currentSong.name}」`} title={`下载到本地（${qualityLabel(audioQuality)}）`} on:click={() => void downloadSong(currentSong)}>
-								<Icon icon={downloadRecordFor(currentSong.hash) ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} />
-							</button>
-						{/if}
 					</div>
 					<div class="music-volume-row">
 						<label class="music-volume" aria-label="音量">
@@ -2592,10 +2587,10 @@
 	   内容多时又直接裁掉（实测内容 597px / 容器 473px，溢出 124px 被切）。
 	   max-height 既保证不超出视口，又不会凭空制造空白。 */
 	.music-panel { position: relative; width: 100%; flex: 0 0 auto; max-height: calc(100vh - 4rem); min-height: 0; margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
-	/* 登录态下按钮行（VIP+保存登录+6 图标 ≈325px）与标题（≈179px）在 440px 的
-	   面板里放不下，flex 会把标题块压到 65px 而内容不缩，文字溢出后被 VIP 徽章
-	   压住。允许换行后，放不下时按钮行整体落到第二行，结构上不可能重叠。 */
-	.music-panel__header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.45rem 0.6rem; margin-bottom: 0.85rem; }
+	/* 标题组与控件必须在同一行。为了永远放得下，变量有三处约束：
+	   按钮行可收缩但裁切（min-width:0 + overflow:hidden）、账号名限宽、
+	   间距收紧——这样「音乐空间 VIP OK」不会掉到第二行，也不会压到控件上。 */
+	.music-panel__header { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 0.45rem; margin-bottom: 0.85rem; }
 	/* 标题块是三行（PERSONAL RADIO / 音乐空间 / SERVICE ONLINE）共 58px，而右侧按钮行
 	   只有 36px。header 用 flex-start 时按钮贴顶，右下角就空出 22px 的死区
 	   （实测 actionsBottomGap=22）。让按钮行在整行高度内垂直居中，空白均分到上下，
@@ -2608,8 +2603,16 @@
 	/* h2 没有专属类，默认 line-height 1.2 + margin-top 让三行块到 58px，
 	   比右侧按钮行高出 22px。压紧到 1.1 并清掉外边距，整体降到约 48px。 */
 	.music-panel-heading h2 { margin: 0; line-height: 1.15; }
-	.music-panel-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.28rem; margin-left: auto; }
-	.music-header-account { max-width: 4.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--md-tone-muted); font-size: 0.66rem; }
+	.music-panel-actions { display: flex; flex: 0 1 auto; min-width: 0; overflow: hidden; align-items: center; gap: 0.22rem; margin-left: auto; }
+	/* 空间不足时只允许「账号名」被压缩到省略号——图标按钮固定尺寸、绝不压缩，
+	   否则先被裁掉的会是关闭按钮，用户就点不到了。 */
+	.music-panel-actions > * { flex: 0 0 auto; }
+	.music-panel-actions > .music-header-account { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+	/* 登录态下这一行要塞进：标题+VIP(≈121) + 保存登录(49) + 6 个图标，
+	   35px 的图标会让总宽超过 475px 可用宽度、把关闭按钮裁掉。
+	   收成 32px 后可余出约 20px，关闭键始终完整可点。 */
+	.music-panel__header .music-panel-actions .music-icon-button { width: 2rem; height: 2rem; font-size: 1.05rem; }
+	.music-header-account { max-width: 3.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--md-tone-muted); font-size: 0.66rem; }
 	.music-vip-badge { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0.1rem 0.38rem; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 30%, transparent); border-radius: 999px; color: var(--md-tone-muted); font-size: 0.56rem; letter-spacing: 0.02em; white-space: nowrap; }
 	.music-vip-badge--ok { border-color: color-mix(in oklch, #2f9e72 36%, transparent); color: #2f9e72; background: color-mix(in oklch, #2f9e72 8%, transparent); }
 	.music-vip-badge--risk { border-color: color-mix(in oklch, #c05640 36%, transparent); color: #c05640; background: color-mix(in oklch, #c05640 8%, transparent); }
@@ -2843,12 +2846,10 @@
 	   让这一列与普通按钮同高同宽。 */
 	.music-mode-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 2.6rem; height: 2.6rem; }
 
-	/* 这一行必须只有「上一首 / 播放 / 下一首 / 播放模式」四个控件——
-	   它们是居中对齐的，多塞一个元素会把播放键顶偏、让整行失衡。
-	   下载键改为绝对定位贴右缘，与上方爱心、头部图标对齐成同一列。 */
-	.music-controls { position: relative; margin-top: 0.55rem; display: flex; align-items: center; justify-content: center; gap: 0.35rem; }
-	.music-controls > .music-download-inline { position: absolute; top: 50%; right: 0; transform: translateY(-50%); color: var(--md-tone-muted); }
-	.music-controls > .music-download-inline:hover:not(:disabled) { color: var(--primary); }
+	/* 这一行只放「上一首 / 播放 / 下一首 / 播放模式」四个控件并居中。
+	   下载入口统一在歌名行（爱心旁边），不要再往这里加按钮——
+	   多塞一个会把播放键顶偏、整行失衡。 */
+	.music-controls { margin-top: 0.55rem; display: flex; align-items: center; justify-content: center; gap: 0.35rem; }
 	.music-play-button { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border: 0; border-radius: 50%; color: #fff; background: var(--primary); cursor: pointer; font-size: 1.5rem; transition: transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), box-shadow 180ms ease; }
 	.music-play-button:hover { transform: scale(1.05); }
 	.music-play-button:active { transform: scale(0.94); }
