@@ -321,6 +321,50 @@ a.btn-regular:hover {
   border-top-color: var(--card-border);
 }
 
+/* ============================================================
+   视觉参考落地（zhheo / solitude 系）
+   ============================================================ */
+
+/* ---------- 文章封面 hover 放大（zhheo 标志性交互）----------
+   封面链接带 aria-label={title}，标题链接没有，所以此选择器只命中封面，
+   不会误伤标题。transform 不触发布局，配合 overflow:hidden 不会溢出卡片。 */
+.post-card a[aria-label] img {
+  transition: transform 700ms var(--ease-tech), filter 700ms var(--ease-tech);
+  will-change: transform;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .post-card a[aria-label]:hover img {
+    transform: scale(1.06);
+    filter: saturate(1.08) brightness(1.02);
+  }
+}
+
+/* 封面遮罩在 hover 时稍浅，让放大后的图更透出来 */
+.post-card a[aria-label] > div:first-child {
+  transition: background-color 400ms var(--ease-tech);
+}
+
+/* ---------- 卡片 hover：边框与阴影的层次再拉开一档 ---------- */
+.card-base:has(a:hover) {
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--primary) 26%, transparent),
+    0 18px 40px -28px color-mix(in oklch, var(--primary) 40%, transparent),
+    var(--ds-shadow-card-hover);
+}
+
+/* ---------- 导航栏：毛玻璃加强（solitude 系）---------- */
+#navbar .card-base {
+  backdrop-filter: blur(14px) saturate(1.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
+  background: color-mix(in oklch, var(--card-bg) 82%, transparent);
+}
+
+/* ---------- 侧栏卡片：hover 时主色细边，与文章卡呼应 ---------- */
+#sidebar .card-base:hover {
+  border-color: color-mix(in oklch, var(--primary) 22%, var(--card-border));
+}
+
 /* ---------- 减少动效 ---------- */
 @media (prefers-reduced-motion: reduce) {
   .onload-animation {
