@@ -21,10 +21,17 @@ const postsCollection = defineCollection({
 		nextSlug: z.string().default(""),
 	}),
 });
+const notesCollection = defineCollection({
+	schema: z.object({
+		published: z.date(),
+		tags: z.array(z.string()).optional().default([]),
+	}),
+});
 const specCollection = defineCollection({
 	schema: z.object({}),
 });
 export const collections = {
 	posts: postsCollection,
+	notes: notesCollection,
 	spec: specCollection,
 };

@@ -1,0 +1,180 @@
+---
+import MainGridLayout from "@layouts/MainGridLayout.astro";
+import { friendLinks } from "@/data/links";
+
+const links = friendLinks;
+---
+
+<MainGridLayout title="友链" description="互相推荐、长期可访问的个人站点。">
+	<div class="links-page">
+		<header class="links-hero">
+			<p class="links-hero__eyebrow">FRIENDS / NEIGHBORS</p>
+			<h1>友链</h1>
+			<p>互相推荐、长期可访问的个人站点。这里只放真实存在的邻居，不放占位示例。</p>
+			<div class="links-hero__stats">
+				<span><strong>{links.length}</strong> 个站点</span>
+			</div>
+		</header>
+
+		{links.length === 0 ? (
+			<div class="links-empty">
+				<p class="links-empty__title">还没有友链</p>
+				<p class="links-empty__hint">
+					交换条件：站点有持续更新的原创内容、可长期访问、无强制弹窗与跳转。
+					想交换的话，在任意文章下留言并附上你的站点地址即可。
+				</p>
+			</div>
+		) : (
+			<div class="links-grid">
+				{links.map((link) => (
+					<a class="link-card" href={link.url} target="_blank" rel="noopener noreferrer me">
+						<span class="link-card__avatar">
+							{link.avatar ? (
+								<img src={link.avatar} alt="" loading="lazy" decoding="async" />
+							) : (
+								<span class="link-card__avatar-fallback">{link.name.slice(0, 1)}</span>
+							)}
+						</span>
+						<span class="link-card__body">
+							<strong>{link.name}</strong>
+							{link.description && <small>{link.description}</small>}
+						</span>
+					</a>
+				))}
+			</div>
+		)}
+	</div>
+</MainGridLayout>
+
+<style>
+	.links-page { display: grid; gap: 1.4rem; }
+
+	.links-hero {
+		padding: 1.15rem 1.25rem 1.25rem;
+		border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5));
+		border-radius: var(--radius-large);
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklch, var(--primary) 10%, var(--card-bg, #fff)),
+			color-mix(in oklch, var(--card-bg, #fff) 86%, transparent)
+		);
+		box-shadow: 0 20px 45px -34px color-mix(in oklch, var(--primary) 48%, transparent);
+	}
+	.links-hero__eyebrow {
+		margin: 0;
+		color: var(--primary);
+		font-family: var(--font-mono, monospace);
+		font-size: 0.62rem;
+		letter-spacing: 0.14em;
+	}
+	.links-hero h1 { margin: 0.55rem 0 0; font-size: clamp(1.7rem, 4vw, 2.45rem); line-height: 1.1; }
+	.links-hero > p:not(.links-hero__eyebrow) {
+		max-width: 42rem;
+		margin: 0.75rem 0 0;
+		color: var(--text-70, #475569);
+		font-size: 0.82rem;
+		line-height: 1.8;
+	}
+	.links-hero__stats {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem 1rem;
+		margin-top: 1rem;
+		color: var(--text-50, #64748b);
+		font-family: var(--font-mono, monospace);
+		font-size: 0.65rem;
+	}
+	.links-hero__stats strong { color: var(--primary); font-size: 0.9rem; }
+
+	.links-empty {
+		display: grid;
+		gap: 0.5rem;
+		padding: 2.6rem 1.25rem;
+		border: 1px dashed var(--card-border, #dce5e5);
+		border-radius: var(--radius-large);
+		text-align: center;
+	}
+	.links-empty__title { margin: 0; color: var(--text-75, #334155); font-size: 0.95rem; font-weight: 600; }
+	.links-empty__hint {
+		max-width: 34rem;
+		margin: 0 auto;
+		color: var(--text-50, #64748b);
+		font-size: 0.78rem;
+		line-height: 1.8;
+	}
+
+	.links-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+		gap: 0.75rem;
+	}
+
+	.link-card {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		padding: 0.75rem 0.85rem;
+		border: 1px solid var(--card-border, #dce5e5);
+		border-radius: var(--radius-large);
+		background: color-mix(in oklch, var(--card-bg, #fff) 92%, transparent);
+		text-decoration: none;
+		transition:
+			border-color 0.35s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
+			box-shadow 0.35s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
+			transform 0.35s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1));
+	}
+	.link-card:hover {
+		border-color: color-mix(in oklch, var(--primary) 34%, var(--card-border, #dce5e5));
+		box-shadow: 0 16px 34px -26px color-mix(in oklch, var(--primary) 55%, transparent);
+		transform: translateY(-2px);
+	}
+
+	.link-card__avatar {
+		display: grid;
+		flex: 0 0 2.4rem;
+		place-items: center;
+		width: 2.4rem;
+		height: 2.4rem;
+		overflow: hidden;
+		border-radius: 0.7rem;
+		background: color-mix(in oklch, var(--primary) 12%, transparent);
+	}
+	.link-card__avatar img { width: 100%; height: 100%; object-fit: cover; }
+	.link-card__avatar-fallback {
+		color: var(--primary);
+		font-size: 1rem;
+		font-weight: 700;
+	}
+
+	.link-card__body { display: grid; min-width: 0; gap: 0.1rem; }
+	.link-card__body strong {
+		overflow: hidden;
+		color: var(--text-90, #1e293b);
+		font-size: 0.84rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.link-card__body small {
+		overflow: hidden;
+		color: var(--text-50, #64748b);
+		font-size: 0.7rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	:global(.dark) .links-hero {
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklch, var(--primary) 13%, var(--card-bg, #172033)),
+			color-mix(in oklch, var(--card-bg, #172033) 88%, transparent)
+		);
+	}
+	:global(.dark) .link-card { background: color-mix(in oklch, var(--card-bg, #172033) 82%, transparent); }
+	:global(.dark) .link-card__body strong { color: var(--text-90, #e2e8f0); }
+	:global(.dark) .links-empty__title { color: var(--text-75, #cbd5e1); }
+
+	@media (prefers-reduced-motion: reduce) {
+		.link-card { transition: none; }
+		.link-card:hover { transform: none; }
+	}
+</style>

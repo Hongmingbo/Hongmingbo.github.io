@@ -43,6 +43,16 @@ export const navBarConfig: NavBarConfig = {
 			url: "/stars",
 			external: false,
 		},
+		{
+			name: "说说",
+			url: "/notes",
+			external: false,
+		},
+		{
+			name: "友链",
+			url: "/links",
+			external: false,
+		},
 		LinkPreset.Projects,
 		LinkPreset.About,
 		{
