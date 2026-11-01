@@ -1825,6 +1825,8 @@
 		if (!client) return;
 		client.setSource(next);
 		setNotice(`已切换到${MUSIC_SOURCE_META[next].label}`);
+		// 口令是否已配置、凭据是否已保存，两个源各自独立，切源后必须重查。
+		await refreshAdminStatus();
 		try {
 			auth = await client.getSession();
 			if (auth) await loadUserData();
@@ -2542,7 +2544,7 @@
 				</div>
 				<div class="music-login-tabs">
 					<button class:music-login-tab--active={loginMode === "qr"} type="button" on:click={() => selectLoginMode("qr")}>二维码</button>
-					{#if MUSIC_SOURCE_META[musicSource].hasKugouFeatures && adminConfigured}<button class:music-login-tab--active={loginMode === "admin"} type="button" on:click={() => selectLoginMode("admin")}>管理员</button>{/if}
+					{#if adminConfigured}<button class:music-login-tab--active={loginMode === "admin"} type="button" on:click={() => selectLoginMode("admin")}>管理员</button>{/if}
 					<button class:music-login-tab--active={loginMode === "phone"} type="button" on:click={() => selectLoginMode("phone")}>手机验证码</button>
 					{#if !MUSIC_SOURCE_META[musicSource].hasKugouFeatures}<button class:music-login-tab--active={loginMode === "password"} type="button" on:click={() => selectLoginMode("password")}>账号密码</button>{/if}
 				</div>

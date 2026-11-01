@@ -513,7 +513,15 @@ assert.equal(getShanghaiDateKey(new Date("2026-08-09T18:00:00.000Z")), "2026-08-
 		// 酷狗独有能力必须被拒绝，而不是静默打到错误的路由
 		await assert.rejects(() => sourceClient.claimVip("2026-11-01"), /仅酷狗概念版支持/);
 		await assert.rejects(() => sourceClient.getDailyRecommendations(), /仅酷狗概念版支持/);
-		await assert.rejects(() => sourceClient.loginAdmin("x"), /仅酷狗概念版支持/);
+
+		// 凭据保存与口令登录两个源都支持（同一口令、各自独立存储），
+		// 所以路径必须自动加 /netease 前缀，而不是被拒绝。
+		seenUrls.length = 0;
+		await sourceClient.adminStatus();
+		assert.ok(seenUrls.at(-1)!.includes("/netease/auth/admin/status"), "网易云口令状态必须走 /netease 前缀");
+		seenUrls.length = 0;
+		await sourceClient.saveAdminCredentials("x").catch(() => {});
+		assert.ok(seenUrls.at(-1)!.includes("/netease/auth/admin/save"), "网易云保存凭据必须走 /netease 前缀");
 
 		// 切回酷狗：口令登录不可用，验证码字段名回到 mobile
 		sourceClient.setSource("kugou");

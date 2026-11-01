@@ -687,11 +687,10 @@ export class MusicApiClient {
 	/** 酷狗独有能力在网易云源下直接拒绝，避免打到错误的路由。 */
 	private isKugouOnly(path: string, method: string): boolean {
 		const bare = path.startsWith("/") ? path : `/${path}`;
-		if (bare.startsWith("/auth/admin")) return true;
 		if (bare.startsWith("/recommendations")) return true;
 		if (bare.startsWith("/verify/")) return true;
 		if (bare.startsWith("/vip/")) return true;
-		// 歌单增删改：网易云侧尚未实现
+		// 歌单增删改：网易云侧尚未实现（凭据保存/口令登录两个源都支持，故不在此拦截）
 		if (bare === "/playlists" && method !== "GET") return true;
 		if (/^\/playlists\/[^/]+\/(add|tracks\/delete)$/.test(bare)) return true;
 		if (/^\/playlists\/[^/]+$/.test(bare) && method === "DELETE") return true;
