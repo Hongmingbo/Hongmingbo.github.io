@@ -398,11 +398,13 @@ globalThis.fetch = async (input, init) => {
 		headers: { "Content-Type": "application/json" },
 	});
 };
-// 账号密码登录已下线（上游对任何凭据形态都拒绝），契约要求该方法不存在。
-assert.equal(
-	(bff as unknown as Record<string, unknown>).loginPassword,
-	undefined,
-	"account+password login must no longer exist on the client",
+// 酷狗上游对所有账号密码形态都拒绝（/v9/login_by_pwd 全凭据空 msg），
+// 因此酷狗源下账号密码登录必须不可用 —— 这条守护保留原意。
+// 网易云的账号密码登录是独立链路（/netease/auth/password），不受此限制。
+await assert.rejects(
+	() => bff.loginPassword({ phone: "13800000000", password: "x" }),
+	/仅网易云源支持/,
+	"kugou must not offer account+password login",
 );
 try {
 	assert.equal(await bff.getStreamUrl("abc123"), "https://music.hmb2011.dpdns.org/tracks/abc123/stream");
@@ -455,4 +457,73 @@ try {
 
 // This instant remains on the next calendar day in Asia/Shanghai, guarding against UTC-date VIP claims.
 assert.equal(getShanghaiDateKey(new Date("2026-08-09T18:00:00.000Z")), "2026-08-10");
+// ---------------- 播放源切换契约（酷狗 / 网易云）----------------
+{
+	const originalSourceFetch = globalThis.fetch;
+	const seenUrls: string[] = [];
+	let lastRequestBody = "";
+	globalThis.fetch = async (input, init) => {
+		const url = String(input);
+		seenUrls.push(url);
+		lastRequestBody = String(init?.body ?? "");
+		const json = (payload: unknown) =>
+			new Response(JSON.stringify(payload), { status: 200, headers: { "Content-Type": "application/json" } });
+		if (url.includes("/session")) return json({ status: 1, data: { authenticated: false } });
+		if (url.includes("/search/songs")) return json({ status: 1, data: { info: [{ hash: "22", name: "稻香", author: "周杰伦", timeLength: 223 }] } });
+		if (url.includes("/lyrics")) return json({ status: 1, data: { content: "[00:00]x" } });
+		if (url.includes("/prepare")) return json({ status: 1, data: { ready: true } });
+		return json({ status: 1, data: {} });
+	};
+
+	try {
+		const sourceClient = new MusicApiClient(MUSIC_BFF_ORIGIN);
+		assert.equal(sourceClient.getSource(), "kugou", "默认源必须是酷狗");
+
+		// 酷狗源：路径不带前缀
+		seenUrls.length = 0;
+		await sourceClient.searchSongs("x", 1, 10);
+		assert.ok(seenUrls.at(-1)!.includes("/search/songs"), "酷狗搜索保持原路径");
+		assert.ok(!seenUrls.at(-1)!.includes("/netease/"), "酷狗搜索不能带 netease 前缀");
+
+		// 切到网易云：共用能力自动加前缀
+		sourceClient.setSource("netease");
+		assert.equal(sourceClient.getSource(), "netease");
+
+		seenUrls.length = 0;
+		await sourceClient.searchSongs("x", 1, 10);
+		assert.ok(seenUrls.at(-1)!.includes("/netease/search/songs"), "网易云搜索必须走 /netease 前缀");
+
+		seenUrls.length = 0;
+		await sourceClient.getSession();
+		assert.ok(seenUrls.at(-1)!.includes("/netease/session"));
+
+		seenUrls.length = 0;
+		await sourceClient.getLyrics("22", 0);
+		assert.ok(seenUrls.at(-1)!.includes("/netease/tracks/22/lyrics"));
+
+		// 流地址（浏览器 audio.src）也必须带前缀，否则会打到酷狗路由
+		const sourceStreamUrl = await sourceClient.getStreamUrl("22");
+		assert.ok(sourceStreamUrl.includes("/netease/tracks/22/stream"), `流地址应带前缀，实际: ${sourceStreamUrl}`);
+
+		// 验证码字段名按源切换
+		seenUrls.length = 0;
+		await sourceClient.sendCaptcha("13800000000");
+		assert.equal(JSON.parse(lastRequestBody).phone, "13800000000", "网易云验证码用 phone 字段");
+
+		// 酷狗独有能力必须被拒绝，而不是静默打到错误的路由
+		await assert.rejects(() => sourceClient.claimVip("2026-11-01"), /仅酷狗概念版支持/);
+		await assert.rejects(() => sourceClient.getDailyRecommendations(), /仅酷狗概念版支持/);
+		await assert.rejects(() => sourceClient.loginAdmin("x"), /仅酷狗概念版支持/);
+
+		// 切回酷狗：口令登录不可用，验证码字段名回到 mobile
+		sourceClient.setSource("kugou");
+		await assert.rejects(() => sourceClient.loginPassword({ phone: "13800000000", password: "x" }), /仅网易云源支持/);
+		seenUrls.length = 0;
+		await sourceClient.sendCaptcha("13800000000");
+		assert.equal(JSON.parse(lastRequestBody).mobile, "13800000000", "酷狗验证码用 mobile 字段");
+	} finally {
+		globalThis.fetch = originalSourceFetch;
+	}
+}
+
 console.log("music-api contract tests: PASS");

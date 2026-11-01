@@ -41,6 +41,23 @@ export interface MusicSong {
 // Fixed production endpoint. Browser code never receives an arbitrary credentialed API origin.
 export const MUSIC_BFF_ORIGIN = "https://music.hmb2011.dpdns.org";
 
+/** 播放源。网易云的路由挂在 BFF 的 /netease 前缀下，酷狗保持原有路径。 */
+export type MusicSource = "kugou" | "netease";
+
+export const MUSIC_SOURCE_META: Record<
+	MusicSource,
+	{
+		label: string;
+		short: string;
+		/** 该源是否支持酷狗独有能力（VIP 每日领取、管理员口令、风控验证、歌单增删） */
+		hasKugouFeatures: boolean;
+		loginModes: Array<"qr" | "sms" | "passphrase" | "password">;
+	}
+> = {
+	kugou: { label: "酷狗概念版", short: "酷狗", hasKugouFeatures: true, loginModes: ["qr", "sms", "passphrase"] },
+	netease: { label: "网易云音乐", short: "网易云", hasKugouFeatures: false, loginModes: ["qr", "sms", "password"] },
+};
+
 export class MusicApiError extends Error {
 	readonly code?: number | string;
 	readonly status?: number;
@@ -645,14 +662,53 @@ export const parseLyricsText = (raw: string): MusicLyricLine[] => {
  */
 export class MusicApiClient {
 	readonly baseUrl: string;
+	private source: MusicSource = "kugou";
 
-	constructor(baseUrl: string) {
+	constructor(baseUrl: string, source: MusicSource = "kugou") {
 		this.baseUrl = normalizeApiBaseUrl(baseUrl);
+		this.source = source === "netease" ? "netease" : "kugou";
+	}
+
+	/** 切换播放源；切换后所有共用方法自动走对应前缀。 */
+	setSource(source: MusicSource): void {
+		this.source = source === "netease" ? "netease" : "kugou";
+	}
+
+	getSource(): MusicSource {
+		return this.source;
+	}
+
+	/** 只做前缀拼接，不做能力判断。 */
+	private scopedPath(path: string): string {
+		const bare = path.startsWith("/") ? path : `/${path}`;
+		return this.source === "netease" ? `/netease${bare}` : bare;
+	}
+
+	/** 酷狗独有能力在网易云源下直接拒绝，避免打到错误的路由。 */
+	private isKugouOnly(path: string, method: string): boolean {
+		const bare = path.startsWith("/") ? path : `/${path}`;
+		if (bare.startsWith("/auth/admin")) return true;
+		if (bare.startsWith("/recommendations")) return true;
+		if (bare.startsWith("/verify/")) return true;
+		if (bare.startsWith("/vip/")) return true;
+		// 歌单增删改：网易云侧尚未实现
+		if (bare === "/playlists" && method !== "GET") return true;
+		if (/^\/playlists\/[^/]+\/(add|tracks\/delete)$/.test(bare)) return true;
+		if (/^\/playlists\/[^/]+$/.test(bare) && method === "DELETE") return true;
+		return false;
+	}
+
+	/** 统一解析最终请求路径。 */
+	private resolvePath(path: string, method: string): string {
+		if (this.source !== "netease") return path;
+		if (this.isKugouOnly(path, method)) throw new MusicApiError("该功能仅酷狗概念版支持");
+		return this.scopedPath(path);
 	}
 
 	async request<T = any>(path: string, options: { method?: string; query?: Record<string, unknown>; body?: unknown } = {}): Promise<T> {
 		if (!this.baseUrl) throw new MusicApiError("音乐服务尚未配置");
-		const url = new URL(`${this.baseUrl}/${path.replace(/^\/+/, "")}`);
+		const resolved = this.resolvePath(path, options.method ?? (options.body === undefined ? "GET" : "POST"));
+		const url = new URL(`${this.baseUrl}/${resolved.replace(/^\/+/, "")}`);
 		for (const [key, value] of Object.entries(options.query ?? {})) {
 			if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
 		}
@@ -699,7 +755,7 @@ export class MusicApiClient {
 			if (!responseSucceeded(payload)) return null;
 			const data = responseData<any>(payload);
 			if (!data?.authenticated || data.userid === undefined) return null;
-			return { userid: data.userid, nickname: data.nickname, pic: data.pic };
+			return { userid: data.userid, nickname: data.nickname, pic: data.pic ?? data.avatar };
 		} catch (error) {
 			if (error instanceof MusicApiError && error.status === 401) return null;
 			throw error;
@@ -707,13 +763,25 @@ export class MusicApiClient {
 	}
 
 	async sendCaptcha(mobile: string): Promise<void> {
-		const payload = await this.request("/auth/sms/send", { body: { mobile } });
+		// 两个源的字段名不同：酷狗用 mobile，网易云用 phone。
+		const body = this.source === "netease" ? { phone: mobile } : { mobile };
+		const payload = await this.request("/auth/sms/send", { body });
 		if (!responseSucceeded(payload)) throw new MusicApiError("验证码发送失败", payload, undefined, responseErrorCode(payload));
 	}
 
 	async loginPhone(mobile: string, code: string, userid?: string): Promise<MusicSession> {
-		const payload = await this.request("/auth/sms/login", { body: { mobile, code, userid } });
+		// 网易云用 phone + captcha，且没有 userid 概念。
+		const body = this.source === "netease" ? { phone: mobile, captcha: code } : { mobile, code, userid };
+		const payload = await this.request("/auth/sms/login", { body });
 		if (!responseSucceeded(payload)) throw new MusicApiError("手机验证码登录失败", payload, undefined, responseErrorCode(payload));
+		return this.sessionFromLogin(payload);
+	}
+
+	/** 网易云账号口令登录（手机号或邮箱 + 密码）。仅网易云源可用。 */
+	async loginPassword(input: { phone?: string; email?: string; password: string }): Promise<MusicSession> {
+		if (this.source !== "netease") throw new MusicApiError("账号口令登录仅网易云源支持");
+		const payload = await this.request("/auth/password", { method: "POST", body: input });
+		if (!responseSucceeded(payload)) throw new MusicApiError("账号口令登录失败", payload, undefined, responseErrorCode(payload));
 		return this.sessionFromLogin(payload);
 	}
 
@@ -760,13 +828,13 @@ export class MusicApiClient {
 	private sessionFromLogin(payload: unknown): MusicSession {
 		const data = responseData<any>(payload);
 		if (data?.userid === undefined) throw new MusicApiError("登录会话响应无效", payload);
-		return { userid: data.userid, nickname: data.nickname, pic: data.pic };
+		return { userid: data.userid, nickname: data.nickname, pic: data.pic ?? data.avatar };
 	}
 
 	private sessionFromQr(payload: unknown): MusicSession {
 		const data = responseData<any>(payload);
 		if (Number(data?.status) !== 4 || data?.userid === undefined) throw new MusicApiError("二维码会话响应无效", payload);
-		return { userid: data.userid, nickname: data.nickname, pic: data.pic };
+		return { userid: data.userid, nickname: data.nickname, pic: data.pic ?? data.avatar };
 	}
 
 	async logout(): Promise<void> {
@@ -844,7 +912,8 @@ export class MusicApiClient {
 		// Native Audio requests this BFF URL directly. The BFF HttpOnly session cookie
 		// authenticates the request; this never resolves or exposes an upstream media URL.
 		const streamQuery = quality ? `?quality=${encodeURIComponent(quality)}` : "";
-		return `${this.baseUrl}/tracks/${encodeURIComponent(hash)}/stream${streamQuery}`;
+		const streamPath = this.scopedPath(`/tracks/${encodeURIComponent(hash)}/stream`).replace(/^\/+/, "");
+		return `${this.baseUrl}/${streamPath}${streamQuery}`;
 	}
 
 	/** 取整首歌的二进制（下载用）。鉴权与播放一致，走同一个 BFF 会话 Cookie；
@@ -865,6 +934,10 @@ export class MusicApiClient {
 		} = {},
 	): Promise<Blob> {
 		if (!this.baseUrl) throw new MusicApiError("音乐服务尚未配置");
+		// 网易云侧没有单独的下载路由；/stream 本身就返回整首字节，直接用。
+		if (this.source === "netease") {
+			return await this.fetchTrackBytes(hash, quality, "stream", options);
+		}
 		try {
 			return await this.fetchTrackBytes(hash, quality, "download", options);
 		} catch (error) {
@@ -883,7 +956,8 @@ export class MusicApiClient {
 		route: "download" | "stream",
 		options: { onProgress?: (loaded: number, total: number) => void; signal?: AbortSignal } = {},
 	): Promise<Blob> {
-		const url = new URL(`${this.baseUrl}/tracks/${encodeURIComponent(hash)}/${route}`);
+		const bytesPath = this.scopedPath(`/tracks/${encodeURIComponent(hash)}/${route}`).replace(/^\/+/, "");
+		const url = new URL(`${this.baseUrl}/${bytesPath}`);
 		if (quality) url.searchParams.set("quality", quality);
 		const response = await fetch(url, { credentials: "include", cache: "no-store", signal: options.signal });
 		if (!response.ok) {

@@ -29,6 +29,8 @@
 		MusicApiError,
 		MusicRiskVerifyError,
 		MUSIC_BFF_ORIGIN,
+		MUSIC_SOURCE_META,
+		type MusicSource,
 		isSongInPlaylist,
 		musicErrorMessage,
 		nextPlayMode,
@@ -72,7 +74,7 @@
 			}
 		},
 	};
-	type LoginMode = "qr" | "phone" | "admin";
+	type LoginMode = "qr" | "phone" | "admin" | "password";
 	type VipState = "idle" | "checking" | "claimed" | "risk" | "error";
 	type SearchScope = "all" | "playlist";
 	type PanelTab = "songs" | "discover";
@@ -92,6 +94,10 @@
 	let expanded = false;
 	let showSettings = false;
 	let showLogin = false;
+	/** 当前播放源：酷狗概念版 / 网易云。两个源的登录态在 BFF 侧互相独立。 */
+	let musicSource: MusicSource = "kugou";
+	let accountInput = "";
+	let passwordInput = "";
 	let loginMode: LoginMode = "qr";
 	let loginBusy = false;
 	let loginMessage = "";
@@ -454,7 +460,7 @@
 		showLogin = false;
 		loginBusy = false;
 		loginMessage = "";
-		setNotice("已登录酷狗概念版，正在加载你的音乐数据");
+		setNotice(`已登录${MUSIC_SOURCE_META[musicSource].label}，正在加载你的音乐数据`);
 		await loadUserData();
 		const pending = pendingRiskSong;
 		pendingRiskSong = null;
@@ -480,7 +486,7 @@
 		apiStatus = "connecting";
 		apiMessage = "正在连接受信音乐服务…";
 		try {
-			client = new MusicApiClient(apiUrl);
+			client = new MusicApiClient(apiUrl, musicSource);
 			await client.health();
 			apiStatus = "ready";
 			apiMessage = "音乐服务已连接";
@@ -731,6 +737,7 @@
 	// 状态与规则全部来自 music-api 的纯函数（已由契约测试锁定），这里只做接线。
 	const DOWNLOADS_KEY = "hengduo-music-downloads";
 	const DOWNLOAD_CONCURRENCY_KEY = "hengduo-music-download-concurrency";
+	const SOURCE_KEY = "hengduo-music-source";
 	let downloadRecords: DownloadRecord[] = [];
 	let downloadConcurrency = DOWNLOAD_CONCURRENCY_DEFAULT;
 	let downloadSummary = summarizeDownloads([]);
@@ -1791,6 +1798,66 @@
 		}
 	};
 
+	/** 切换播放源：重置会话与播放态，用新源继续。两个源的 cookie 在 BFF 侧独立。 */
+	const switchSource = async (next: MusicSource) => {
+		if (next === musicSource) return;
+		musicSource = next;
+		safeStorage.set(SOURCE_KEY, next);
+		clearQrTimer();
+		qrImage = "";
+		qrKey = "";
+		qrMessage = "点击生成二维码";
+		loginMessage = "";
+		loginMode = "qr";
+		accountInput = "";
+		passwordInput = "";
+		auth = null;
+		playlists = [];
+		songs = [];
+		queueSongs = [];
+		currentSong = null;
+		isPlaying = false;
+		if (audio) {
+			audio.pause();
+			audio.removeAttribute("src");
+			audio.load();
+		}
+		if (!client) return;
+		client.setSource(next);
+		setNotice(`已切换到${MUSIC_SOURCE_META[next].label}`);
+		try {
+			auth = await client.getSession();
+			if (auth) await loadUserData();
+		} catch {
+			/* 未登录或网络异常时保持空态，不打扰用户 */
+		}
+	};
+
+	/** 网易云账号口令登录（手机号或邮箱 + 密码）。酷狗源下该方法会被客户端拒绝。 */
+	const passwordLogin = async () => {
+		if (!client) return;
+		const account = accountInput.trim();
+		if (!account || !passwordInput) {
+			loginMessage = "请输入账号和密码";
+			return;
+		}
+		loginBusy = true;
+		loginMessage = "";
+		try {
+			const isPhone = /^1\d{10}$/.test(account);
+			const nextAuth = await client.loginPassword({
+				...(isPhone ? { phone: account } : { email: account }),
+				password: passwordInput,
+			});
+			passwordInput = "";
+			await setSession(nextAuth);
+		} catch (error) {
+			loginMessage = errorMessage(error, "账号或密码不正确");
+		} finally {
+			loginBusy = false;
+		}
+	};
+
 	onMount(() => {
 		const onKeydown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
@@ -1851,6 +1918,7 @@
 
 	onMount(() => {
 		apiUrl = normalizeApiBaseUrl(isDev && devApiUrl ? devApiUrl : MUSIC_BFF_ORIGIN);
+		musicSource = safeStorage.get(SOURCE_KEY) === "netease" ? "netease" : "kugou";
 		// 注意：键缺失时 Number(null) === 0，会被误判为「合法音量 0」导致无声。
 		// 必须区分「从未设置过」（键为 null → 保留默认 0.7）与「用户主动设为 0」（键为 "0" → 尊重该值）。
 		const savedVolumeRaw = safeStorage.get("hengduo-music-volume");
@@ -2466,16 +2534,21 @@
 	{/if}
 	{#if showLogin && apiStatus === "ready"}
 		<div class="music-login-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (showLogin = false)}>
-			<div class="music-login-card" role="dialog" aria-modal="true" aria-label="登录酷狗概念版">
-				<header class="music-panel__header"><div><p class="music-kicker">ACCOUNT ACCESS</p><h2>登录酷狗概念版</h2></div><button class="music-icon-button" type="button" aria-label="关闭登录窗口" on:click={() => (showLogin = false)}><Icon icon="material-symbols:close-rounded" /></button></header>
+			<div class="music-login-card" role="dialog" aria-modal="true" aria-label={`登录${MUSIC_SOURCE_META[musicSource].label}`}>
+				<header class="music-panel__header"><div><p class="music-kicker">ACCOUNT ACCESS</p><h2>登录{MUSIC_SOURCE_META[musicSource].label}</h2></div><button class="music-icon-button" type="button" aria-label="关闭登录窗口" on:click={() => (showLogin = false)}><Icon icon="material-symbols:close-rounded" /></button></header>
+				<div class="music-source-switch" role="group" aria-label="选择播放源">
+					<button class="music-source-switch__item" class:music-source-switch__item--active={musicSource === "kugou"} type="button" disabled={loginBusy} on:click={() => void switchSource("kugou")}>酷狗概念版</button>
+					<button class="music-source-switch__item" class:music-source-switch__item--active={musicSource === "netease"} type="button" disabled={loginBusy} on:click={() => void switchSource("netease")}>网易云音乐</button>
+				</div>
 				<div class="music-login-tabs">
 					<button class:music-login-tab--active={loginMode === "qr"} type="button" on:click={() => selectLoginMode("qr")}>二维码</button>
-					{#if adminConfigured}<button class:music-login-tab--active={loginMode === "admin"} type="button" on:click={() => selectLoginMode("admin")}>管理员</button>{/if}
+					{#if MUSIC_SOURCE_META[musicSource].hasKugouFeatures && adminConfigured}<button class:music-login-tab--active={loginMode === "admin"} type="button" on:click={() => selectLoginMode("admin")}>管理员</button>{/if}
 					<button class:music-login-tab--active={loginMode === "phone"} type="button" on:click={() => selectLoginMode("phone")}>手机验证码</button>
+					{#if !MUSIC_SOURCE_META[musicSource].hasKugouFeatures}<button class:music-login-tab--active={loginMode === "password"} type="button" on:click={() => selectLoginMode("password")}>账号密码</button>{/if}
 				</div>
 				{#if loginMode === "qr"}
 					<div class="music-qr-block">
-						{#if qrImage}<img src={qrImage} alt="酷狗登录二维码" />{:else}<div class="music-qr-empty"><Icon icon="material-symbols:qr-code-2-rounded" /><span>点击生成登录二维码</span></div>{/if}
+						{#if qrImage}<img src={qrImage} alt={`${MUSIC_SOURCE_META[musicSource].short}登录二维码`} />{:else}<div class="music-qr-empty"><Icon icon="material-symbols:qr-code-2-rounded" /><span>点击生成登录二维码</span></div>{/if}
 						<p>{qrMessage}</p>
 						<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void startQrLogin()}>{loginBusy ? "生成中…" : "生成二维码"}</button>
 					</div>
@@ -2491,6 +2564,13 @@
 						<label class="music-field"><span>管理员口令</span><input bind:value={adminPassphrase} type="password" autocomplete="off" placeholder="自设口令" /></label>
 						{#if adminSaved}<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void adminLogin()}>{loginBusy ? "恢复中…" : "口令登录"}</button>{/if}
 						{#if auth}<button class="music-quiet" type="button" disabled={loginBusy} on:click={() => void saveAdmin()}>{loginBusy ? "保存中…" : "保存当前登录"}</button>{/if}
+					</div>
+				{:else if loginMode === "password"}
+					<div class="music-login-form">
+						<p class="music-muted">用网易云账号的密码登录。开启了二次验证的账号请改用二维码或手机验证码。</p>
+						<label class="music-field"><span>手机号 / 邮箱</span><input bind:value={accountInput} autocomplete="username" placeholder="手机号或邮箱" /></label>
+						<label class="music-field"><span>密码</span><input bind:value={passwordInput} type="password" autocomplete="current-password" placeholder="账号密码" /></label>
+						<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void passwordLogin()}>{loginBusy ? "登录中…" : "账号密码登录"}</button>
 					</div>
 				{:else}
 					<div class="music-qr-block">
@@ -2912,6 +2992,42 @@
 	.music-login-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1rem; background: rgb(15 23 42 / 0.28); backdrop-filter: blur(5px); }
 	.music-login-card { width: min(27rem, 100%); max-height: calc(100vh - 2rem); padding: 1.25rem 1.35rem 1.15rem; overflow: auto; border: 1px solid color-mix(in oklch, var(--primary) 25%, var(--card-border, #dce5e5)); border-radius: 1.2rem; background: var(--card-bg, #fff); box-shadow: 0 30px 80px -35px rgb(15 23 42 / 0.65); animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-login-card > .music-panel__header { margin-bottom: 1.05rem; }
+	/* 播放源切换：两个源视觉上等权，选中项用主色描边 + 浅底，不抢登录表单的注意力 */
+	.music-source-switch {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.3rem;
+		margin-bottom: 0.55rem;
+		padding: 0.22rem;
+		border: 1px solid color-mix(in oklch, var(--primary) 16%, var(--card-border, #dce5e5));
+		border-radius: 0.75rem;
+		background: color-mix(in oklch, var(--primary) 5%, transparent);
+	}
+
+	.music-source-switch__item {
+		min-height: 2rem;
+		border: 1px solid transparent;
+		border-radius: 0.55rem;
+		color: var(--md-tone-muted);
+		background: transparent;
+		font: inherit;
+		font-size: 0.72rem;
+		cursor: pointer;
+		transition: color 0.25s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
+			background 0.25s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
+			border-color 0.25s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1));
+	}
+
+	.music-source-switch__item--active {
+		border-color: color-mix(in oklch, var(--primary) 42%, transparent);
+		color: var(--primary);
+		background: var(--card-bg, #fff);
+		font-weight: 600;
+	}
+
+	.music-source-switch__item:disabled { cursor: not-allowed; opacity: 0.6; }
+	.music-source-switch__item:not(:disabled):hover { color: var(--primary); }
+
 	.music-login-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.25rem; padding: 0.25rem; border-radius: 0.75rem; background: color-mix(in oklch, var(--primary) 7%, var(--page-bg, #f8fafc)); }
 	.music-login-tabs button { min-height: 2.1rem; border: 0; border-radius: 0.55rem; color: var(--md-tone-muted); background: transparent; font: inherit; font-size: 0.7rem; cursor: pointer; }
 	.music-login-tab--active { color: var(--primary) !important; background: var(--card-bg, #fff) !important; box-shadow: 0 5px 12px -10px rgb(15 23 42 / 0.55); }
