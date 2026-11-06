@@ -449,7 +449,10 @@ try {
 	assert.equal(searchUrl, "https://music.hmb2011.dpdns.org/search/songs?keyword=%E6%9C%AA%E6%94%B6%E8%97%8F%E6%AD%8C%E6%9B%B2&page=2&pagesize=50");
 	assert.equal(searchBody, "");
 
-	await bff.addPlaylistTracks("123", "歌曲名|HASH123|42|99");
+	await bff.addToPlaylist({
+		id: "123",
+		songs: [{ hash: "HASH123", name: "歌曲名", author: "歌手", img: "", timeLength: 100, album_id: 42, mixsongid: 99 } as any],
+	});
 	assert.equal(addMethod, "POST");
 	assert.equal(addUrl, "https://music.hmb2011.dpdns.org/playlists/123/add");
 	assert.equal(addBody, JSON.stringify({ data: "歌曲名|HASH123|42|99" }));
@@ -633,6 +636,49 @@ assert.equal(getShanghaiDateKey(new Date("2026-08-09T18:00:00.000Z")), "2026-08-
 		);
 	} finally {
 		globalThis.fetch = originalCapFetch;
+	}
+}
+
+// ---------------- P3：歌单操作收 id / 歌曲对象，不再暴露上游拼串规则 ----------------
+{
+	const originalMutFetch = globalThis.fetch;
+	let mutUrl = "";
+	let mutBody = "";
+	globalThis.fetch = (async (input: any, init: any) => {
+		mutUrl = String(input);
+		mutBody = String(init?.body ?? "");
+		return new Response(JSON.stringify({ status: 1, data: {} }), { status: 200, headers: { "Content-Type": "application/json" } });
+	}) as any;
+
+	try {
+		const mutClient = new MusicApiClient(MUSIC_BFF_ORIGIN);
+		const fullSong = { hash: "h1", name: "歌一", author: "A", img: "", timeLength: 100, album_id: 7, mixsongid: 8 } as any;
+		const bareSong = { hash: "h2", name: "歌二", author: "B", img: "", timeLength: 100 } as any;
+
+		// 两个源都用同一份载荷：酷狗按 ',' 切分，网易云取第 2 段当 id
+		await mutClient.addToPlaylist({ id: 555, songs: [fullSong, bareSong] });
+		assert.ok(mutUrl.endsWith("/playlists/555/add"), mutUrl);
+		assert.equal(JSON.parse(mutBody).data, "歌一|h1|7|8,歌二|h2|0|0", "缺字段必须补 0，不能出现 undefined");
+
+		// 空列表在客户端就拒绝，不发请求
+		mutUrl = "";
+		await assert.rejects(() => mutClient.addToPlaylist({ id: 1, songs: [] }), /缺少歌曲/);
+		assert.equal(mutUrl, "", "空歌曲列表不应发出请求");
+
+		// 移除：非数字 id 被过滤，剩下的照常发
+		mutUrl = "";
+		await mutClient.removeFromPlaylist({ id: 555, trackIds: ["11", "abc", "22", 33] });
+		assert.ok(mutUrl.endsWith("/playlists/555/tracks/delete"), mutUrl);
+		assert.deepEqual(JSON.parse(mutBody).fileids, ["11", "22", "33"], "非数字 id 必须被丢弃");
+
+		// 全非法 → 客户端拒绝
+		await assert.rejects(() => mutClient.removeFromPlaylist({ id: 1, trackIds: ["abc", ""] }), /缺少歌曲 id/);
+
+		// 超过 100 首 → 客户端拒绝（两个源的上游上限一致）
+		const tooMany = Array.from({ length: 101 }, (_, i) => String(i + 1));
+		await assert.rejects(() => mutClient.removeFromPlaylist({ id: 1, trackIds: tooMany }), /最多移除 100 首/);
+	} finally {
+		globalThis.fetch = originalMutFetch;
 	}
 }
 

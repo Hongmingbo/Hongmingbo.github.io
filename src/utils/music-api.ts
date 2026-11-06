@@ -989,12 +989,42 @@ export class MusicApiClient {
 		return normalizeSongs(payload);
 	}
 
-	async addPlaylistTracks(listid: string | number, data: string): Promise<unknown> {
-		return this.request(`/playlists/${encodeURIComponent(String(listid))}/add`, { method: "POST", body: { data } });
+	/**
+	 * 把歌曲加入歌单。
+	 *
+	 * 调用方只传歌曲对象 —— 不再把上游的 "name|hash|albumId|mixSongId" 拼串规则
+	 * 泄漏到 UI 层。两个源的载荷格式恰好一致：酷狗上游按 ',' 切分再按 '|' 取字段，
+	 * 网易云侧取第 2 段当歌曲 id，所以同一份载荷两边都能用。
+	 */
+	async addToPlaylist(input: { id: string | number; songs: MusicSong[] }): Promise<unknown> {
+		const id = encodeURIComponent(String(input.id));
+		const songs = (input.songs ?? []).filter((song) => song && song.hash);
+		if (!songs.length) throw new MusicApiError("缺少歌曲", null, 400, "INVALID_SONG");
+		const data = songs
+			.map((song) => {
+				const raw = song as Record<string, unknown>;
+				const albumId = Number(raw.album_id ?? raw.albumid ?? 0) || 0;
+				const mixSongId = Number(raw.mixsongid ?? raw.mix_song_id ?? 0) || 0;
+				return `${song.name}|${song.hash}|${albumId}|${mixSongId}`;
+			})
+			.join(",");
+		// BFF 对 data 有 2048 字符上限，超了要提前说清楚而不是让服务端报错。
+		if (data.length > 2048) throw new MusicApiError("单次添加的歌曲过多，请分批收藏", null, 400, "INVALID_SONG");
+		return this.request(`/playlists/${id}/add`, { method: "POST", body: { data } });
 	}
 
-	async delPlaylistTracks(listid: string | number, fileids: Array<string | number>): Promise<unknown> {
-		return this.request(`/playlists/${encodeURIComponent(String(listid))}/tracks/delete`, { method: "POST", body: { fileids } });
+	/**
+	 * 从歌单移除歌曲。接收 id 数组，上限 100（两个源的上游一致）。
+	 * 非法 id 在客户端就拦掉，不发给服务端。
+	 */
+	async removeFromPlaylist(input: { id: string | number; trackIds: Array<string | number> }): Promise<unknown> {
+		const id = encodeURIComponent(String(input.id));
+		const trackIds = (input.trackIds ?? [])
+			.map((value) => String(value).trim())
+			.filter((value) => /^\d{1,15}$/.test(value));
+		if (!trackIds.length) throw new MusicApiError("缺少歌曲 id", null, 400, "INVALID_FILEIDS");
+		if (trackIds.length > 100) throw new MusicApiError("单次最多移除 100 首", null, 400, "INVALID_FILEIDS");
+		return this.request(`/playlists/${id}/tracks/delete`, { method: "POST", body: { fileids: trackIds } });
 	}
 
 	async getStreamPreparation(hash: string): Promise<void> {

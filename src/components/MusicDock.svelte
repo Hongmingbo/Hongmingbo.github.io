@@ -1007,12 +1007,6 @@
 		libraryPage = 1;
 	};
 
-	const searchSongAddData = (song: MusicSong) => {
-		const albumId = Number(song.album_id ?? song.albumid ?? 0) || 0;
-		const mixSongId = Number(song.mixsongid ?? song.mix_song_id ?? 0) || 0;
-		return `${song.name}|${song.hash}|${albumId}|${mixSongId}`;
-	};
-
 	const openAddSong = (song: MusicSong) => {
 		if (!auth || playlists.length === 0) {
 			setNotice("请先登录并加载至少一个歌单");
@@ -1031,7 +1025,7 @@
 		}
 		addBusy = true;
 		try {
-			await client.addPlaylistTracks(addTargetPlaylistId, searchSongAddData(addTargetSong));
+			await client.addToPlaylist({ id: addTargetPlaylistId, songs: [addTargetSong] });
 			const target = playlists.find((playlist) => String(playlist.listid) === addTargetPlaylistId);
 			setNotice(`已添加到「${target?.name ?? "歌单"}」`);
 			if (addTargetPlaylistId === selectedPlaylistId) await loadSongs();
@@ -1306,7 +1300,7 @@
 		let ok = true;
 		for (const [playlistId, items] of byPlaylist) {
 			try {
-				await client.delPlaylistTracks(playlistId, items.map((item) => item.fileid));
+				await client.removeFromPlaylist({ id: playlistId, trackIds: items.map((item) => item.fileid) });
 				for (const item of items) pendingRemovals.delete(item.hash);
 			} catch (error) {
 				ok = false;
@@ -1345,7 +1339,7 @@
 	const addSongToCurrentPlaylist = async (song: MusicSong) => {
 		if (!client || !selectedPlaylistId) return;
 		try {
-			await client.addPlaylistTracks(selectedPlaylistId, searchSongAddData(song));
+			await client.addToPlaylist({ id: selectedPlaylistId, songs: [song] });
 			// 立刻标记为已收藏：远端已接受，但 songs 要等重载才含这首歌。
 			locallyFavorited = new Set(locallyFavorited).add(song.hash);
 			allFavorites = new Set(allFavorites).add(song.hash);
@@ -1430,7 +1424,7 @@
 		batchBusy = true;
 		try {
 			const fileids = entries.filter(([, song]) => songFileId(song)).map(([, song]) => String(songFileId(song)));
-			await client.delPlaylistTracks(selectedPlaylistId, fileids);
+			await client.removeFromPlaylist({ id: selectedPlaylistId, trackIds: fileids });
 			cancelRemovalCommit();
 			showToast("unfav", `已从歌单移除 ${fileids.length} 首歌曲`);
 			batchSelected.clear();
@@ -1866,6 +1860,17 @@
 		vipMessage = next === "netease" ? "登录后自动签到" : "登录后自动检查今日权益";
 		dailySongs = [];
 		dailyMessage = "";
+		// 收藏状态同样要按源隔离。「喜欢 = 收藏到歌单」，所以残留的 hash 会让
+		// 爱心错误地保持实心（那首歌其实不在当前源的任何歌单里）。
+		// 更危险的是 pendingRemovals：未提交的删除会在 5 秒后用【上一个源的歌单 id】
+		// 发起请求 —— 所以必须先取消定时器，再清空缓冲。
+		cancelRemovalCommit();
+		pendingRemovals = new Map();
+		pendingRemovalHashes = new Set();
+		locallyFavorited = new Set();
+		allFavorites = new Set();
+		allFavoritesLoaded = false;
+		fileIdMaps.clear();
 		if (audio) {
 			audio.pause();
 			audio.removeAttribute("src");
