@@ -30,6 +30,7 @@
 		MusicRiskVerifyError,
 		MUSIC_BFF_ORIGIN,
 		MUSIC_SOURCE_META,
+		musicErrorAction,
 		type MusicSource,
 		isSongInPlaylist,
 		musicErrorMessage,
@@ -436,6 +437,39 @@
 
 	const errorMessage = (error: unknown, fallback: string): string => musicErrorMessage(error, fallback);
 
+	/**
+	 * 统一的音乐错误处理入口。
+	 *
+	 * 数据加载/写操作失败时，「加载失败」这种文案会掩盖真实原因（多半是会话过期）。
+	 * 这里按错误携带的 action 决定 UI 反应，各 catch 块只管调用，不再自己判断状态码。
+	 * 登录表单内部的错误不走这里 —— 那时候用户本来就在登录框里。
+	 */
+	const handleMusicError = (error: unknown, fallback: string): string => {
+		const action = musicErrorAction(error);
+
+		if (action === "signIn") {
+			// 只有「本以为登录着」才主动踢回登录，避免未登录用户被反复弹窗。
+			if (auth) {
+				auth = null;
+				showLogin = true;
+				setNotice("登录已过期，请重新登录后再试");
+			}
+			return errorMessage(error, "登录已过期，请重新登录后再试");
+		}
+
+		if (action === "setup") {
+			loginMode = "admin";
+			showLogin = true;
+			return errorMessage(error, "请先设置管理员口令并保存当前登录");
+		}
+
+		if (action === "unsupported") {
+			return errorMessage(error, `${MUSIC_SOURCE_META[musicSource].label}不支持该功能`);
+		}
+
+		return errorMessage(error, fallback);
+	};
+
 	const clearQrTimer = () => {
 		if (qrTimer) clearInterval(qrTimer);
 		qrTimer = null;
@@ -543,7 +577,7 @@
 			// runDailyVipFlow 内部只处理业务错误；网络/会话类异常会冒泡到这里。
 			// 不兜住的话 vipState 会永久停在 "checking"，按钮一直禁用无法重试。
 			vipState = "error";
-			vipMessage = errorMessage(error, isNetease ? "签到失败，可稍后重试" : "VIP 检查失败，可稍后重试");
+			vipMessage = handleMusicError(error, isNetease ? "签到失败，可稍后重试" : "VIP 检查失败，可稍后重试");
 		}
 	};
 
@@ -563,7 +597,7 @@
 				songsMessage = "没有读取到可用歌单";
 			}
 		} catch (error) {
-			songsMessage = errorMessage(error, "歌单加载失败");
+			songsMessage = handleMusicError(error, "歌单加载失败");
 		}
 	};
 
@@ -619,7 +653,7 @@
 		} catch (error) {
 			if (generation !== loadGeneration || requestedId !== selectedPlaylistId) return;
 			songs = [];
-			songsMessage = errorMessage(error, "歌曲列表加载失败");
+			songsMessage = handleMusicError(error, "歌曲列表加载失败");
 		} finally {
 			if (generation === loadGeneration) songsLoading = false;
 		}
@@ -647,7 +681,7 @@
 			searchMessage = searchResults.length ? `找到 ${searchResults.length} 首歌曲` : "没有找到匹配歌曲";
 		} catch (error) {
 			searchResults = [];
-			searchMessage = errorMessage(error, "歌曲搜索失败");
+			searchMessage = handleMusicError(error, "歌曲搜索失败");
 		} finally {
 			searchBusy = false;
 		}
@@ -727,7 +761,7 @@
 					/* 回退也失败时走下面的统一提示 */
 				}
 			}
-			setNotice(errorMessage(error, "音质切换失败"));
+			setNotice(handleMusicError(error, "音质切换失败"));
 		}
 	};
 
@@ -831,7 +865,7 @@
 			} else if ((error as { name?: string })?.name === "AbortError") {
 				patch({ status: "canceled" });
 			} else {
-				patch({ status: "failed", error: errorMessage(error, "下载失败") });
+				patch({ status: "failed", error: handleMusicError(error, "下载失败") });
 			}
 		} finally {
 			downloadAborts.delete(record.id);
@@ -1003,7 +1037,7 @@
 			if (addTargetPlaylistId === selectedPlaylistId) await loadSongs();
 			addTargetSong = null;
 		} catch (error) {
-			setNotice(errorMessage(error, "添加到歌单失败"));
+			setNotice(handleMusicError(error, "添加到歌单失败"));
 		} finally {
 			addBusy = false;
 		}
@@ -1059,7 +1093,7 @@
 			if (mediaErrorCode === 2 || mediaErrorCode === 4 || (error instanceof DOMException && error.name === "NotSupportedError")) {
 				void recoverSessionAfterPlaybackFailure();
 			}
-			setNotice(errorMessage(error, "BFF 播放流连接失败"));
+			setNotice(handleMusicError(error, "BFF 播放流连接失败"));
 		} finally {
 			if (generation === playGeneration) currentSongLoading = "";
 		}
@@ -1124,7 +1158,7 @@
 			if (error instanceof DOMException && error.name === "AbortError") return;
 			// 其余（媒体失效 / 浏览器自动播放策略）必须给用户可见反馈，
 			// 否则按钮看起来「点了没反应」。
-			setNotice(errorMessage(error, "播放失败，请重新点击歌曲"));
+			setNotice(handleMusicError(error, "播放失败，请重新点击歌曲"));
 		}
 	};
 
@@ -1276,7 +1310,7 @@
 				for (const item of items) pendingRemovals.delete(item.hash);
 			} catch (error) {
 				ok = false;
-				showToast("error", errorMessage(error, "移除执行失败，收藏状态已保留，可重试"));
+				showToast("error", handleMusicError(error, "移除执行失败，收藏状态已保留，可重试"));
 			}
 		}
 		pendingRemovalHashes = new Set(pendingRemovals.keys());
@@ -1319,7 +1353,7 @@
 			showToast("fav", `已收藏「${song.name}」到当前歌单`);
 			await loadSongs();
 		} catch (error) {
-			showToast("error", errorMessage(error, "收藏失败"));
+			showToast("error", handleMusicError(error, "收藏失败"));
 		}
 	};
 
@@ -1331,7 +1365,7 @@
 			playlists = await client.getPlaylists();
 			if (!selectedPlaylistId && playlists.length > 0) selectedPlaylistId = String(playlists[0].listid);
 		} catch (error) {
-			setNotice(errorMessage(error, "歌单列表刷新失败"));
+			setNotice(handleMusicError(error, "歌单列表刷新失败"));
 		}
 	};
 
@@ -1345,7 +1379,7 @@
 			setNotice(`已创建歌单「${name}」`);
 			await reloadPlaylists();
 		} catch (error) {
-			setNotice(errorMessage(error, "新建歌单失败"));
+			setNotice(handleMusicError(error, "新建歌单失败"));
 		} finally {
 			playlistBusy = false;
 		}
@@ -1365,7 +1399,7 @@
 			await reloadPlaylists();
 			if (selectedPlaylistId) await loadSongs();
 		} catch (error) {
-			setNotice(errorMessage(error, "删除歌单失败"));
+			setNotice(handleMusicError(error, "删除歌单失败"));
 		} finally {
 			playlistBusy = false;
 		}
@@ -1403,7 +1437,7 @@
 			batchMode = false;
 			await loadSongs();
 		} catch (error) {
-			showToast("error", errorMessage(error, "批量移除失败"));
+			showToast("error", handleMusicError(error, "批量移除失败"));
 		} finally {
 			batchBusy = false;
 		}
@@ -1460,7 +1494,7 @@
 			dailyMessage = dailySongs.length > 0 ? "" : "今天暂时没有推荐歌曲";
 		} catch (error) {
 			dailySongs = [];
-			dailyMessage = errorMessage(error, "每日推荐加载失败");
+			dailyMessage = handleMusicError(error, "每日推荐加载失败");
 		} finally {
 			dailyLoading = false;
 		}
@@ -1575,7 +1609,7 @@
 		} catch (error) {
 			if (!isCurrentLyricsRequest(song.hash, currentSong?.hash, generation, lyricsRequestGeneration) || !lyricsOpen) return;
 			lyricsLines = [];
-			lyricsMessage = errorMessage(error, "歌词加载失败");
+			lyricsMessage = handleMusicError(error, "歌词加载失败");
 			lyricsLoading = false;
 		}
 	};
@@ -1609,7 +1643,7 @@
 		} catch (error) {
 			if (!isCurrentLyricsRequest(song.hash, currentSong?.hash, generation, lyricsRequestGeneration)) return;
 			lyricsLines = [];
-			lyricsMessage = errorMessage(error, "歌词加载失败");
+			lyricsMessage = handleMusicError(error, "歌词加载失败");
 		} finally {
 			if (isCurrentLyricsRequest(song.hash, currentSong?.hash, generation, lyricsRequestGeneration)) lyricsLoading = false;
 		}

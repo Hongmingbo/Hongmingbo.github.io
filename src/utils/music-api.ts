@@ -44,24 +44,105 @@ export const MUSIC_BFF_ORIGIN = "https://music.hmb2011.dpdns.org";
 /** 播放源。网易云的路由挂在 BFF 的 /netease 前缀下，酷狗保持原有路径。 */
 export type MusicSource = "kugou" | "netease";
 
-export const MUSIC_SOURCE_META: Record<
-	MusicSource,
-	{
-		label: string;
-		short: string;
-		/** 该源是否支持酷狗独有能力（VIP 每日领取、管理员口令、风控验证、歌单增删） */
-		hasKugouFeatures: boolean;
-		loginModes: Array<"qr" | "sms" | "passphrase" | "password">;
-	}
-> = {
-	kugou: { label: "酷狗概念版", short: "酷狗", hasKugouFeatures: true, loginModes: ["qr", "sms", "passphrase"] },
-	netease: { label: "网易云音乐", short: "网易云", hasKugouFeatures: false, loginModes: ["qr", "sms", "password"] },
+/**
+ * 播放源能力。这是「某个源到底能做什么」的唯一事实源 ——
+ * 客户端按它拒绝请求，UI 按它决定渲染哪些入口。
+ *
+ * 取代了旧的 hasKugouFeatures 布尔 + isKugouOnly() 路径黑名单：
+ * 那套写法把同一件事拆在两处，加一个源或加一个能力要同时改 client 和 UI，
+ * 而且靠正则匹配路径前缀来「猜」能力，很容易漏。
+ */
+export type MusicCapability =
+	| "qrLogin"
+	| "smsLogin"
+	| "passphraseLogin"
+	| "dailyRecommend"
+	| "playlistWrite"
+	| "download"
+	| "lyrics"
+	| "search"
+	| "riskVerify"
+	| "vipDaily"
+	| "vipUpgrade";
+
+export interface MusicSourceMeta {
+	label: string;
+	short: string;
+	capabilities: readonly MusicCapability[];
+}
+
+export const MUSIC_SOURCE_META: Record<MusicSource, MusicSourceMeta> = {
+	kugou: {
+		label: "酷狗概念版",
+		short: "酷狗",
+		capabilities: [
+			"qrLogin", "smsLogin", "passphraseLogin",
+			"dailyRecommend", "playlistWrite", "download", "lyrics", "search",
+			"riskVerify", "vipDaily", "vipUpgrade",
+		],
+	},
+	netease: {
+		label: "网易云音乐",
+		short: "网易云",
+		capabilities: [
+			"qrLogin", "smsLogin", "passphraseLogin",
+			"dailyRecommend", "playlistWrite", "download", "lyrics", "search",
+			"vipDaily",
+		],
+	},
+};
+
+/** 某条路径需要什么能力。不需要特殊能力的路径不在此表内。 */
+interface CapabilityRule {
+	capability: MusicCapability;
+	pattern: RegExp;
+	/** 限定 HTTP 方法；省略表示所有方法。 */
+	methods?: readonly string[];
+}
+
+const CAPABILITY_RULES: readonly CapabilityRule[] = [
+	// 风控挑战流程只有酷狗有，网易云上游没有对应机制
+	{ capability: "riskVerify", pattern: /^\/verify\// },
+	// 歌单写操作（新建/删除/加歌/删歌）
+	{ capability: "playlistWrite", pattern: /^\/playlists/, methods: ["POST", "DELETE", "PUT", "PATCH"] },
+];
+
+/**
+ * 一个错误应该触发什么 UI 反应。
+ *
+ * 借鉴 mygo-music 的插件契约：把五花八门的错误码收敛成四个动作，
+ * 让 UI 只需 `switch (action)`，而不是在每个 catch 里做字符串匹配。
+ */
+export type MusicErrorAction = "signIn" | "setup" | "unavailable" | "unsupported" | null;
+
+const SIGN_IN_CODE_RE = /SESSION_EXPIRED|SESSION_INVALID|NO_SESSION_COOKIE|QR_NO_COOKIE/;
+const SETUP_CODE_RE = /ADMIN_NOT_CONFIGURED|ADMIN_CREDENTIALS_MISSING|SESSION_NOT_PERSISTABLE/;
+const UNSUPPORTED_CODE_RE = /NOT_APPLICABLE|UNSUPPORTED_CAPABILITY/;
+const UNAVAILABLE_CODE_RE =
+	/UNREACHABLE|BAD_STATUS|BAD_BODY|STREAM_FETCH_FAILED|UPSTREAM_ERROR|UPSTREAM_REJECTED|VERIFY_FAILED/;
+
+/** 纯函数：由 status 与 code 推导动作，供测试与裸 payload 使用。 */
+export const deriveMusicErrorAction = (status?: number, code?: number | string): MusicErrorAction => {
+	const text = String(code ?? "");
+	const numeric = Number(status);
+	if (!text && !Number.isFinite(numeric)) return null;
+	// 登录态失效 → 引导重新登录
+	if (numeric === 401 || SIGN_IN_CODE_RE.test(text)) return "signIn";
+	// 还没配置好（口令未设 / 凭据未存）→ 引导去设置
+	if (SETUP_CODE_RE.test(text)) return "setup";
+	// 当前源根本不做这件事 → 提示不支持
+	if (UNSUPPORTED_CODE_RE.test(text)) return "unsupported";
+	// 上游或链路不可用 → 提示稍后重试
+	if (numeric === 502 || UNAVAILABLE_CODE_RE.test(text)) return "unavailable";
+	return null;
 };
 
 export class MusicApiError extends Error {
 	readonly code?: number | string;
 	readonly status?: number;
 	readonly payload: unknown;
+	/** 构造时就固定下来的 UI 动作，避免调用方各自重复判断。 */
+	readonly action: MusicErrorAction;
 
 	constructor(message: string, payload: unknown = null, status?: number, code?: number | string) {
 		super(message);
@@ -69,8 +150,19 @@ export class MusicApiError extends Error {
 		this.payload = payload;
 		this.status = status;
 		this.code = code;
+		this.action = deriveMusicErrorAction(status, code);
 	}
 }
+
+/** 从任意错误对象（含 BFF 直接返回的裸 payload）推断动作。 */
+export const musicErrorAction = (error: unknown): MusicErrorAction => {
+	if (error instanceof MusicApiError) return error.action;
+	const anyError = error as Record<string, unknown> | null;
+	return deriveMusicErrorAction(
+		Number(anyError?.status),
+		(anyError?.error_code ?? anyError?.code) as number | string | undefined,
+	);
+};
 
 export class MusicRiskVerifyError extends MusicApiError {
 	readonly challenge: MusicRiskChallenge;
@@ -690,21 +782,44 @@ export class MusicApiClient {
 		return this.source === "netease" ? `/netease${bare}` : bare;
 	}
 
-	/**
-	 * 两个源的能力已经对齐（每日推荐、歌单增删、每日签到/领取、凭据保存），
-	 * 只剩酷狗独有的「风控挑战流程」在网易云没有对应机制 —— 只拦这一条。
-	 * 仍然保留这个守卫，是为了避免以后新增酷狗独有能力时静默打到网易云路由。
-	 */
-	private isKugouOnly(path: string, method: string): boolean {
-		const bare = path.startsWith("/") ? path : `/${path}`;
-		if (bare.startsWith("/verify/")) return true;
-		return false;
+	/** 当前源声明的能力（UI 用它决定渲染哪些入口）。 */
+	get capabilities(): readonly MusicCapability[] {
+		return MUSIC_SOURCE_META[this.source].capabilities;
 	}
 
-	/** 统一解析最终请求路径。 */
+	hasCapability(capability: MusicCapability): boolean {
+		return MUSIC_SOURCE_META[this.source].capabilities.includes(capability);
+	}
+
+	/** 该请求需要什么能力；不需要特殊能力时返回 null。 */
+	private requiredCapability(path: string, method: string): MusicCapability | null {
+		const bare = path.startsWith("/") ? path : `/${path}`;
+		const upper = method.toUpperCase();
+		for (const rule of CAPABILITY_RULES) {
+			if (rule.methods && !rule.methods.includes(upper)) continue;
+			if (rule.pattern.test(bare)) return rule.capability;
+		}
+		return null;
+	}
+
+	/**
+	 * 统一解析最终请求路径：先按能力声明拦截，再加源前缀。
+	 *
+	 * 拦截发生在能力层而不是路径层 —— 未声明的能力直接抛 UNSUPPORTED_CAPABILITY，
+	 * 错误体会带上 action=unsupported，UI 据此提示「该源不支持」而不是让请求
+	 * 打到 BFF 拿一个含义模糊的 404。
+	 */
 	private resolvePath(path: string, method: string): string {
+		const needed = this.requiredCapability(path, method);
+		if (needed && !this.hasCapability(needed)) {
+			throw new MusicApiError(
+				`${MUSIC_SOURCE_META[this.source].label}不支持该功能`,
+				null,
+				undefined,
+				"UNSUPPORTED_CAPABILITY",
+			);
+		}
 		if (this.source !== "netease") return path;
-		if (this.isKugouOnly(path, method)) throw new MusicApiError("该功能仅酷狗概念版支持");
 		return this.scopedPath(path);
 	}
 

@@ -4,6 +4,9 @@ import {
 	MusicApiClient,
 	MusicApiError,
 	MUSIC_BFF_ORIGIN,
+	MUSIC_SOURCE_META,
+	deriveMusicErrorAction,
+	musicErrorAction,
 	MusicRiskVerifyError,
 	musicErrorMessage,
 	normalizeApiBaseUrl,
@@ -517,7 +520,10 @@ assert.equal(getShanghaiDateKey(new Date("2026-08-09T18:00:00.000Z")), "2026-08-
 		seenUrls.length = 0;
 		await sourceClient.getDailyRecommendations();
 		assert.ok(seenUrls.at(-1)!.includes("/netease/recommendations/daily"), "网易云每日推荐必须走 /netease 前缀");
-		await assert.rejects(() => sourceClient.getRiskInfo("evt"), /仅酷狗概念版支持/);
+		await assert.rejects(
+			() => sourceClient.getRiskInfo("evt"),
+			(error: any) => error?.code === "UNSUPPORTED_CAPABILITY" && error?.action === "unsupported",
+		);
 
 		// 凭据保存与口令登录两个源都支持（同一口令、各自独立存储），
 		// 所以路径必须自动加 /netease 前缀，而不是被拒绝。
@@ -542,6 +548,91 @@ assert.equal(getShanghaiDateKey(new Date("2026-08-09T18:00:00.000Z")), "2026-08-
 		assert.equal(JSON.parse(lastRequestBody).mobile, "13800000000", "酷狗验证码用 mobile 字段");
 	} finally {
 		globalThis.fetch = originalSourceFetch;
+	}
+}
+
+// ---------------- P1：类型化 action 错误码 ----------------
+{
+	// 登录态失效 → 弹登录
+	assert.equal(deriveMusicErrorAction(401, undefined), "signIn");
+	assert.equal(deriveMusicErrorAction(undefined, "SESSION_EXPIRED"), "signIn");
+	assert.equal(deriveMusicErrorAction(undefined, "NETEASE_SESSION_EXPIRED"), "signIn");
+	assert.equal(deriveMusicErrorAction(404, "NETEASE_NO_SESSION_COOKIE"), "signIn");
+
+	// 还没配置好 → 引导设置
+	assert.equal(deriveMusicErrorAction(404, "ADMIN_NOT_CONFIGURED"), "setup");
+	assert.equal(deriveMusicErrorAction(404, "ADMIN_CREDENTIALS_MISSING"), "setup");
+
+	// 该源不做这件事 → 提示不支持
+	assert.equal(deriveMusicErrorAction(200, "NETEASE_NOT_APPLICABLE"), "unsupported");
+	assert.equal(deriveMusicErrorAction(undefined, "UNSUPPORTED_CAPABILITY"), "unsupported");
+
+	// 上游/链路不可用 → 稍后重试
+	assert.equal(deriveMusicErrorAction(502, undefined), "unavailable");
+	assert.equal(deriveMusicErrorAction(undefined, "NETEASE_UNREACHABLE"), "unavailable");
+	assert.equal(deriveMusicErrorAction(undefined, "STREAM_FETCH_FAILED"), "unavailable");
+
+	// 普通业务错误不携带动作，走原文案
+	assert.equal(deriveMusicErrorAction(400, "INVALID_SEARCH"), null);
+	assert.equal(deriveMusicErrorAction(429, "RATE_LIMITED"), null);
+	assert.equal(deriveMusicErrorAction(undefined, undefined), null);
+	assert.equal(deriveMusicErrorAction(undefined, "131001"), null);
+
+	// 构造 MusicApiError 时 action 就被固定
+	assert.equal(new MusicApiError("请重新登录", null, 401).action, "signIn");
+	assert.equal(new MusicApiError("不支持", null, undefined, "UNSUPPORTED_CAPABILITY").action, "unsupported");
+	assert.equal(new MusicApiError("普通错误", null, 400, "INVALID_INPUT").action, null);
+
+	// 裸 payload（BFF 直接返回的 body）也能推断
+	assert.equal(musicErrorAction({ error_code: "SESSION_EXPIRED" }), "signIn");
+	assert.equal(musicErrorAction({ status: 502 }), "unavailable");
+	assert.equal(musicErrorAction({ error_code: "NETEASE_NOT_APPLICABLE" }), "unsupported");
+	assert.equal(musicErrorAction(null), null);
+
+	// 风控挑战是独立流程，不走这四个动作（由 MusicRiskVerifyError 子类处理）
+	const riskError = new MusicRiskVerifyError("需要验证", {}, { eventid: "e", edt: "t" } as any);
+	assert.equal(riskError.action, null);
+}
+
+// ---------------- P2：能力声明是唯一事实源 ----------------
+{
+	// 两源都有的能力
+	for (const source of ["kugou", "netease"] as const) {
+		for (const cap of ["qrLogin", "smsLogin", "passphraseLogin", "dailyRecommend", "playlistWrite", "download", "lyrics", "search", "vipDaily"] as const) {
+			assert.ok(MUSIC_SOURCE_META[source].capabilities.includes(cap), `${source} 应具备 ${cap}`);
+		}
+	}
+
+	// 酷狗独有：风控挑战 + 概念版升级
+	assert.ok(MUSIC_SOURCE_META.kugou.capabilities.includes("riskVerify"));
+	assert.ok(!MUSIC_SOURCE_META.netease.capabilities.includes("riskVerify"), "网易云没有风控挑战流程");
+	assert.ok(MUSIC_SOURCE_META.kugou.capabilities.includes("vipUpgrade"));
+	assert.ok(!MUSIC_SOURCE_META.netease.capabilities.includes("vipUpgrade"), "网易云没有概念版升级");
+
+	// 旧的死元数据必须已移除
+	assert.equal((MUSIC_SOURCE_META.kugou as any).hasKugouFeatures, undefined);
+	assert.equal((MUSIC_SOURCE_META.kugou as any).loginModes, undefined);
+
+	// client 暴露能力查询，并随源切换
+	const capClient = new MusicApiClient(MUSIC_BFF_ORIGIN);
+	assert.ok(capClient.hasCapability("riskVerify"), "酷狗默认支持风控验证");
+	assert.ok(capClient.capabilities.includes("riskVerify"));
+
+	capClient.setSource("netease");
+	assert.ok(!capClient.hasCapability("riskVerify"), "切到网易云后不应再声明风控验证");
+	assert.ok(capClient.hasCapability("playlistWrite"), "网易云支持歌单写操作");
+
+	// 未声明的能力必须在客户端就被拦住，而不是打到 BFF 拿 404
+	const originalCapFetch = globalThis.fetch;
+	globalThis.fetch = (async () => new Response("{}", { status: 200 })) as any;
+	try {
+		await assert.rejects(
+			() => capClient.getRiskInfo("evt"),
+			(error: any) => error?.code === "UNSUPPORTED_CAPABILITY" && error?.action === "unsupported",
+			"未声明能力必须抛 UNSUPPORTED_CAPABILITY",
+		);
+	} finally {
+		globalThis.fetch = originalCapFetch;
 	}
 }
 
