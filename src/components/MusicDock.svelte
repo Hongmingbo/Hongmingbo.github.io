@@ -676,7 +676,7 @@
 				const lower = keyword.toLocaleLowerCase();
 				searchResults = songs.filter((song) => `${song.name} ${song.author}`.toLocaleLowerCase().includes(lower));
 			} else if (client) {
-				searchResults = await client.searchSongs(keyword, 1, 100);
+				searchResults = await client.searchSongs({ keyword, page: 1, pagesize: 100 });
 			}
 			searchMessage = searchResults.length ? `找到 ${searchResults.length} 首歌曲` : "没有找到匹配歌曲";
 		} catch (error) {
@@ -737,7 +737,7 @@
 		const wasPlaying = isPlaying;
 		const generation = ++playGeneration;
 		try {
-			const url = await client.getStreamUrl(currentSong.hash, quality);
+			const url = await client.getStreamUrl({ hash: currentSong.hash, quality });
 			if (!url) throw new MusicApiError("BFF 播放流不可用");
 			if (generation !== playGeneration) return;
 			audio.src = url;
@@ -749,7 +749,7 @@
 			// 高音质可能无权限或上游失败：回退到 128 保证不断播。
 			if (quality !== "128") {
 				try {
-					const fallback = await client.getStreamUrl(currentSong.hash, "128");
+					const fallback = await client.getStreamUrl({ hash: currentSong.hash, quality: "128" });
 					if (fallback && generation === playGeneration) {
 						audio.src = fallback;
 						audio.currentTime = resumeAt;
@@ -850,7 +850,9 @@
 		};
 		patch({ status: "running" });
 		try {
-			const blob = await client.getTrackBlob(record.hash, record.quality, {
+			const blob = await client.getTrackBlob({
+				hash: record.hash,
+				quality: record.quality,
 				signal: controller.signal,
 				onProgress: (loaded, total) => patch({ loaded, total }),
 			});
@@ -1045,7 +1047,7 @@
 		const generation = ++playGeneration;
 		currentSongLoading = song.hash;
 		try {
-			const audioUrl = await client.getStreamUrl(song.hash, audioQuality);
+			const audioUrl = await client.getStreamUrl({ hash: song.hash, quality: audioQuality });
 			if (!audioUrl) throw new MusicApiError("BFF 播放流不可用");
 			currentSong = song;
 			sharedWindow().__hengduoMusicLast = song;
@@ -1578,7 +1580,7 @@
 		if (pending) return pending;
 
 		const requestClient = client;
-		const pendingRequest = requestClient.getLyrics(song.hash, Math.round((Number(song.timeLength) || 0) * 1000))
+		const pendingRequest = requestClient.getLyrics({ hash: song.hash, durationMs: Math.round((Number(song.timeLength) || 0) * 1000) })
 			.then(parseLyrics)
 			.then((lines) => {
 				lyricsCache.set(song.hash, lines);
@@ -1758,7 +1760,7 @@
 		loginBusy = true;
 		loginMessage = "正在登录…";
 		try {
-			const nextAuth = await client.loginPhone(phone, phoneCode, userid ? String(userid) : undefined);
+			const nextAuth = await client.loginPhone({ mobile: phone, code: phoneCode, userid: userid ? String(userid) : undefined });
 			await setSession(nextAuth);
 		} catch (error) {
 			const payload = error instanceof MusicApiError ? error.payload as any : null;

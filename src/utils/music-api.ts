@@ -887,7 +887,8 @@ export class MusicApiClient {
 		if (!responseSucceeded(payload)) throw new MusicApiError("验证码发送失败", payload, undefined, responseErrorCode(payload));
 	}
 
-	async loginPhone(mobile: string, code: string, userid?: string): Promise<MusicSession> {
+	async loginPhone(input: { mobile: string; code: string; userid?: string }): Promise<MusicSession> {
+		const { mobile, code, userid } = input;
 		// 网易云用 phone + captcha，且没有 userid 概念。
 		const body = this.source === "netease" ? { phone: mobile, captcha: code } : { mobile, code, userid };
 		const payload = await this.request("/auth/sms/login", { body });
@@ -984,7 +985,8 @@ export class MusicApiClient {
 		return normalizeSongs(await this.request("/recommendations/daily"));
 	}
 
-	async searchSongs(keyword: string, page = 1, pagesize = 50): Promise<MusicSong[]> {
+	async searchSongs(input: { keyword: string; page?: number; pagesize?: number }): Promise<MusicSong[]> {
+		const { keyword, page = 1, pagesize = 50 } = input;
 		const payload = await this.request("/search/songs", { query: { keyword, page, pagesize } });
 		return normalizeSongs(payload);
 	}
@@ -1027,8 +1029,8 @@ export class MusicApiClient {
 		return this.request(`/playlists/${id}/tracks/delete`, { method: "POST", body: { fileids: trackIds } });
 	}
 
-	async getStreamPreparation(hash: string): Promise<void> {
-		await this.request(`/tracks/${encodeURIComponent(hash)}/prepare`);
+	async getStreamPreparation(input: { hash: string }): Promise<void> {
+		await this.request(`/tracks/${encodeURIComponent(input.hash)}/prepare`);
 	}
 
 	async getRiskInfo(eventid: string): Promise<any> {
@@ -1048,9 +1050,10 @@ export class MusicApiClient {
 		});
 	}
 
-	async getStreamUrl(hash: string, quality?: string): Promise<string> {
+	async getStreamUrl(input: { hash: string; quality?: string }): Promise<string> {
+		const { hash, quality } = input;
 		if (!this.baseUrl) throw new MusicApiError("音乐服务尚未配置");
-		await this.getStreamPreparation(hash, quality);
+		await this.getStreamPreparation({ hash });
 		// Native Audio requests this BFF URL directly. The BFF HttpOnly session cookie
 		// authenticates the request; this never resolves or exposes an upstream media URL.
 		const streamQuery = quality ? `?quality=${encodeURIComponent(quality)}` : "";
@@ -1065,16 +1068,15 @@ export class MusicApiClient {
 	 * 优先走 /download（专用路由，超时 180s，适合无损大文件）。旧版 BFF 还没有
 	 * 该路由时会 404——此时回落到 /stream 取整首，功能立刻可用；后端重启后
 	 * 自动改用下载路由，无需再改前端。 */
-	async getTrackBlob(
-		hash: string,
-		quality?: string,
-		options: {
-			/** 每收到一段数据回调一次，用于进度条。total 未知时为 0。 */
-			onProgress?: (loaded: number, total: number) => void;
-			/** 取消信号：中止后 fetch 与流读取都会立刻停止。 */
-			signal?: AbortSignal;
-		} = {},
-	): Promise<Blob> {
+	async getTrackBlob(input: {
+		hash: string;
+		quality?: string;
+		/** 每收到一段数据回调一次，用于进度条。total 未知时为 0。 */
+		onProgress?: (loaded: number, total: number) => void;
+		/** 取消信号：中止后 fetch 与流读取都会立刻停止。 */
+		signal?: AbortSignal;
+	}): Promise<Blob> {
+		const { hash, quality, ...options } = input;
 		if (!this.baseUrl) throw new MusicApiError("音乐服务尚未配置");
 		// 网易云侧没有单独的下载路由；/stream 本身就返回整首字节，直接用。
 		if (this.source === "netease") {
@@ -1162,7 +1164,8 @@ export class MusicApiClient {
 		return new Blob(chunks as BlobPart[], { type: response.headers.get("content-type") || "audio/mpeg" });
 	}
 
-	async getLyrics(hash: string, durationMs = 0): Promise<string> {
+	async getLyrics(input: { hash: string; durationMs?: number }): Promise<string> {
+		const { hash, durationMs = 0 } = input;
 		const query = durationMs > 0 ? `?duration=${Math.floor(durationMs)}` : "";
 		const payload = await this.request(`/tracks/${encodeURIComponent(hash)}/lyrics${query}`);
 		const data = responseData<any>(payload);

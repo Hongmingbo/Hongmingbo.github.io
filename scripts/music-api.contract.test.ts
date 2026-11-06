@@ -409,12 +409,12 @@ assert.equal(
 	"account+password login must not exist on the client",
 );
 try {
-	assert.equal(await bff.getStreamUrl("abc123"), "https://music.hmb2011.dpdns.org/tracks/abc123/stream");
+	assert.equal(await bff.getStreamUrl({ hash: "abc123" }), "https://music.hmb2011.dpdns.org/tracks/abc123/stream");
 	assert.equal(prepareMethod, "GET");
 	assert.equal(prepareUrl, "https://music.hmb2011.dpdns.org/tracks/abc123/prepare");
 
 	await assert.rejects(
-		() => bff.getStreamUrl("risk"),
+		() => bff.getStreamUrl({ hash: "risk" }),
 		(error: unknown) => error instanceof MusicRiskVerifyError && error.challenge.eventid === "event-1" && error.challenge.edt === "edt-1",
 	);
 
@@ -444,7 +444,7 @@ try {
 	assert.equal(upgradeContentType, "application/json");
 	assert.equal(upgradeBody, "{}");
 
-	await bff.searchSongs("未收藏歌曲", 2, 50);
+	await bff.searchSongs({ keyword: "未收藏歌曲", page: 2, pagesize: 50 });
 	assert.equal(searchMethod, "GET");
 	assert.equal(searchUrl, "https://music.hmb2011.dpdns.org/search/songs?keyword=%E6%9C%AA%E6%94%B6%E8%97%8F%E6%AD%8C%E6%9B%B2&page=2&pagesize=50");
 	assert.equal(searchBody, "");
@@ -486,7 +486,7 @@ assert.equal(getShanghaiDateKey(new Date("2026-08-09T18:00:00.000Z")), "2026-08-
 
 		// 酷狗源：路径不带前缀
 		seenUrls.length = 0;
-		await sourceClient.searchSongs("x", 1, 10);
+		await sourceClient.searchSongs({ keyword: "x", page: 1, pagesize: 10 });
 		assert.ok(seenUrls.at(-1)!.includes("/search/songs"), "酷狗搜索保持原路径");
 		assert.ok(!seenUrls.at(-1)!.includes("/netease/"), "酷狗搜索不能带 netease 前缀");
 
@@ -495,7 +495,7 @@ assert.equal(getShanghaiDateKey(new Date("2026-08-09T18:00:00.000Z")), "2026-08-
 		assert.equal(sourceClient.getSource(), "netease");
 
 		seenUrls.length = 0;
-		await sourceClient.searchSongs("x", 1, 10);
+		await sourceClient.searchSongs({ keyword: "x", page: 1, pagesize: 10 });
 		assert.ok(seenUrls.at(-1)!.includes("/netease/search/songs"), "网易云搜索必须走 /netease 前缀");
 
 		seenUrls.length = 0;
@@ -503,11 +503,11 @@ assert.equal(getShanghaiDateKey(new Date("2026-08-09T18:00:00.000Z")), "2026-08-
 		assert.ok(seenUrls.at(-1)!.includes("/netease/session"));
 
 		seenUrls.length = 0;
-		await sourceClient.getLyrics("22", 0);
+		await sourceClient.getLyrics({ hash: "22", durationMs: 0 });
 		assert.ok(seenUrls.at(-1)!.includes("/netease/tracks/22/lyrics"));
 
 		// 流地址（浏览器 audio.src）也必须带前缀，否则会打到酷狗路由
-		const sourceStreamUrl = await sourceClient.getStreamUrl("22");
+		const sourceStreamUrl = await sourceClient.getStreamUrl({ hash: "22" });
 		assert.ok(sourceStreamUrl.includes("/netease/tracks/22/stream"), `流地址应带前缀，实际: ${sourceStreamUrl}`);
 
 		// 验证码字段名按源切换
