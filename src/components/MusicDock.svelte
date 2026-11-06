@@ -107,6 +107,8 @@
 	let phoneCode = "";
 	let phoneCountdown = 0;
 	let adminPassphrase = "";
+	/** 口令明文可见开关：输错时能当场看出是哪个字符错了。 */
+	let passphraseVisible = false;
 	let adminConfigured = false;
 	let adminSaved = false;
 	let accountOptions: Array<{ userid: string | number; nickname?: string; pic?: string }> = [];
@@ -525,6 +527,14 @@
 			showSettings = false;
 			await refreshAdminStatus();
 			auth = await client.getSession();
+			// 白名单 IP：不弹登录框，直接用已保存的凭据恢复会话。
+			if (!auth) {
+				const auto = await client.autoLoginViaIp();
+				if (auto) {
+					auth = auto;
+					setNotice(`已通过信任 IP 自动登录${MUSIC_SOURCE_META[musicSource].short}`);
+				}
+			}
 			if (auth) await loadUserData();
 		} catch (error) {
 			apiStatus = "error";
@@ -1850,6 +1860,7 @@
 		qrMessage = "点击生成二维码";
 		loginMessage = "";
 		loginMode = "qr";
+		passphraseVisible = false;
 		auth = null;
 		playlists = [];
 		songs = [];
@@ -1885,6 +1896,14 @@
 		await refreshAdminStatus();
 		try {
 			auth = await client.getSession();
+			// 白名单 IP：不弹登录框，直接用已保存的凭据恢复会话。
+			if (!auth) {
+				const auto = await client.autoLoginViaIp();
+				if (auto) {
+					auth = auto;
+					setNotice(`已通过信任 IP 自动登录${MUSIC_SOURCE_META[musicSource].short}`);
+				}
+			}
 			if (auth) await loadUserData();
 		} catch {
 			/* 未登录或网络异常时保持空态，不打扰用户 */
@@ -2595,7 +2614,20 @@
 				{:else if loginMode === "admin"}
 					<div class="music-login-form">
 						<p class="music-muted">{adminSaved ? "用管理员口令恢复已保存的登录，无需再次扫码。" : "尚未保存登录凭据：先扫码登录，登录成功后在此输入口令保存。"}</p>
-						<label class="music-field"><span>管理员口令</span><input bind:value={adminPassphrase} type="password" autocomplete="off" placeholder="自设口令" /></label>
+						<label class="music-field">
+							<span>管理员口令</span>
+							<span class="music-password-wrap">
+								<input bind:value={adminPassphrase} type={passphraseVisible ? "text" : "password"} autocomplete="off" spellcheck="false" placeholder="自设口令" />
+								<button
+									class="music-password-toggle"
+									type="button"
+									aria-label={passphraseVisible ? "隐藏口令" : "显示口令"}
+									aria-pressed={passphraseVisible}
+									title={passphraseVisible ? "隐藏口令" : "显示口令"}
+									on:click={() => (passphraseVisible = !passphraseVisible)}
+								><Icon icon={passphraseVisible ? "material-symbols:visibility-off-rounded" : "material-symbols:visibility-rounded"} /></button>
+							</span>
+						</label>
 						{#if adminSaved}<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void adminLogin()}>{loginBusy ? "恢复中…" : "口令登录"}</button>{/if}
 						{#if auth}<button class="music-quiet" type="button" disabled={loginBusy} on:click={() => void saveAdmin()}>{loginBusy ? "保存中…" : "保存当前登录"}</button>{/if}
 					</div>
@@ -2787,6 +2819,82 @@
 	   会把空白平分、按钮被推到中间去。 */
 	.music-now-playing .music-download-button { margin-left: auto; }
 	.music-now-playing .music-download-button + .music-favorite { margin-left: 0.35rem; }
+
+	/* ---------- 下载中心列表 ----------
+	   之前这组类一个样式都没有，所以下载记录是裸的 strong/small 堆叠，
+	   进度条也只是一条没有宽高约束的 span。这里补成卡片行。 */
+	.music-download-row {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid color-mix(in oklch, var(--primary) 12%, var(--card-border, #dce5e5));
+		border-radius: 0.85rem;
+		background: color-mix(in oklch, var(--card-bg, #fff) 92%, transparent);
+		transition: border-color 0.3s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
+			box-shadow 0.3s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1));
+	}
+	.music-download-row + .music-download-row { margin-top: 0.45rem; }
+	.music-download-row:hover {
+		border-color: color-mix(in oklch, var(--primary) 28%, var(--card-border, #dce5e5));
+		box-shadow: 0 12px 28px -24px color-mix(in oklch, var(--primary) 60%, transparent);
+	}
+	.music-download-row--failed {
+		border-color: color-mix(in oklch, #c05640 34%, transparent);
+		background: color-mix(in oklch, #c05640 6%, var(--card-bg, #fff));
+	}
+
+	.music-download-row__copy { display: grid; flex: 1 1 auto; min-width: 0; gap: 0.18rem; }
+	.music-download-row__copy strong {
+		overflow: hidden;
+		color: inherit;
+		font-size: 0.78rem;
+		font-weight: 600;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.music-download-row__copy small {
+		overflow: hidden;
+		color: var(--md-tone-muted);
+		font-size: 0.66rem;
+		font-variant-numeric: tabular-nums;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.music-download-bar {
+		position: relative;
+		overflow: hidden;
+		height: 0.22rem;
+		margin-top: 0.2rem;
+		border-radius: 999px;
+		background: color-mix(in oklch, var(--primary) 12%, transparent);
+	}
+	.music-download-bar__fill {
+		display: block;
+		height: 100%;
+		border-radius: inherit;
+		background: linear-gradient(90deg, color-mix(in oklch, var(--primary) 65%, transparent), var(--primary));
+		transition: width 0.3s linear;
+	}
+	.music-download-bar__fill--indeterminate {
+		width: 40% !important;
+		animation: music-download-indeterminate 1.1s ease-in-out infinite;
+	}
+	@keyframes music-download-indeterminate {
+		0% { transform: translateX(-100%); }
+		100% { transform: translateX(250%); }
+	}
+
+	.music-download-row__actions { display: grid; flex: 0 0 auto; place-items: center; }
+	.music-download-row__tick {
+		display: grid;
+		place-items: center;
+		width: 1.9rem;
+		height: 1.9rem;
+		color: color-mix(in oklch, #2f9e72 78%, var(--primary));
+		font-size: 1.15rem;
+	}
 	.music-pending-hint { padding: 0.12rem 0.45rem; border-radius: 999px; color: #c05640; background: color-mix(in oklch, #c05640 9%, transparent); font-size: 0.6rem; white-space: nowrap; }
 	.music-library-empty { display: grid; min-height: 12rem; place-items: center; padding: 1rem; text-align: center; }
 	.music-quiet--danger { color: #c05640; border-color: color-mix(in oklch, #c05640 36%, transparent); }
@@ -2904,7 +3012,30 @@
 	.music-config-block, .music-login-form { display: grid; gap: 0.7rem; }
 	.music-muted, .music-status-line, .music-login-note { margin: 0; color: var(--md-tone-muted); font-size: 0.72rem; line-height: 1.55; }
 	.music-error { color: #c05640; }
-	.music-field { display: grid; gap: 0.3rem; color: var(--md-tone-body); font-size: 0.7rem; }
+		.music-field { display: grid; gap: 0.3rem; color: var(--md-tone-body); font-size: 0.7rem; }
+	.music-password-wrap { position: relative; display: block; }
+	.music-password-wrap input { padding-right: 2.2rem; }
+	.music-password-toggle {
+		position: absolute;
+		top: 50%;
+		right: 0.28rem;
+		display: grid;
+		place-items: center;
+		width: 1.7rem;
+		height: 1.7rem;
+		padding: 0;
+		border: 0;
+		border-radius: 0.45rem;
+		background: transparent;
+		color: var(--md-tone-muted);
+		font-size: 1rem;
+		cursor: pointer;
+		transform: translateY(-50%);
+		transition: color 0.2s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
+			background 0.2s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1));
+	}
+	.music-password-toggle:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); }
+	.music-password-toggle:focus-visible { outline: 2px solid color-mix(in oklch, var(--primary) 60%, transparent); outline-offset: 1px; }
 	.music-field input, .music-field select { width: 100%; min-height: 2.25rem; padding: 0.45rem 0.65rem; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 88%, transparent); border-radius: 0.6rem; outline: 0; color: inherit; background: color-mix(in oklch, var(--page-bg, #f8fafc) 70%, transparent); font: inherit; }
 	.music-field input:focus, .music-field select:focus { border-color: color-mix(in oklch, var(--primary) 60%, var(--card-border, #dce5e5)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 14%, transparent); }
 	.music-actions, .music-controls, .music-secondary-actions { display: flex; align-items: center; gap: 0.45rem; }

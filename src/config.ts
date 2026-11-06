@@ -44,11 +44,6 @@ export const navBarConfig: NavBarConfig = {
 			external: false,
 		},
 		{
-			name: "说说",
-			url: "/notes",
-			external: false,
-		},
-		{
 			name: "友链",
 			url: "/links",
 			external: false,

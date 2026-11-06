@@ -909,6 +909,21 @@ export class MusicApiClient {
 		return this.sessionFromLogin(payload);
 	}
 
+	/**
+	 * 白名单 IP 免口令恢复登录。
+	 * 未启用该通道、IP 不在名单、凭据失效等一切情况都返回 null，不向上抛错 ——
+	 * 调用方只需要「能不能直接进入」这一个判断。
+	 */
+	async autoLoginViaIp(): Promise<MusicSession | null> {
+		try {
+			const payload = await this.request("/auth/admin/auto", { method: "POST", body: {} });
+			if (!responseSucceeded(payload)) return null;
+			return this.sessionFromLogin(payload);
+		} catch {
+			return null;
+		}
+	}
+
 	async saveAdminCredentials(passphrase: string): Promise<void> {
 		const payload = await this.request("/auth/admin/save", { body: { passphrase } });
 		if (!responseSucceeded(payload)) throw new MusicApiError("保存登录凭据失败", payload, undefined, responseErrorCode(payload));
