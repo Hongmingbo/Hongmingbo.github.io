@@ -292,6 +292,12 @@ export const sortSongs = (songs: MusicSong[], sort: "default" | "title" | "artis
 
 /** 歌单内歌曲的 fileid（删除接口需要），仅歌单曲目接口返回该字段。 */
 export const songFileId = (song: MusicSong): string | null => {
+	// 网易云没有独立的 fileid：归一化时把歌曲 id 写进了 hash，删除接口也用这个 id。
+	// 不能拿 audio_id / album_audio_id 冒充 —— 那两个上游不收，删不掉歌。
+	if (song.source === "netease") {
+		const hash = String(song.hash ?? "");
+		return /^\d{1,20}$/.test(hash) ? hash : null;
+	}
 	const raw = song.id ?? song.fileid ?? song.song_id;
 	const value = Number(raw);
 	return Number.isFinite(value) && value > 0 ? String(value) : null;
@@ -684,16 +690,14 @@ export class MusicApiClient {
 		return this.source === "netease" ? `/netease${bare}` : bare;
 	}
 
-	/** 酷狗独有能力在网易云源下直接拒绝，避免打到错误的路由。 */
+	/**
+	 * 两个源的能力已经对齐（每日推荐、歌单增删、每日签到/领取、凭据保存），
+	 * 只剩酷狗独有的「风控挑战流程」在网易云没有对应机制 —— 只拦这一条。
+	 * 仍然保留这个守卫，是为了避免以后新增酷狗独有能力时静默打到网易云路由。
+	 */
 	private isKugouOnly(path: string, method: string): boolean {
 		const bare = path.startsWith("/") ? path : `/${path}`;
-		if (bare.startsWith("/recommendations")) return true;
 		if (bare.startsWith("/verify/")) return true;
-		if (bare.startsWith("/vip/")) return true;
-		// 歌单增删改：网易云侧尚未实现（凭据保存/口令登录两个源都支持，故不在此拦截）
-		if (bare === "/playlists" && method !== "GET") return true;
-		if (/^\/playlists\/[^/]+\/(add|tracks\/delete)$/.test(bare)) return true;
-		if (/^\/playlists\/[^/]+$/.test(bare) && method === "DELETE") return true;
 		return false;
 	}
 
@@ -776,14 +780,6 @@ export class MusicApiClient {
 		return this.sessionFromLogin(payload);
 	}
 
-	/** 网易云账号口令登录（手机号或邮箱 + 密码）。仅网易云源可用。 */
-	async loginPassword(input: { phone?: string; email?: string; password: string }): Promise<MusicSession> {
-		if (this.source !== "netease") throw new MusicApiError("账号口令登录仅网易云源支持");
-		const payload = await this.request("/auth/password", { method: "POST", body: input });
-		if (!responseSucceeded(payload)) throw new MusicApiError("账号口令登录失败", payload, undefined, responseErrorCode(payload));
-		return this.sessionFromLogin(payload);
-	}
-
 	/** 管理员口令快速登录：用服务器保存的凭据恢复会话（口令本身不落盘）。 */
 	async adminStatus(): Promise<{ configured: boolean; saved: boolean }> {
 		const payload = await this.request("/auth/admin/status");
@@ -848,7 +844,9 @@ export class MusicApiClient {
 	}
 
 	async deletePlaylist(listid: string | number): Promise<void> {
-		const payload = await this.request(`/playlists/${encodeURIComponent(String(listid))}`, { method: "DELETE" });
+		// 必须带 body：BFF 对 DELETE 也强制要求 application/json，
+		// 不带会被 Origin/Content-Type 中间件直接 415（两个源都踩过这个坑）。
+		const payload = await this.request(`/playlists/${encodeURIComponent(String(listid))}`, { method: "DELETE", body: {} });
 		if (!responseSucceeded(payload)) throw new MusicApiError("删除歌单失败", payload, undefined, responseErrorCode(payload));
 	}
 

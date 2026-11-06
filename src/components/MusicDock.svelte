@@ -74,7 +74,7 @@
 			}
 		},
 	};
-	type LoginMode = "qr" | "phone" | "admin" | "password";
+	type LoginMode = "qr" | "phone" | "admin";
 	type VipState = "idle" | "checking" | "claimed" | "risk" | "error";
 	type SearchScope = "all" | "playlist";
 	type PanelTab = "songs" | "discover";
@@ -96,8 +96,6 @@
 	let showLogin = false;
 	/** 当前播放源：酷狗概念版 / 网易云。两个源的登录态在 BFF 侧互相独立。 */
 	let musicSource: MusicSource = "kugou";
-	let accountInput = "";
-	let passwordInput = "";
 	let loginMode: LoginMode = "qr";
 	let loginBusy = false;
 	let loginMessage = "";
@@ -504,16 +502,29 @@
 	const claimDailyVip = async () => {
 		if (!client || !auth?.userid) return;
 		const dateKey = getShanghaiDateKey();
+		const isNetease = musicSource === "netease";
 		const storageKey = `${VIP_DATE_PREFIX}${auth.userid}`;
 		if (safeStorage.get(storageKey) === dateKey) {
 			vipState = "claimed";
-			vipMessage = "今日 VIP 已检查";
+			vipMessage = isNetease ? "今日已签到" : "今日 VIP 已检查";
 			return;
 		}
 
 		vipState = "checking";
-		vipMessage = "正在检查今日 VIP…";
+		vipMessage = isNetease ? "正在签到…" : "正在检查今日 VIP…";
 		try {
+			// 网易云没有「概念版升级」这一步：签到一次即完成。
+			// 酷狗是「领取畅听权益 → 升级概念版」两段流程，不能混用。
+			if (isNetease) {
+				const payload = await client.claimVip(dateKey);
+				const data = payload?.data ?? {};
+				vipMessage = data.alreadySigned
+					? "今日已签到"
+					: `签到成功${data.point ? `，+${data.point} 云贝` : ""}`;
+				safeStorage.set(storageKey, dateKey);
+				vipState = "claimed";
+				return;
+			}
 			const result = await runDailyVipFlow({
 				dateKey,
 				claim: (day) => client.claimVip(day),
@@ -532,7 +543,7 @@
 			// runDailyVipFlow 内部只处理业务错误；网络/会话类异常会冒泡到这里。
 			// 不兜住的话 vipState 会永久停在 "checking"，按钮一直禁用无法重试。
 			vipState = "error";
-			vipMessage = errorMessage(error, "VIP 检查失败，可稍后重试");
+			vipMessage = errorMessage(error, isNetease ? "签到失败，可稍后重试" : "VIP 检查失败，可稍后重试");
 		}
 	};
 
@@ -1075,10 +1086,10 @@
 		loginMode = "qr";
 		qrImage = "";
 		qrKey = "";
-		qrMessage = "请重新扫码确认酷狗账号";
+		qrMessage = `请重新扫码确认${MUSIC_SOURCE_META[musicSource].short}账号`;
 		loginMessage = "";
 		showLogin = true;
-		setNotice("酷狗要求登录确认，请重新扫码登录后继续播放");
+		setNotice(`${MUSIC_SOURCE_META[musicSource].short}要求登录确认，请重新扫码登录后继续播放`);
 	};
 
 	const togglePlay = async () => {
@@ -1636,7 +1647,7 @@
 		currentSong = null;
 		isPlaying = false;
 		vipState = "idle";
-		vipMessage = "登录后自动检查今日权益";
+		vipMessage = musicSource === "netease" ? "登录后自动签到" : "登录后自动检查今日权益";
 		setNotice("已退出音乐平台");
 	};
 
@@ -1652,7 +1663,7 @@
 			const qr = await client.createQr();
 			qrKey = qr.key;
 			qrImage = qr.image;
-			qrMessage = "请使用酷狗客户端扫码";
+			qrMessage = `请使用${MUSIC_SOURCE_META[musicSource].label}扫码`;
 			loginMessage = "";
 			loginBusy = false;
 			qrTimer = setInterval(async () => {
@@ -1671,7 +1682,7 @@
 					else if (poll.status === 0) {
 						clearQrTimer();
 						qrMessage = "二维码已过期，请重新生成";
-					} else qrMessage = "正在等待酷狗确认";
+					} else qrMessage = `正在等待${MUSIC_SOURCE_META[musicSource].short}确认`;
 				} catch (error) {
 					clearQrTimer();
 					loginMessage = errorMessage(error, "二维码状态检查失败");
@@ -1809,14 +1820,18 @@
 		qrMessage = "点击生成二维码";
 		loginMessage = "";
 		loginMode = "qr";
-		accountInput = "";
-		passwordInput = "";
 		auth = null;
 		playlists = [];
 		songs = [];
 		queueSongs = [];
 		currentSong = null;
 		isPlaying = false;
+		// 签到状态与每日推荐是两个源各自的，切源后必须清掉上一个源的残留，
+		// 否则会看到「酷狗的 VIP OK」挂在网易云上。
+		vipState = "idle";
+		vipMessage = next === "netease" ? "登录后自动签到" : "登录后自动检查今日权益";
+		dailySongs = [];
+		dailyMessage = "";
 		if (audio) {
 			audio.pause();
 			audio.removeAttribute("src");
@@ -1832,31 +1847,6 @@
 			if (auth) await loadUserData();
 		} catch {
 			/* 未登录或网络异常时保持空态，不打扰用户 */
-		}
-	};
-
-	/** 网易云账号口令登录（手机号或邮箱 + 密码）。酷狗源下该方法会被客户端拒绝。 */
-	const passwordLogin = async () => {
-		if (!client) return;
-		const account = accountInput.trim();
-		if (!account || !passwordInput) {
-			loginMessage = "请输入账号和密码";
-			return;
-		}
-		loginBusy = true;
-		loginMessage = "";
-		try {
-			const isPhone = /^1\d{10}$/.test(account);
-			const nextAuth = await client.loginPassword({
-				...(isPhone ? { phone: account } : { email: account }),
-				password: passwordInput,
-			});
-			passwordInput = "";
-			await setSession(nextAuth);
-		} catch (error) {
-			loginMessage = errorMessage(error, "账号或密码不正确");
-		} finally {
-			loginBusy = false;
 		}
 	};
 
@@ -2037,10 +2027,12 @@
 				<div class="music-panel-heading">
 					<h2>音乐空间</h2>
 					{#if vipState !== "idle"}
-						<span class:music-vip-badge--ok={vipState === "claimed"} class:music-vip-badge--risk={vipState === "risk" || vipState === "error"} class="music-vip-badge" title={vipMessage}>{vipState === "checking" ? "VIP…" : vipState === "claimed" ? "VIP OK" : "需验证"}</span>{/if}
+						<span class:music-vip-badge--ok={vipState === "claimed"} class:music-vip-badge--risk={vipState === "risk" || vipState === "error"} class="music-vip-badge" title={vipMessage}>{musicSource === "netease"
+							? vipState === "checking" ? "签到…" : vipState === "claimed" ? "已签到" : "待签到"
+							: vipState === "checking" ? "VIP…" : vipState === "claimed" ? "VIP OK" : "需验证"}</span>{/if}
 				</div>
 				<div class="music-panel-actions">
-					<span class="music-header-account">{auth ? (auth.nickname ?? `酷狗用户 ${auth.userid}`) : "未登录"}</span>
+					<span class="music-header-account">{auth ? (auth.nickname ?? `${MUSIC_SOURCE_META[musicSource].short}用户 ${auth.userid}`) : "未登录"}</span>
 					{#if auth}
 						{#if adminConfigured}<button class="music-quiet music-quiet--tiny" type="button" aria-label="保存当前登录凭据" title="保存当前登录，供管理员口令快速登录" on:click={() => { loginMode = "admin"; showLogin = true; }}>保存登录</button>{/if}
 					{:else}
@@ -2065,7 +2057,7 @@
 			{#if apiStatus !== "ready" || showSettings}
 				<div class="music-config-block music-config-block--full">
 					<div class="music-section-label">SERVICE CONNECTION</div>
-					<p class="music-muted">音乐登录只通过已配置的受信 HTTPS BFF 进行。BFF 保管酷狗账号令牌、设备标识和上游 Cookie；此页面不会保存它们。</p>
+					<p class="music-muted">音乐登录只通过已配置的受信 HTTPS BFF 进行。{MUSIC_SOURCE_META[musicSource].label}的账号令牌、设备标识与上游 Cookie 全部由 BFF 保管；此页面不会保存它们。</p>
 					{#if isDev}
 						<p class="music-muted">本地开发可通过 <code>PUBLIC_MUSIC_DEV_API_URL</code> 配置 localhost Mock BFF。</p>
 					{/if}
@@ -2184,7 +2176,7 @@
 							</div>
 						{:else}
 							<div class="music-entry-card__body">
-								<button class="music-primary music-primary--small music-entry-card__cta" type="button" on:click={() => (showLogin = true)}>登录酷狗</button>
+								<button class="music-primary music-primary--small music-entry-card__cta" type="button" on:click={() => (showLogin = true)}>登录{MUSIC_SOURCE_META[musicSource].short}</button>
 							</div>
 						{/if}
 					</div>
@@ -2546,7 +2538,6 @@
 					<button class:music-login-tab--active={loginMode === "qr"} type="button" on:click={() => selectLoginMode("qr")}>二维码</button>
 					{#if adminConfigured}<button class:music-login-tab--active={loginMode === "admin"} type="button" on:click={() => selectLoginMode("admin")}>管理员</button>{/if}
 					<button class:music-login-tab--active={loginMode === "phone"} type="button" on:click={() => selectLoginMode("phone")}>手机验证码</button>
-					{#if !MUSIC_SOURCE_META[musicSource].hasKugouFeatures}<button class:music-login-tab--active={loginMode === "password"} type="button" on:click={() => selectLoginMode("password")}>账号密码</button>{/if}
 				</div>
 				{#if loginMode === "qr"}
 					<div class="music-qr-block">
@@ -2566,13 +2557,6 @@
 						<label class="music-field"><span>管理员口令</span><input bind:value={adminPassphrase} type="password" autocomplete="off" placeholder="自设口令" /></label>
 						{#if adminSaved}<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void adminLogin()}>{loginBusy ? "恢复中…" : "口令登录"}</button>{/if}
 						{#if auth}<button class="music-quiet" type="button" disabled={loginBusy} on:click={() => void saveAdmin()}>{loginBusy ? "保存中…" : "保存当前登录"}</button>{/if}
-					</div>
-				{:else if loginMode === "password"}
-					<div class="music-login-form">
-						<p class="music-muted">用网易云账号的密码登录。开启了二次验证的账号请改用二维码或手机验证码。</p>
-						<label class="music-field"><span>手机号 / 邮箱</span><input bind:value={accountInput} autocomplete="username" placeholder="手机号或邮箱" /></label>
-						<label class="music-field"><span>密码</span><input bind:value={passwordInput} type="password" autocomplete="current-password" placeholder="账号密码" /></label>
-						<button class="music-primary" type="button" disabled={loginBusy} on:click={() => void passwordLogin()}>{loginBusy ? "登录中…" : "账号密码登录"}</button>
 					</div>
 				{:else}
 					<div class="music-qr-block">

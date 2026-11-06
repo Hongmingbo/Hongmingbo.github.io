@@ -398,13 +398,12 @@ globalThis.fetch = async (input, init) => {
 		headers: { "Content-Type": "application/json" },
 	});
 };
-// 酷狗上游对所有账号密码形态都拒绝（/v9/login_by_pwd 全凭据空 msg），
-// 因此酷狗源下账号密码登录必须不可用 —— 这条守护保留原意。
-// 网易云的账号密码登录是独立链路（/netease/auth/password），不受此限制。
-await assert.rejects(
-	() => bff.loginPassword({ phone: "13800000000", password: "x" }),
-	/仅网易云源支持/,
-	"kugou must not offer account+password login",
+// 账号密码登录已彻底移除：酷狗上游对所有凭据形态都拒绝（/v9/login_by_pwd 空 msg），
+// 网易云侧也同步下线 —— 统一改用二维码 / 手机验证码 / 管理员口令。
+assert.equal(
+	(bff as unknown as Record<string, unknown>).loginPassword,
+	undefined,
+	"account+password login must not exist on the client",
 );
 try {
 	assert.equal(await bff.getStreamUrl("abc123"), "https://music.hmb2011.dpdns.org/tracks/abc123/stream");
@@ -510,9 +509,15 @@ assert.equal(getShanghaiDateKey(new Date("2026-08-09T18:00:00.000Z")), "2026-08-
 		await sourceClient.sendCaptcha("13800000000");
 		assert.equal(JSON.parse(lastRequestBody).phone, "13800000000", "网易云验证码用 phone 字段");
 
-		// 酷狗独有能力必须被拒绝，而不是静默打到错误的路由
-		await assert.rejects(() => sourceClient.claimVip("2026-11-01"), /仅酷狗概念版支持/);
-		await assert.rejects(() => sourceClient.getDailyRecommendations(), /仅酷狗概念版支持/);
+		// 每日推荐与「VIP/签到」两个源都已支持，必须自动加 /netease 前缀；
+		// 只有酷狗独有的风控挑战流程在网易云侧被拒绝。
+		seenUrls.length = 0;
+		await sourceClient.claimVip("2026-11-01");
+		assert.ok(seenUrls.at(-1)!.includes("/netease/vip/daily"), "网易云签到必须走 /netease 前缀");
+		seenUrls.length = 0;
+		await sourceClient.getDailyRecommendations();
+		assert.ok(seenUrls.at(-1)!.includes("/netease/recommendations/daily"), "网易云每日推荐必须走 /netease 前缀");
+		await assert.rejects(() => sourceClient.getRiskInfo("evt"), /仅酷狗概念版支持/);
 
 		// 凭据保存与口令登录两个源都支持（同一口令、各自独立存储），
 		// 所以路径必须自动加 /netease 前缀，而不是被拒绝。
@@ -523,9 +528,15 @@ assert.equal(getShanghaiDateKey(new Date("2026-08-09T18:00:00.000Z")), "2026-08-
 		await sourceClient.saveAdminCredentials("x").catch(() => {});
 		assert.ok(seenUrls.at(-1)!.includes("/netease/auth/admin/save"), "网易云保存凭据必须走 /netease 前缀");
 
-		// 切回酷狗：口令登录不可用，验证码字段名回到 mobile
+		// 账号密码登录在两个源上都不存在
+		assert.equal(
+			(sourceClient as unknown as Record<string, unknown>).loginPassword,
+			undefined,
+			"account+password login must not exist on any source",
+		);
+
+		// 切回酷狗：验证码字段名回到 mobile
 		sourceClient.setSource("kugou");
-		await assert.rejects(() => sourceClient.loginPassword({ phone: "13800000000", password: "x" }), /仅网易云源支持/);
 		seenUrls.length = 0;
 		await sourceClient.sendCaptcha("13800000000");
 		assert.equal(JSON.parse(lastRequestBody).mobile, "13800000000", "酷狗验证码用 mobile 字段");
