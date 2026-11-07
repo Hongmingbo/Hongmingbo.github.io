@@ -69,12 +69,18 @@ export interface MusicSourceMeta {
 	label: string;
 	short: string;
 	capabilities: readonly MusicCapability[];
+	/** 平台图标（public/brand 下），登录面板用它做身份识别。 */
+	icon: string;
+	/** 平台主色：登录面板会用它重染当前源的强调色。 */
+	accent: string;
 }
 
 export const MUSIC_SOURCE_META: Record<MusicSource, MusicSourceMeta> = {
 	kugou: {
 		label: "酷狗概念版",
 		short: "酷狗",
+		icon: "/brand/kugou.png",
+		accent: "#0a6ed8",
 		capabilities: [
 			"qrLogin", "smsLogin", "passphraseLogin",
 			"dailyRecommend", "playlistWrite", "download", "lyrics", "search",
@@ -84,6 +90,8 @@ export const MUSIC_SOURCE_META: Record<MusicSource, MusicSourceMeta> = {
 	netease: {
 		label: "网易云音乐",
 		short: "网易云",
+		icon: "/brand/netease.png",
+		accent: "#d91f2d",
 		capabilities: [
 			"qrLogin", "smsLogin", "passphraseLogin",
 			"dailyRecommend", "playlistWrite", "download", "lyrics", "search",
