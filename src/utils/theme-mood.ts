@@ -67,3 +67,18 @@ export function setMood(mood: ThemeMood, fallbackHue?: number): void {
 	}
 	applyMoodToDocument(m, fallbackHue);
 }
+
+/** 色调 ↔ 音乐平台的默认对应：冷青=酷狗，暖橘=网易云。
+ *  放在这里作为单一事实源，两个组件都从它取，避免各写一份映射后漂移。 */
+export const MOOD_SOURCE: Record<ThemeMood, "kugou" | "netease"> = {
+	cool: "kugou",
+	warm: "netease",
+};
+
+/** 跨组件同步事件名。用 window 事件而不是互相 import，避免两个组件强耦合。 */
+export const MOOD_EVENT = "blog-mood-changed";
+export const SOURCE_EVENT = "music-source-changed";
+
+export function moodForSource(source: string): ThemeMood {
+	return source === "netease" ? "warm" : "cool";
+}

@@ -47,6 +47,12 @@
 		type MusicSong,
 		type PlayMode,
 	} from "@utils/music-api";
+import {
+	MOOD_EVENT,
+	MOOD_SOURCE,
+	readStoredMood,
+	SOURCE_EVENT,
+} from "@utils/theme-mood";
 
 	type ApiStatus = "idle" | "connecting" | "ready" | "error";
 	// localStorage 在隐私模式、配额耗尽或站点数据被禁用时会抛异常。
@@ -1854,6 +1860,10 @@
 		if (next === musicSource) return;
 		musicSource = next;
 		safeStorage.set(SOURCE_KEY, next);
+		// 反向联动：换平台 → 博客色调跟着换（ToneSwitch 监听此事件）。
+		if (typeof window !== "undefined") {
+			window.dispatchEvent(new CustomEvent(SOURCE_EVENT, { detail: { source: next } }));
+		}
 		clearQrTimer();
 		qrImage = "";
 		qrKey = "";
@@ -1961,7 +1971,17 @@
 			}
 		};
 		window.addEventListener("keydown", onKeydown);
-		return () => window.removeEventListener("keydown", onKeydown);
+		// 博客色调变了就跟随换平台：冷青=酷狗、暖橘=网易云。
+		const onMoodChanged = (event: Event) => {
+			const detail = (event as CustomEvent<{ mood?: string }>).detail;
+			const next = detail?.mood === "warm" ? "netease" : detail?.mood === "cool" ? "kugou" : null;
+			if (next) void switchSource(next);
+		};
+		window.addEventListener(MOOD_EVENT, onMoodChanged);
+		return () => {
+			window.removeEventListener("keydown", onKeydown);
+			window.removeEventListener(MOOD_EVENT, onMoodChanged);
+		};
 	});
 
 	// 弹窗/全屏打开时锁定页面背景滚动，滑动手势只作用于面板自身。
@@ -1970,7 +1990,10 @@
 
 	onMount(() => {
 		apiUrl = normalizeApiBaseUrl(isDev && devApiUrl ? devApiUrl : MUSIC_BFF_ORIGIN);
-		musicSource = safeStorage.get(SOURCE_KEY) === "netease" ? "netease" : "kugou";
+		// 首屏对齐：以色调为准（它在 pre-paint 已生效），否则会出现
+		// 「页面已经暖橘、播放器还是酷狗蓝」的错位。
+		musicSource = MOOD_SOURCE[readStoredMood()];
+		safeStorage.set(SOURCE_KEY, musicSource);
 		// 注意：键缺失时 Number(null) === 0，会被误判为「合法音量 0」导致无声。
 		// 必须区分「从未设置过」（键为 null → 保留默认 0.7）与「用户主动设为 0」（键为 "0" → 尊重该值）。
 		const savedVolumeRaw = safeStorage.get("hengduo-music-volume");
@@ -3205,11 +3228,25 @@
 	/* ---------- 面板主题：整块 dock 随当前播放源换强调色 ----------
 	   面板内 var(--primary) 被引用近百处（按钮/进度/边框/高亮/弹窗），
 	   在 dock 根上换一次即可整面板生效，且不会泄漏到博客正文。 */
-	.music-dock.music-theme--kugou { --primary: #0a6ed8; }
-	.music-dock.music-theme--netease { --primary: #d91f2d; }
+	/* 每个平台两档色：--primary 深色（强调/文字/按钮），--music-fill 淡色（容器填充）。
+	   酷狗=深蓝+淡蓝，网易云=深橘+淡橘，两套结构一致。 */
+	.music-dock.music-theme--kugou {
+		--primary: #0a6ed8;
+		--music-fill: oklch(0.938 0.042 232);
+	}
+	.music-dock.music-theme--netease {
+		--primary: #c2410c;
+		--music-fill: oklch(0.938 0.05 55);
+	}
 	/* 深色底品牌色必须提亮（实测未提亮时只有 2.4:1） */
-	:global(html.dark) .music-dock.music-theme--kugou { --primary: #5ab0ff; }
-	:global(html.dark) .music-dock.music-theme--netease { --primary: #ff7b87; }
+	:global(html.dark) .music-dock.music-theme--kugou {
+		--primary: #5ab0ff;
+		--music-fill: oklch(0.36 0.05 235);
+	}
+	:global(html.dark) .music-dock.music-theme--netease {
+		--primary: #ff9f45;
+		--music-fill: oklch(0.36 0.058 55);
+	}
 
 	/* 面板的填充底必须由「当前平台」决定，不能继承博客色调：
 	   博客有冷青/暖橘两套 mood，若继承，蓝面板会配上暖底发闷、红面板会配上薄荷底发绿
@@ -3263,7 +3300,7 @@
 		padding: 0.16rem;
 		border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5));
 		border-radius: 999px;
-		background: color-mix(in oklch, var(--primary) 9%, transparent);
+		background: var(--music-fill, color-mix(in oklch, var(--primary) 9%, transparent));
 		cursor: pointer;
 		transition: background 0.4s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
 			border-color 0.4s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
@@ -3332,7 +3369,7 @@
 		margin-bottom: 0.5rem;
 		padding: 0.16rem;
 		border-radius: 999px;
-		background: color-mix(in oklch, var(--primary) 8%, var(--page-bg, #f8fafc));
+		background: var(--music-fill, color-mix(in oklch, var(--primary) 8%, var(--page-bg, #f8fafc)));
 	}
 	.music-login-methods button {
 		min-height: 1.55rem;

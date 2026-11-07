@@ -1,7 +1,10 @@
 <script lang="ts">
 import {
 	DEFAULT_MOOD,
+	MOOD_EVENT,
 	MOOD_PRESETS,
+	SOURCE_EVENT,
+	moodForSource,
 	readStoredMood,
 	setMood,
 	type ThemeMood,
@@ -12,11 +15,25 @@ let mood: ThemeMood = DEFAULT_MOOD;
 
 onMount(() => {
 	mood = readStoredMood();
+	// 反向联动：播放器里换了平台，博客色调跟着换。
+	// 这里只更新状态、不再派发 MOOD_EVENT，否则两个组件会互相触发成环。
+	const onSourceChanged = (event: Event) => {
+		const source = (event as CustomEvent<{ source?: string }>).detail?.source;
+		if (!source) return;
+		const next = moodForSource(source);
+		if (next === mood) return;
+		mood = next;
+		setMood(next);
+	};
+	window.addEventListener(SOURCE_EVENT, onSourceChanged);
+	return () => window.removeEventListener(SOURCE_EVENT, onSourceChanged);
 });
 
 function toggleTone() {
 	mood = mood === "cool" ? "warm" : "cool";
 	setMood(mood);
+	// 正向联动：色调变了就通知播放器换到对应平台。
+	window.dispatchEvent(new CustomEvent(MOOD_EVENT, { detail: { mood } }));
 }
 </script>
 

@@ -5,8 +5,9 @@
 
 :root {
   /* 主色仍由 --hue (config 200 冷青) 驱动 Fuwari 原有变量 */
-  --accent-neon: oklch(0.78 0.14 200);
-  --accent-neon-dim: oklch(0.55 0.10 200);
+  /* 必须跟随 --hue：写死 200 会让暖橘/暗色模式下的卡片描边、光晕仍是青色 */
+  --accent-neon: oklch(0.78 0.14 var(--hue));
+  --accent-neon-dim: oklch(0.55 0.10 var(--hue));
   --accent-warm: oklch(0.72 0.12 45); /* 极少量点缀，保留个人暖感 */
   --font-body: "Noto Sans SC Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
