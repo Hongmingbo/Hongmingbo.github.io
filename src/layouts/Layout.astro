@@ -143,7 +143,12 @@ const bannerOffset =
 
 			// 强制使用 config 的 hue；清掉旧 localStorage 残留，避免旧版本写回的 hue 干扰
 						try { localStorage.removeItem('hue'); } catch (e) {}
-						const hue = configHue;
+						// 色调：冷青（跟随 config）↔ 暖橘（52）。必须在首帧前生效，
+						// 否则会先闪一下冷青再跳暖橘。
+						let mood = 'cool';
+						try { mood = localStorage.getItem('theme-mood') === 'warm' ? 'warm' : 'cool'; } catch (e) {}
+						const hue = mood === 'warm' ? 52 : configHue;
+						document.documentElement.setAttribute('data-mood', mood);
 						document.documentElement.style.setProperty('--hue', hue);
 
 			// calculate the --banner-height-extend, which needs to be a multiple of 4 to avoid blurry text

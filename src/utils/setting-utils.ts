@@ -5,6 +5,11 @@ import {
 	LIGHT_MODE,
 } from "@constants/constants.ts";
 import { expressiveCodeConfig, siteConfig } from "@/config";
+import {
+	applyMoodToDocument,
+	getMoodHue,
+	readStoredMood,
+} from "@utils/theme-mood";
 import type { LIGHT_DARK_MODE } from "@/types/config";
 
 export function getDefaultHue(): number {
@@ -19,25 +24,24 @@ export function getDefaultHue(): number {
 }
 
 /**
- * 主题色：始终以 config 为准（fixed 品牌色）。
- * 忽略 localStorage 中的旧 hue，避免「闪一下冷青又变回 18」。
+ * 主题色相：冷青跟随 config 的品牌色，暖橘用固定值。
+ * 旧的 localStorage['hue'] 一律丢弃，避免历史版本写回的 hue 干扰。
  */
 export function getHue(): number {
-	return getDefaultHue();
+	return getMoodHue(readStoredMood(), getDefaultHue());
 }
 
-export function setHue(_hue: number): void {
-	const h = getDefaultHue();
+/**
+ * 应用当前色调（冷青/暖橘）。
+ * 参数保留是为了兼容旧调用点；实际色相由 mood 决定。
+ */
+export function setHue(_hue?: number): void {
 	try {
 		localStorage.removeItem("hue");
 	} catch {
 		/* ignore */
 	}
-	const r = document.querySelector(":root") as HTMLElement;
-	if (!r) {
-		return;
-	}
-	r.style.setProperty("--hue", String(h));
+	applyMoodToDocument(readStoredMood(), getDefaultHue());
 }
 
 export function applyThemeToDocument(theme: LIGHT_DARK_MODE) {

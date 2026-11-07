@@ -101,3 +101,43 @@ define({
 /* 默认继承色：修复 currentColor 在暗色模式下回退黑色 */
 :root.dark
   color #F5F7FF
+
+/* ---------------- 暖橘色调（访客可切换） ----------------
+   默认冷青由 --hue(200) 驱动。暖橘模式不只换 hue：
+   把所有中性底（页面/卡片/按钮/正文）调暖，才是一套独立样式，
+   否则只会像"只换了个强调色"，和冷调中性色打架。 */
+html[data-mood="warm"]
+  --page-bg: oklch(0.962 0.022 62)
+  --card-bg: oklch(0.995 0.007 62)
+  --btn-regular-bg: oklch(0.955 0.03 60)
+  --btn-regular-bg-hover: oklch(0.925 0.045 60)
+  --btn-regular-bg-active: oklch(0.895 0.06 60)
+  --btn-plain-bg-hover: oklch(0.955 0.03 60)
+  --btn-plain-bg-active: oklch(0.972 0.02 60)
+  --btn-card-bg-hover: oklch(0.975 0.018 60)
+  --btn-card-bg-active: oklch(0.925 0.04 60)
+  --deep-text: oklch(0.28 0.03 55)
+  --line-divider: black(0.09)
+  --line-color: black(0.11)
+  --selection-bg: oklch(0.90 0.06 60)
+  --link-underline: oklch(0.93 0.05 60)
+  --link-hover: oklch(0.95 0.03 60)
+  --link-active: oklch(0.90 0.06 60)
+
+html[data-mood="warm"].dark
+  --page-bg: oklch(0.265 0.02 50)
+  --card-bg: oklch(0.315 0.024 50)
+  --btn-regular-bg: oklch(0.345 0.03 52)
+  --btn-regular-bg-hover: oklch(0.385 0.036 52)
+  --btn-regular-bg-active: oklch(0.425 0.042 52)
+  --btn-plain-bg-hover: oklch(0.345 0.03 52)
+  --btn-plain-bg-active: oklch(0.30 0.024 50)
+  --btn-card-bg-hover: oklch(0.36 0.028 52)
+  --btn-card-bg-active: oklch(0.42 0.038 52)
+  --deep-text: oklch(0.96 0.012 60)
+  --line-divider: rgba(255, 236, 214, 0.16)
+  --line-color: rgba(255, 236, 214, 0.20)
+  --selection-bg: oklch(0.42 0.06 55)
+  --link-underline: oklch(0.38 0.05 55)
+  --link-hover: oklch(0.35 0.04 55)
+  --link-active: oklch(0.42 0.06 55)

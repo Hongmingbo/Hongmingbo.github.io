@@ -3206,10 +3206,43 @@
 	   面板内 var(--primary) 被引用近百处（按钮/进度/边框/高亮/弹窗），
 	   在 dock 根上换一次即可整面板生效，且不会泄漏到博客正文。 */
 	.music-dock.music-theme--kugou { --primary: #0a6ed8; }
-	.music-dock.music-theme--netease { --primary: #c2410c; }
+	.music-dock.music-theme--netease { --primary: #d91f2d; }
 	/* 深色底品牌色必须提亮（实测未提亮时只有 2.4:1） */
 	:global(html.dark) .music-dock.music-theme--kugou { --primary: #5ab0ff; }
-	:global(html.dark) .music-dock.music-theme--netease { --primary: #ff9f45; }
+	:global(html.dark) .music-dock.music-theme--netease { --primary: #ff7b87; }
+
+	/* 面板的填充底必须由「当前平台」决定，不能继承博客色调：
+	   博客有冷青/暖橘两套 mood，若继承，蓝面板会配上暖底发闷、红面板会配上薄荷底发绿
+	   （用户截图里「扫码/验证码」那条就是后者）。所以两个主题都显式定义表面色。 */
+	.music-dock.music-theme--kugou {
+		--page-bg: oklch(0.962 0.016 232);
+		--btn-regular-bg: oklch(0.955 0.024 232);
+		--btn-regular-bg-hover: oklch(0.925 0.036 232);
+		--btn-plain-bg-hover: oklch(0.955 0.024 232);
+		--btn-plain-bg-active: oklch(0.97 0.016 232);
+	}
+	:global(html.dark) .music-dock.music-theme--kugou {
+		--page-bg: oklch(0.305 0.026 235);
+		--btn-regular-bg: oklch(0.34 0.03 235);
+		--btn-regular-bg-hover: oklch(0.38 0.036 235);
+		--btn-plain-bg-hover: oklch(0.34 0.03 235);
+		--btn-plain-bg-active: oklch(0.29 0.024 235);
+	}
+
+	.music-dock.music-theme--netease {
+		--page-bg: oklch(0.972 0.019 55);
+		--btn-regular-bg: oklch(0.962 0.028 55);
+		--btn-regular-bg-hover: oklch(0.94 0.04 55);
+		--btn-plain-bg-hover: oklch(0.962 0.028 55);
+		--btn-plain-bg-active: oklch(0.975 0.02 55);
+	}
+	:global(html.dark) .music-dock.music-theme--netease {
+		--page-bg: oklch(0.30 0.028 55);
+		--btn-regular-bg: oklch(0.335 0.032 58);
+		--btn-regular-bg-hover: oklch(0.375 0.038 58);
+		--btn-plain-bg-hover: oklch(0.335 0.032 58);
+		--btn-plain-bg-active: oklch(0.29 0.026 55);
+	}
 
 	.music-login-heading { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
 	.music-login-title { min-width: 0; }
