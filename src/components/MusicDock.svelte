@@ -2080,7 +2080,12 @@
 	});
 </script>
 
-<div class:music-dock--open={expanded} class="music-dock">
+<div
+	class="music-dock"
+	class:music-dock--open={expanded}
+	class:music-theme--kugou={musicSource === "kugou"}
+	class:music-theme--netease={musicSource === "netease"}
+>
 	{#if expanded}
 		<section class="music-panel" aria-label="音乐播放器">
 			<header class="music-panel__header">
@@ -2590,47 +2595,59 @@
 		<div class="music-login-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (showLogin = false)}>
 			<div
 				class="music-login-card"
-				class:music-login-card--kugou={musicSource === "kugou"}
-				class:music-login-card--netease={musicSource === "netease"}
-				style={`--login-accent: ${MUSIC_SOURCE_META[musicSource].accent}`}
 				role="dialog"
 				aria-modal="true"
 				aria-label={`登录${MUSIC_SOURCE_META[musicSource].label}`}
 			>
 				<header class="music-panel__header">
 					<div class="music-login-heading">
-						<img class="music-login-brand" src={MUSIC_SOURCE_META[musicSource].icon} alt="" aria-hidden="true" />
-						<div>
+						<button
+							class="music-source-toggle"
+							class:music-source-toggle--netease={musicSource === "netease"}
+							type="button"
+							role="switch"
+							aria-checked={musicSource === "netease"}
+							aria-label={`切换播放源，当前为${MUSIC_SOURCE_META[musicSource].label}`}
+							title={`当前：${MUSIC_SOURCE_META[musicSource].label}（点击切换）`}
+							disabled={loginBusy}
+							on:click={() => void switchSource(musicSource === "kugou" ? "netease" : "kugou")}
+						>
+							<span class="music-source-toggle__opts" aria-hidden="true">
+								<img class:music-source-toggle__opt--on={musicSource === "kugou"} src={MUSIC_SOURCE_META.kugou.icon} alt="" />
+								<img class:music-source-toggle__opt--on={musicSource === "netease"} src={MUSIC_SOURCE_META.netease.icon} alt="" />
+							</span>
+							<span class="music-source-toggle__thumb" aria-hidden="true"></span>
+						</button>
+						<div class="music-login-title">
 							<p class="music-kicker">ACCOUNT ACCESS</p>
 							<h2>登录{MUSIC_SOURCE_META[musicSource].label}</h2>
 						</div>
 					</div>
-					<button class="music-icon-button" type="button" aria-label="关闭登录窗口" on:click={() => (showLogin = false)}><Icon icon="material-symbols:close-rounded" /></button>
+					<div class="music-login-actions">
+						{#if adminConfigured}
+							<button
+								class="music-icon-button"
+								class:music-icon-button--on={loginMode === "admin"}
+								type="button"
+								aria-pressed={loginMode === "admin"}
+								aria-label={loginMode === "admin" ? "返回扫码登录" : "管理员口令登录"}
+								title={loginMode === "admin" ? "返回扫码登录" : "管理员口令登录"}
+								on:click={() => selectLoginMode(loginMode === "admin" ? "qr" : "admin")}
+							><Icon icon="material-symbols:key-rounded" /></button>
+						{/if}
+						<button class="music-icon-button" type="button" aria-label="关闭登录窗口" on:click={() => (showLogin = false)}><Icon icon="material-symbols:close-rounded" /></button>
+					</div>
 				</header>
-				<button
-					class="music-source-toggle"
-					class:music-source-toggle--netease={musicSource === "netease"}
-					type="button"
-					role="switch"
-					aria-checked={musicSource === "netease"}
-					aria-label={`切换播放源，当前为${MUSIC_SOURCE_META[musicSource].label}`}
-					disabled={loginBusy}
-					on:click={() => void switchSource(musicSource === "kugou" ? "netease" : "kugou")}
-				>
-					<span class="music-source-toggle__labels" aria-hidden="true">
-						<span class:music-source-toggle__label--on={musicSource === "kugou"}>酷狗</span>
-						<span class:music-source-toggle__label--on={musicSource === "netease"}>网易云</span>
-					</span>
-					<span class="music-source-toggle__thumb" aria-hidden="true">
-						<img src={MUSIC_SOURCE_META[musicSource].icon} alt="" />
-						<span>{MUSIC_SOURCE_META[musicSource].short}</span>
-					</span>
-				</button>
-				<div class="music-login-tabs">
-					<button class:music-login-tab--active={loginMode === "qr"} type="button" on:click={() => selectLoginMode("qr")}>二维码</button>
-					{#if adminConfigured}<button class:music-login-tab--active={loginMode === "admin"} type="button" on:click={() => selectLoginMode("admin")}>管理员</button>{/if}
-					<button class:music-login-tab--active={loginMode === "phone"} type="button" on:click={() => selectLoginMode("phone")}>手机验证码</button>
-				</div>
+				{#if loginMode === "admin"}
+					<div class="music-login-methods music-login-methods--admin" role="group" aria-label="登录方式">
+						<span class="music-login-methods__static">管理员口令登录</span>
+					</div>
+				{:else}
+					<div class="music-login-methods" role="group" aria-label="登录方式">
+						<button class:music-login-method--on={loginMode === "qr"} type="button" on:click={() => selectLoginMode("qr")}>扫码</button>
+						<button class:music-login-method--on={loginMode === "phone"} type="button" on:click={() => selectLoginMode("phone")}>验证码</button>
+					</div>
+				{/if}
 				{#if loginMode === "qr"}
 					<div class="music-qr-block">
 						{#if qrImage}<img src={qrImage} alt={`${MUSIC_SOURCE_META[musicSource].short}登录二维码`} />{:else}<div class="music-qr-empty"><Icon icon="material-symbols:qr-code-2-rounded" /><span>点击生成登录二维码</span></div>{/if}
@@ -3185,109 +3202,135 @@
 	/* 播放源切换：两个源视觉上等权，选中项用主色描边 + 浅底，不抢登录表单的注意力 */
 	/* 平台身份色：卡片内所有基于 --primary 的规则（tabs / 主按钮 / 边框 / 二维码框）
 	   会随当前源自动重染，无需逐条覆盖。颜色按白底与深底都够用选取。 */
-	.music-login-card--kugou { --primary: var(--login-accent, #0a6ed8); }
-	.music-login-card--netease { --primary: var(--login-accent, #d91f2d); }
-	/* 深色底上品牌色必须提亮：实测 #d91f2d on #2B3452 只有 2.44:1，小字不可读。 */
-	:global(html.dark) .music-login-card--kugou { --primary: #5ab0ff; }
-	:global(html.dark) .music-login-card--netease { --primary: #ff7b87; }
+	/* ---------- 面板主题：整块 dock 随当前播放源换强调色 ----------
+	   面板内 var(--primary) 被引用近百处（按钮/进度/边框/高亮/弹窗），
+	   在 dock 根上换一次即可整面板生效，且不会泄漏到博客正文。 */
+	.music-dock.music-theme--kugou { --primary: #0a6ed8; }
+	.music-dock.music-theme--netease { --primary: #c2410c; }
+	/* 深色底品牌色必须提亮（实测未提亮时只有 2.4:1） */
+	:global(html.dark) .music-dock.music-theme--kugou { --primary: #5ab0ff; }
+	:global(html.dark) .music-dock.music-theme--netease { --primary: #ff9f45; }
 
-	.music-login-heading { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
-	.music-login-brand {
-		flex: 0 0 auto;
-		width: 2.15rem;
-		height: 2.15rem;
-		border-radius: 0.62rem;
-		background: #fff;
-		object-fit: cover;
-		box-shadow: 0 3px 12px -8px rgb(15 23 42 / 0.5), 0 0 0 1px rgb(15 23 42 / 0.06);
+	.music-login-heading { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
+	.music-login-title { min-width: 0; }
+	.music-login-title h2 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+	.music-login-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.12rem; }
+	.music-icon-button--on {
+		color: var(--primary) !important;
+		background: color-mix(in oklch, var(--primary) 14%, transparent) !important;
 	}
 
-	/* ---------- 播放源开关 ---------- */
+	/* ---------- 播放源开关：头部紧凑版（两图标 + 滑动拇指） ---------- */
 	.music-source-toggle {
 		position: relative;
+		flex: 0 0 auto;
 		display: block;
-		width: 100%;
-		height: 2.35rem;
-		margin-bottom: 0.6rem;
-		padding: 0.22rem;
-		border: 1px solid color-mix(in oklch, var(--login-accent) 24%, var(--card-border, #dce5e5));
+		width: 3.5rem;
+		height: 1.8rem;
+		padding: 0.16rem;
+		border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5));
 		border-radius: 999px;
-		background: color-mix(in oklch, var(--login-accent) 9%, transparent);
-		font: inherit;
+		background: color-mix(in oklch, var(--primary) 9%, transparent);
 		cursor: pointer;
 		transition: background 0.4s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
 			border-color 0.4s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
 			box-shadow 0.4s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1));
 	}
 	.music-source-toggle:hover:not(:disabled) {
-		box-shadow: 0 10px 24px -20px color-mix(in oklch, var(--login-accent) 70%, transparent);
+		box-shadow: 0 8px 18px -16px color-mix(in oklch, var(--primary) 70%, transparent);
 	}
 	.music-source-toggle:focus-visible {
-		outline: 2px solid color-mix(in oklch, var(--login-accent) 60%, transparent);
+		outline: 2px solid color-mix(in oklch, var(--primary) 60%, transparent);
 		outline-offset: 2px;
 	}
 	.music-source-toggle:disabled { cursor: not-allowed; opacity: 0.6; }
 
-	.music-source-toggle__labels {
+	.music-source-toggle__opts {
 		position: relative;
 		z-index: 1;
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		height: 100%;
 		align-items: center;
+		justify-items: center;
 	}
-	.music-source-toggle__labels > span {
-		color: var(--md-tone-muted);
-		font-size: 0.72rem;
-		text-align: center;
-		transition: color 0.35s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1));
+	.music-source-toggle__opts img {
+		width: 1.16rem;
+		height: 1.16rem;
+		border-radius: 0.28rem;
+		background: #fff;
+		object-fit: cover;
+		opacity: 0.45;
+		filter: grayscale(0.5);
+		transition: opacity 0.35s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
+			filter 0.35s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1));
 	}
-	/* 用更具体的选择器压过上面的 > span 规则，否则激活标签色会被盖掉 */
-	.music-source-toggle__labels > span.music-source-toggle__label--on {
-		color: var(--primary);
-		font-weight: 600;
+	.music-source-toggle__opts img.music-source-toggle__opt--on {
+		opacity: 1;
+		filter: none;
 	}
-	:global(html.dark) .music-source-toggle__labels > span { color: rgb(226 232 240 / 0.74); }
 
 	.music-source-toggle__thumb {
 		position: absolute;
-		top: 0.22rem;
-		left: 0.22rem;
-		z-index: 2;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.34rem;
-		width: calc(50% - 0.22rem);
-		height: calc(100% - 0.44rem);
+		top: 0.16rem;
+		left: 0.16rem;
+		z-index: 0;
+		width: calc(50% - 0.16rem);
+		height: calc(100% - 0.32rem);
 		border-radius: 999px;
 		background: var(--card-bg, #fff);
-		box-shadow: 0 8px 18px -14px color-mix(in oklch, var(--login-accent) 85%, transparent),
-			0 0 0 1px color-mix(in oklch, var(--login-accent) 30%, transparent);
-		color: var(--login-accent);
-		font-size: 0.72rem;
-		font-weight: 600;
+		box-shadow: 0 6px 14px -12px color-mix(in oklch, var(--primary) 85%, transparent),
+			0 0 0 1px color-mix(in oklch, var(--primary) 30%, transparent);
 		transform: translateX(0);
 		transition: transform 0.42s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
 			box-shadow 0.42s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1));
 		will-change: transform;
 	}
 	.music-source-toggle--netease .music-source-toggle__thumb { transform: translateX(100%); }
-	/* 深色下 thumb 若沿用 --card-bg 会和轨道同色，看不出滑钮，这里抬一档 */
 	:global(html.dark) .music-source-toggle__thumb {
 		background: color-mix(in oklch, #fff 13%, var(--card-bg, #2b3452));
 	}
-	.music-source-toggle__thumb img {
-		width: 1.3rem;
-		height: 1.3rem;
-		border-radius: 0.32rem;
-		background: #fff;
-		object-fit: cover;
-	}
 
-	.music-login-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.25rem; padding: 0.25rem; border-radius: 0.75rem; background: color-mix(in oklch, var(--primary) 7%, var(--page-bg, #f8fafc)); }
-	.music-login-tabs button { min-height: 2.1rem; border: 0; border-radius: 0.55rem; color: var(--md-tone-muted); background: transparent; font: inherit; font-size: 0.7rem; cursor: pointer; }
-	.music-login-tab--active { color: var(--primary) !important; background: var(--card-bg, #fff) !important; box-shadow: 0 5px 12px -10px rgb(15 23 42 / 0.55); }
+	/* ---------- 登录方式：两段式小胶囊（独立一行，比原来的 3 段标签页矮很多） ---------- */
+	.music-login-methods {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.2rem;
+		margin-bottom: 0.5rem;
+		padding: 0.16rem;
+		border-radius: 999px;
+		background: color-mix(in oklch, var(--primary) 8%, var(--page-bg, #f8fafc));
+	}
+	.music-login-methods button {
+		min-height: 1.55rem;
+		border: 0;
+		border-radius: 999px;
+		color: var(--md-tone-muted);
+		background: transparent;
+		font: inherit;
+		font-size: 0.68rem;
+		cursor: pointer;
+		transition: color 0.3s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
+			background 0.3s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1));
+	}
+	/* 用 .music-login-methods button.x 提高特异性：上面的 font: inherit 会把字重一起重置 */
+	.music-login-methods button.music-login-method--on {
+		color: var(--primary) !important;
+		background: var(--card-bg, #fff) !important;
+		font-weight: 600;
+		box-shadow: 0 4px 10px -9px rgb(15 23 42 / 0.55);
+	}
+	.music-login-methods--admin { grid-template-columns: 1fr; }
+	.music-login-methods__static {
+		display: grid;
+		place-items: center;
+		min-height: 1.55rem;
+		border-radius: 999px;
+		color: var(--primary);
+		background: color-mix(in oklch, var(--primary) 10%, transparent);
+		font-size: 0.68rem;
+		font-weight: 600;
+	}
 	.music-qr-block { display: grid; justify-items: center; gap: 0.85rem; padding: 1.25rem 0 0.75rem; text-align: center; }
 	.music-qr-block img { width: 13rem; height: 13rem; padding: 0.45rem; border-radius: 0.8rem; background: #fff; }
 	.music-qr-empty { display: grid; place-items: center; gap: 0.55rem; width: 13rem; height: 13rem; border: 1px dashed color-mix(in oklch, var(--primary) 35%, var(--card-border, #dce5e5)); border-radius: 0.8rem; color: var(--primary); font-size: 2.4rem; }
