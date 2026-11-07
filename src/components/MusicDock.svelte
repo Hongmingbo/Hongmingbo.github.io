@@ -2114,10 +2114,7 @@ import {
 			<header class="music-panel__header">
 				<div class="music-panel-heading">
 					<h2>音乐空间</h2>
-					{#if vipState !== "idle"}
-						<span class:music-vip-badge--ok={vipState === "claimed"} class:music-vip-badge--risk={vipState === "risk" || vipState === "error"} class="music-vip-badge" title={vipMessage}>{musicSource === "netease"
-							? vipState === "checking" ? "签到…" : vipState === "claimed" ? "已签到" : "待签到"
-							: vipState === "checking" ? "VIP…" : vipState === "claimed" ? "VIP OK" : "需验证"}</span>{/if}
+					
 				</div>
 				<div class="music-panel-actions">
 					<span class="music-header-account">{auth ? (auth.nickname ?? `${MUSIC_SOURCE_META[musicSource].short}用户 ${auth.userid}`) : "未登录"}</span>
@@ -2126,6 +2123,22 @@ import {
 					{:else}
 						<button class="music-quiet music-quiet--tiny" type="button" on:click={() => (showLogin = true)}>登录</button>
 					{/if}
+					<button
+						class="music-source-toggle music-toolbar-source"
+						class:music-source-toggle--netease={musicSource === "netease"}
+						type="button"
+						role="switch"
+						aria-checked={musicSource === "netease"}
+						aria-label={`切换播放平台，当前为${MUSIC_SOURCE_META[musicSource].label}`}
+						title={`当前：${MUSIC_SOURCE_META[musicSource].label}（点击切换平台）`}
+						on:click={() => void switchSource(musicSource === "kugou" ? "netease" : "kugou")}
+					>
+						<span class="music-source-toggle__opts" aria-hidden="true">
+							<img class:music-source-toggle__opt--on={musicSource === "kugou"} src={MUSIC_SOURCE_META.kugou.icon} alt="" />
+							<img class:music-source-toggle__opt--on={musicSource === "netease"} src={MUSIC_SOURCE_META.netease.icon} alt="" />
+						</span>
+						<span class="music-source-toggle__thumb" aria-hidden="true"></span>
+					</button>
 					<button class:music-quiet--on={historyOpen} class="music-icon-button" type="button" aria-label="播放历史" title="播放历史" on:click={() => (setModal(historyOpen ? null : "history"))}><Icon icon="material-symbols:history-rounded" /></button>
 					<button class:music-quiet--on={queueOpen} class="music-icon-button" type="button" aria-label="播放队列" title={`播放队列${queueSongs.length > 0 ? `（${queueSongs.length} 首）` : ""}`} on:click={() => (setModal(queueOpen ? null : "queue"))}><Icon icon="material-symbols:queue-music-rounded" /></button>
 					<button class:music-quiet--on={downloadsOpen} class="music-icon-button music-downloads-entry" type="button" aria-label={`下载中心${downloadSummary.active ? `（${downloadSummary.active} 进行中）` : ""}`} title={`下载中心${downloadSummary.total ? `：${downloadSummary.done}/${downloadSummary.total} 已完成` : ""}`} on:click={() => setModal(downloadsOpen ? null : "downloads")}><Icon icon="material-symbols:download-for-offline-rounded" />{#if downloadSummary.active}<span class="music-downloads-badge">{downloadSummary.active}</span>{/if}</button>
@@ -2451,6 +2464,7 @@ import {
 										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="eager" decoding="async" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 									</button>
+						<button class="music-search-download" type="button" disabled={Boolean(downloadRecordFor(song.hash))} aria-label={`下载 ${song.name}`} title="下载到本地" on:click={() => void downloadSong(song)}><Icon icon={downloadRecordFor(song.hash) ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} /></button>
 									<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（5 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（5 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，5 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 								<button class="music-search-download" type="button" disabled={Boolean(downloadRecordFor(song.hash))} aria-label={`下载 ${song.name}`} title="下载到本地" on:click={() => void downloadSong(song)}><Icon icon={downloadRecordFor(song.hash) ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} /></button>
 								</div>
@@ -2797,7 +2811,8 @@ import {
 	   之前写死 height: min(38rem, 100vh-6rem)：内容少时底部留一大片空白，
 	   内容多时又直接裁掉（实测内容 597px / 容器 473px，溢出 124px 被切）。
 	   max-height 既保证不超出视口，又不会凭空制造空白。 */
-	.music-panel { position: relative; width: 100%; flex: 0 0 auto; max-height: calc(100vh - 4rem); min-height: 0; margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	/* 面板高度恒定：播放器/设置/空态切换时不改变外框尺寸，避免切换时视觉跳动 */
+	.music-panel { position: relative; width: 100%; flex: 0 0 auto; max-height: calc(100vh - 4rem); min-height: min(34rem, calc(100vh - 5rem)); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	/* 标题组与控件必须在同一行。为了永远放得下，变量有三处约束：
 	   按钮行可收缩但裁切（min-width:0 + overflow:hidden）、账号名限宽、
 	   间距收紧——这样「音乐空间 VIP OK」不会掉到第二行，也不会压到控件上。 */
@@ -2815,6 +2830,9 @@ import {
 	   比右侧按钮行高出 22px。压紧到 1.1 并清掉外边距，整体降到约 48px。 */
 	.music-panel-heading h2 { margin: 0; line-height: 1.15; }
 	.music-panel-actions { display: flex; flex: 0 1 auto; min-width: 0; overflow: hidden; align-items: center; gap: 0.22rem; margin-left: auto; }
+	.music-toolbar-source { width: 3.1rem; height: 1.6rem; padding: 0.13rem; }
+	.music-toolbar-source .music-source-toggle__opts img { width: 1.02rem; height: 1.02rem; }
+	.music-toolbar-source .music-source-toggle__thumb { top: 0.13rem; left: 0.13rem; width: calc(50% - 0.13rem); height: calc(100% - 0.26rem); }
 	/* 空间不足时只允许「账号名」被压缩到省略号——图标按钮固定尺寸、绝不压缩，
 	   否则先被裁掉的会是关闭按钮，用户就点不到了。 */
 	.music-panel-actions > * { flex: 0 0 auto; }
@@ -2824,9 +2842,6 @@ import {
 	   收成 32px 后可余出约 20px，关闭键始终完整可点。 */
 	.music-panel__header .music-panel-actions .music-icon-button { width: 2rem; height: 2rem; font-size: 1.05rem; }
 	.music-header-account { max-width: 3.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--md-tone-muted); font-size: 0.66rem; }
-	.music-vip-badge { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0.1rem 0.38rem; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 30%, transparent); border-radius: 999px; color: var(--md-tone-muted); font-size: 0.56rem; letter-spacing: 0.02em; white-space: nowrap; }
-	.music-vip-badge--ok { border-color: color-mix(in oklch, #2f9e72 36%, transparent); color: #2f9e72; background: color-mix(in oklch, #2f9e72 8%, transparent); }
-	.music-vip-badge--risk { border-color: color-mix(in oklch, #c05640 36%, transparent); color: #c05640; background: color-mix(in oklch, #c05640 8%, transparent); }
 	/* 「保存登录」在窄容器里被挤成两行（保存登 / 录）。禁止折行并允许不被压缩，
 	   同时用 inline-flex 保证文字在按钮内垂直居中。 */
 	.music-quiet--tiny { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-height: 1.8rem; padding: 0.2rem 0.55rem; font-size: 0.66rem; white-space: nowrap; word-break: keep-all; }
@@ -3043,7 +3058,7 @@ import {
 	}
 
 	.music-fullscreen__left .music-icon-button.music-favorite--active,
-	.music-fullscreen__left .music-icon-button.music-favorite--active:hover { color: #fff; border-color: #4fd1c5; background: #4fd1c5; animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
+	.music-fullscreen__left .music-icon-button.music-favorite--active:hover { color: #fff; border-color: var(--primary); background: var(--primary); animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	.music-fullscreen__left .music-play-button { width: 3.6rem; height: 3.6rem; font-size: 1.8rem; }
 	.music-fullscreen__right { width: 100%; height: min(42rem, calc(100vh - 6rem)); min-height: 0; display: flex; justify-content: center; }
 	.music-fullscreen__lyrics { box-sizing: border-box; width: 100%; height: 100%; max-width: 34rem; max-height: none; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; scroll-behavior: smooth; padding: 2.6rem 0.6rem; }
@@ -3231,8 +3246,10 @@ import {
 	/* 每个平台两档色：--primary 深色（强调/文字/按钮），--music-fill 淡色（容器填充）。
 	   酷狗=深蓝+淡蓝，网易云=深橘+淡橘，两套结构一致。 */
 	.music-dock.music-theme--kugou {
-		--primary: #0a6ed8;
-		--music-fill: oklch(0.938 0.042 232);
+		/* 冷青双色：与博客冷青(hue 200)同族，观感统一。
+		   深青 #0e7a72 在白底实测 5.19:1，淡青作容器填充。 */
+		--primary: #0e7a72;
+		--music-fill: oklch(0.938 0.03 196);
 	}
 	.music-dock.music-theme--netease {
 		--primary: #c2410c;
@@ -3240,8 +3257,8 @@ import {
 	}
 	/* 深色底品牌色必须提亮（实测未提亮时只有 2.4:1） */
 	:global(html.dark) .music-dock.music-theme--kugou {
-		--primary: #5ab0ff;
-		--music-fill: oklch(0.36 0.05 235);
+		--primary: oklch(0.80 0.09 195);
+		--music-fill: oklch(0.36 0.038 196);
 	}
 	:global(html.dark) .music-dock.music-theme--netease {
 		--primary: #ff9f45;
@@ -3252,18 +3269,18 @@ import {
 	   博客有冷青/暖橘两套 mood，若继承，蓝面板会配上暖底发闷、红面板会配上薄荷底发绿
 	   （用户截图里「扫码/验证码」那条就是后者）。所以两个主题都显式定义表面色。 */
 	.music-dock.music-theme--kugou {
-		--page-bg: oklch(0.962 0.016 232);
-		--btn-regular-bg: oklch(0.955 0.024 232);
-		--btn-regular-bg-hover: oklch(0.925 0.036 232);
-		--btn-plain-bg-hover: oklch(0.955 0.024 232);
-		--btn-plain-bg-active: oklch(0.97 0.016 232);
+		--page-bg: oklch(0.962 0.014 196);
+		--btn-regular-bg: oklch(0.955 0.022 196);
+		--btn-regular-bg-hover: oklch(0.925 0.032 196);
+		--btn-plain-bg-hover: oklch(0.955 0.022 196);
+		--btn-plain-bg-active: oklch(0.97 0.014 196);
 	}
 	:global(html.dark) .music-dock.music-theme--kugou {
-		--page-bg: oklch(0.305 0.026 235);
-		--btn-regular-bg: oklch(0.34 0.03 235);
-		--btn-regular-bg-hover: oklch(0.38 0.036 235);
-		--btn-plain-bg-hover: oklch(0.34 0.03 235);
-		--btn-plain-bg-active: oklch(0.29 0.024 235);
+		--page-bg: oklch(0.305 0.022 196);
+		--btn-regular-bg: oklch(0.34 0.026 196);
+		--btn-regular-bg-hover: oklch(0.38 0.03 196);
+		--btn-plain-bg-hover: oklch(0.34 0.026 196);
+		--btn-plain-bg-active: oklch(0.29 0.02 196);
 	}
 
 	.music-dock.music-theme--netease {
