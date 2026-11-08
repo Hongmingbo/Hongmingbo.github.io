@@ -145,9 +145,9 @@
 		z-index: 40;
 		display: grid;
 		gap: 0.1rem;
-		min-width: 100%;
-		width: max-content;
-		max-width: 17rem;
+		/* 与触发器同宽：之前用 max-content 撑开，宽度不一致看起来像两块控件 */
+		width: 100%;
+		min-width: 0;
 		max-height: 15rem;
 		padding: 0.3rem;
 		overflow: auto;
@@ -197,6 +197,8 @@
 		font-weight: 600;
 		background: color-mix(in oklch, var(--primary) 12%, transparent);
 	}
+
+	.msel__option-text { overflow: hidden; text-overflow: ellipsis; }
 
 	.msel__check {
 		flex: 0 0 auto;

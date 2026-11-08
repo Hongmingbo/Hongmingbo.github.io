@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { afterUpdate, onMount } from "svelte";
 	import Icon from "@iconify/svelte";
 	import MusicRiskVerify from "./MusicRiskVerify.svelte";
 	import MusicSelect from "./MusicSelect.svelte";
@@ -171,6 +171,9 @@ import {
 	let historyOpen = false;
 	let libraryOpen = false;
 	let searchOverlayOpen = false;
+	let panelEl: HTMLElement | null = null;
+	// 播放器视图的自然高度：设置视图会锁到这个高度并内部滚动，两视图尺寸才一致。
+	let playerPanelHeight = 0;
 	let downloadsOpen = false;
 	$: queueOpen = activeModal === "queue";
 	$: historyOpen = activeModal === "history";
@@ -677,7 +680,30 @@ import {
 		}
 	};
 
-	const searchMusic = async () => {
+	// 搜索加速：同词同范围直接命中缓存；输入停顿 320ms 自动搜，不必手点。
+const searchCache = new Map<string, MusicSong[]>();
+let autoSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let lastAutoKey = "";
+
+const clearSearch = () => {
+	searchQuery = "";
+	searchResults = [];
+	searchMessage = "";
+	lastAutoKey = "";
+	if (autoSearchTimer) { clearTimeout(autoSearchTimer); autoSearchTimer = null; }
+};
+
+const scheduleAutoSearch = (rawQuery: string, scope: string) => {
+	if (!searchOverlayOpen) return;
+	const kw = rawQuery.trim();
+	if (kw.length < 2) return;
+	const key = `${scope}:${kw.toLocaleLowerCase()}`;
+	if (key === lastAutoKey) return;
+	if (autoSearchTimer) clearTimeout(autoSearchTimer);
+	autoSearchTimer = setTimeout(() => { lastAutoKey = key; void searchMusic(); }, 320);
+};
+
+const searchMusic = async () => {
 		const keyword = searchQuery.trim();
 		if (keyword) rememberSearch(keyword);
 		if (!keyword) {
@@ -685,6 +711,13 @@ import {
 			searchMessage = "请输入歌曲名、歌手或关键词";
 			return;
 		}
+	const cacheKey = `${searchScope}:${keyword.toLocaleLowerCase()}`;
+	const cached = searchCache.get(cacheKey);
+	if (cached) {
+		searchResults = cached;
+		searchMessage = cached.length ? `找到 ${cached.length} 首歌曲` : "没有找到匹配歌曲";
+		return;
+	}
 		searchBusy = true;
 		// 全网搜索前确保收藏索引就绪，否则已收藏的歌会显示空心。
 		if (searchScope === "all") await buildAllFavoritesIndex();
@@ -697,6 +730,7 @@ import {
 				searchResults = await client.searchSongs({ keyword, page: 1, pagesize: 100 });
 			}
 			searchMessage = searchResults.length ? `找到 ${searchResults.length} 首歌曲` : "没有找到匹配歌曲";
+		if (searchResults.length) searchCache.set(cacheKey, searchResults);
 		} catch (error) {
 			searchResults = [];
 			searchMessage = handleMusicError(error, "歌曲搜索失败");
@@ -1989,6 +2023,16 @@ import {
 		};
 	});
 
+	// 只在播放器视图测量：设置视图的高度由这个值锁定，避免两视图高矮不一。
+	afterUpdate(() => {
+		if (!showSettings && panelEl && apiStatus === "ready") {
+			const h = Math.round(panelEl.offsetHeight);
+			if (h > 0 && h !== playerPanelHeight) playerPanelHeight = h;
+		}
+	});
+
+	$: scheduleAutoSearch(searchQuery, searchScope);
+
 	// 弹窗/全屏打开时锁定页面背景滚动，滑动手势只作用于面板自身。
 	$: bodyScrollLocked = libraryOpen || fullscreen;
 	$: if (isBrowser()) document.documentElement.style.overflow = bodyScrollLocked ? "hidden" : "";
@@ -2115,7 +2159,12 @@ import {
 	class:music-theme--netease={musicSource === "netease"}
 >
 	{#if expanded}
-		<section class="music-panel" aria-label="音乐播放器">
+		<section
+			class="music-panel"
+			bind:this={panelEl}
+			style={showSettings && playerPanelHeight ? `height:${playerPanelHeight}px;overflow-y:auto;` : ""}
+			aria-label="音乐播放器"
+		>
 			<header class="music-panel__header">
 				<div class="music-panel-heading">
 					<h2>音乐空间</h2>
@@ -2523,7 +2572,7 @@ import {
 					<div class="music-library-footer">
 						<span class="music-muted">第 {Math.min(dailyPage, dailyTotalPages)} / {dailyTotalPages} 页</span>
 						<form class="music-library-jump" on:submit={jumpToLibraryPage}>
-							<input bind:value={libraryPageJump} aria-label="跳转到指定页" placeholder="页码" inputmode="numeric" />
+							<input class="music-page-input" bind:value={libraryPageJump} aria-label="跳转到指定页" placeholder="页码" inputmode="numeric" />
 							<button class="music-quiet" type="submit">跳转</button>
 						</form>
 						<div class="music-actions">
@@ -2606,7 +2655,7 @@ import {
 					<div class="music-library-footer">
 						<span class="music-muted">第 {Math.min(libraryPage, libraryTotalPages)} / {libraryTotalPages} 页</span>
 						<form class="music-library-jump" on:submit={jumpToLibraryPage}>
-							<input bind:value={libraryPageJump} aria-label="跳转到指定页" placeholder="页码" inputmode="numeric" />
+							<input class="music-page-input" bind:value={libraryPageJump} aria-label="跳转到指定页" placeholder="页码" inputmode="numeric" />
 							<button class="music-quiet" type="submit">跳转</button>
 						</form>
 						<div class="music-actions">
@@ -2704,6 +2753,9 @@ import {
 						placeholder="搜索歌曲、歌手…"
 						on:focus={() => (searchHistoryOpen = true)}
 					/>
+					{#if searchQuery}
+						<button class="music-cmd__clear" type="button" aria-label="清空搜索" title="清空" on:click={clearSearch}><Icon icon="material-symbols:cancel-rounded" /></button>
+					{/if}
 					<MusicSelect
 						value={searchScope}
 						ariaLabel="搜索范围"
@@ -2933,7 +2985,8 @@ import {
 	   内容多时又直接裁掉（实测内容 597px / 容器 473px，溢出 124px 被切）。
 	   max-height 既保证不超出视口，又不会凭空制造空白。 */
 	/* 面板高度恒定：播放器/设置/空态切换时不改变外框尺寸，避免切换时视觉跳动 */
-	.music-panel { position: relative; width: 100%; flex: 0 0 auto; max-height: calc(100vh - 4rem); height: min(34rem, calc(100vh - 5rem)); overflow-y: auto; margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	/* 播放器视图高度跟内容走，不再被固定高度/紧 max-height 截断而出现内部滚动 */
+	.music-panel { position: relative; width: 100%; flex: 0 0 auto; max-height: calc(100vh - 1rem); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	/* 标题组与控件必须在同一行。为了永远放得下，变量有三处约束：
 	   按钮行可收缩但裁切（min-width:0 + overflow:hidden）、账号名限宽、
 	   间距收紧——这样「音乐空间 VIP OK」不会掉到第二行，也不会压到控件上。 */
@@ -3061,7 +3114,7 @@ import {
 	.music-library-row > .music-song { min-width: 0; flex: 1; }
 	.music-library-row .music-search-favorite { flex: 0 0 2.1rem; margin-left: 0.45rem; }
 	/* 行内下载按钮与收藏按钮同尺寸同风格，避免多出一个视觉重量。 */
-	.music-search-download { display: grid; place-items: center; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 45%, transparent); border-radius: 0.6rem; color: var(--md-tone-muted); background: transparent; cursor: pointer; transition: color 160ms ease, border-color 160ms ease, background 160ms ease; }
+	.music-search-download { display: grid; place-items: center; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid color-mix(in oklch, var(--primary) 28%, transparent); border-radius: 0.6rem; color: var(--md-tone-muted); background: transparent; cursor: pointer; transition: color 160ms ease, border-color 160ms ease, background 160ms ease; }
 	.music-search-download:hover:not(:disabled) { border-color: color-mix(in oklch, var(--primary) 30%, transparent); color: var(--primary); background: color-mix(in oklch, var(--primary) 8%, transparent); }
 	.music-search-download:disabled { opacity: 0.55; cursor: progress; }
 	.music-download-button { flex: 0 0 auto; }
@@ -3258,7 +3311,7 @@ import {
 	@keyframes music-toast-in { from { opacity: 0; transform: translateY(14px) scale(0.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
 	@keyframes music-toast-beat { 0%, 100% { transform: scale(1) rotate(0deg); } 25% { transform: scale(1.18) rotate(-6deg); } 55% { transform: scale(0.94) rotate(5deg); } 80% { transform: scale(1.08) rotate(-3deg); } }
 	.music-config-block, .music-player-core, .music-account-row, .music-vip-state { padding: 0.8rem; border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 80%, transparent); border-radius: 0.9rem; background: color-mix(in oklch, var(--card-bg, #fff) 70%, transparent); }
-	.music-config-block--full { min-height: 38rem; align-content: start; }
+	.music-config-block--full { align-content: start; }
 	.music-config-block, .music-login-form { display: grid; gap: 0.7rem; }
 	.music-muted, .music-status-line, .music-login-note { margin: 0; color: var(--md-tone-muted); font-size: 0.72rem; line-height: 1.55; }
 	.music-error { color: #c05640; }
@@ -3310,7 +3363,7 @@ import {
 	.music-track-copy strong { overflow: hidden; font-size: 0.85rem; text-overflow: ellipsis; white-space: nowrap; }
 	.music-track-author { overflow: hidden; color: var(--md-tone-muted); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
 	.music-track-status { display: inline-flex; align-items: center; gap: 0.35rem; }
-	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 45%, transparent); border-radius: 0.65rem; color: var(--md-tone-muted); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), border-color 180ms ease; }
+	.music-favorite { flex: 0 0 auto; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; margin-left: auto; padding: 0; border: 1px solid color-mix(in oklch, var(--primary) 28%, transparent); border-radius: 0.65rem; color: var(--md-tone-muted); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.3rem; transition: color 180ms ease, background 180ms ease, transform 180ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)), border-color 180ms ease; }
 	.music-favorite:hover { color: var(--primary); border-color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); transform: scale(1.06); }
 	.music-favorite--active { color: #fff; border-color: var(--primary); background: var(--primary); animation: music-heart-pop 420ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }
 	@keyframes music-heart-pop { 0% { transform: scale(0.7); } 45% { transform: scale(1.28); } 70% { transform: scale(0.92); } 100% { transform: scale(1); } }
@@ -3373,7 +3426,7 @@ import {
 	.music-search-results { margin-top: 0.55rem; }
 	.music-search-result { display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
 	.music-search-result .music-song { min-width: 0; flex: 1; }
-	.music-search-favorite { display: grid; place-items: center; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid color-mix(in oklch, var(--md-tone-faint) 45%, transparent); border-radius: 0.6rem; color: var(--md-tone-muted); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.1rem; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
+	.music-search-favorite { display: grid; place-items: center; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid color-mix(in oklch, var(--primary) 28%, transparent); border-radius: 0.6rem; color: var(--md-tone-muted); background: var(--card-bg, #fff); cursor: pointer; font-size: 1.1rem; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
 	.music-search-favorite:hover { border-color: color-mix(in oklch, var(--primary) 30%, transparent); color: var(--primary); background: color-mix(in oklch, var(--primary) 8%, transparent); }
 	.music-search-favorite--active { color: #fff; border-color: var(--primary); background: var(--primary); }
 	.music-add-song-card { display: grid; gap: 0.55rem; margin-top: 0.6rem; padding: 0.7rem; border: 1px solid color-mix(in oklch, var(--primary) 22%, var(--card-border, #dce5e5)); border-radius: 0.75rem; background: color-mix(in oklch, var(--primary) 5%, transparent); }
@@ -3609,7 +3662,7 @@ import {
 	
 	
 		.music-panel { height: min(74vh, calc(100vh - 5.5rem)); margin-bottom: 0.65rem; padding: 1rem; border-radius: 1.4rem 1.4rem 0 0; }
-		.music-panel::before { content: ""; display: block; width: 2.75rem; height: 0.28rem; margin: 0 auto 0.8rem; border-radius: 999px; background: color-mix(in oklch, var(--md-tone-faint) 45%, transparent); }
+		.music-panel::before { content: ""; display: block; width: 2.75rem; height: 0.28rem; margin: 0 auto 0.8rem; border-radius: 999px; background: color-mix(in oklch, var(--primary) 28%, transparent); }
 		.music-volume-row { display: none; }
 		.music-song { min-height: 3rem; }
 		.music-play-button { width: 3.1rem; height: 3.1rem; font-size: 1.6rem; }
@@ -3640,6 +3693,9 @@ import {
 	}
 	@media (prefers-reduced-motion: reduce) { .music-panel, .music-login-card { animation: none; } .music-trigger-pulse, .music-trigger-cover { animation: none; } .music-eq i { animation: none; } .music-dock-trigger, .music-play-button, .music-song, .music-icon-button, .music-primary, .music-quiet, .music-favorite { transition: none; } }
 
+	.music-page-input { width: 4.2rem; min-height: 2.05rem; padding: 0.2rem 0.5rem; border: 1px solid color-mix(in oklch, var(--primary) 28%, transparent); border-radius: 0.6rem; background: color-mix(in oklch, var(--primary) 5%, transparent); color: var(--md-tone-body); font: inherit; font-size: 0.72rem; text-align: center; }
+	.music-page-input::placeholder { color: color-mix(in oklch, var(--primary) 55%, transparent); }
+
 	/* ---------- 搜索启动条（歌曲库内） ---------- */
 	.music-search-launch { display: flex; align-items: center; gap: 0.55rem; width: 100%; margin-top: 0.95rem; padding: 0.7rem 0.85rem; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 0.85rem; background: color-mix(in oklch, var(--primary) 5%, var(--card-bg, #fff)); color: var(--md-tone-muted); font: inherit; font-size: 0.76rem; cursor: pointer; transition: border-color 0.25s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)), background 0.25s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)), color 0.25s; }
 	.music-search-launch:hover { border-color: color-mix(in oklch, var(--primary) 50%, transparent); background: color-mix(in oklch, var(--primary) 10%, var(--card-bg, #fff)); color: var(--primary); }
@@ -3648,13 +3704,15 @@ import {
 	.music-search-launch__hint { flex: 0 0 auto; padding: 0.12rem 0.42rem; border: 1px solid color-mix(in oklch, var(--primary) 26%, transparent); border-radius: 999px; color: var(--primary); font-size: 0.64rem; }
 
 	/* ---------- Spotlight 式搜索浮层 ---------- */
-	.music-cmd-backdrop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: start center; padding: 11vh 1rem 1rem; background: color-mix(in oklch, #0f172a 42%, transparent); backdrop-filter: blur(3px); }
+	.music-cmd-backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: start center; padding: 11vh 1rem 1rem; background: color-mix(in oklch, #0f172a 42%, transparent); backdrop-filter: blur(3px); }
 	.music-cmd { display: flex; flex-direction: column; gap: 0.65rem; width: min(38rem, 100%); max-height: 70vh; padding: 0.9rem; border: 1px solid color-mix(in oklch, var(--primary) 26%, var(--card-border, #dce5e5)); border-radius: 1.15rem; background: var(--card-bg, #fff); box-shadow: 0 40px 90px -50px rgb(15 23 42 / 0.8); animation: music-cmd-in 0.22s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)); }
 	@keyframes music-cmd-in { from { opacity: 0; transform: translateY(-0.6rem) scale(0.99); } to { opacity: 1; transform: none; } }
-	.music-cmd__bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.45rem; padding: 0.28rem 0.35rem 0.28rem 0.6rem; border: 1px solid color-mix(in oklch, var(--primary) 22%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: color-mix(in oklch, var(--primary) 4%, transparent); }
+	.music-cmd__bar { display: flex; align-items: center; gap: 0.45rem; padding: 0.28rem 0.35rem 0.28rem 0.6rem; border: 1px solid color-mix(in oklch, var(--primary) 22%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: color-mix(in oklch, var(--primary) 4%, transparent); }
 	.music-cmd__icon { font-size: 1.15rem; color: var(--primary); }
-	.music-cmd__input { min-height: 2.7rem; border: 0; background: transparent; color: var(--md-tone-body); font: inherit; font-size: 0.92rem; }
+	.music-cmd__input { flex: 1; min-width: 0; min-height: 2.7rem; border: 0; background: transparent; color: var(--md-tone-body); font: inherit; font-size: 0.92rem; }
 	.music-cmd__input:focus { outline: none; }
+	.music-cmd__clear { display: grid; flex: 0 0 auto; place-items: center; width: 1.7rem; height: 1.7rem; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--md-tone-muted); font-size: 1.05rem; cursor: pointer; transition: color 0.2s, background 0.2s; }
+	.music-cmd__clear:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); }
 	.music-cmd__results { display: grid; gap: 0.12rem; overflow: auto; }
 	.music-cmd__row { display: flex; align-items: center; gap: 0.28rem; padding-right: 0.2rem; border-radius: 0.7rem; }
 	.music-cmd__row:hover { background: color-mix(in oklch, var(--primary) 8%, transparent); }
