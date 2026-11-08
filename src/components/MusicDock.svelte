@@ -170,6 +170,7 @@ import {
 	let queueOpen = false;
 	let historyOpen = false;
 	let libraryOpen = false;
+	let searchOverlayOpen = false;
 	let downloadsOpen = false;
 	$: queueOpen = activeModal === "queue";
 	$: historyOpen = activeModal === "history";
@@ -2121,7 +2122,6 @@ import {
 					
 				</div>
 				<div class="music-panel-actions">
-					<span class="music-header-account">{auth ? (auth.nickname ?? `${MUSIC_SOURCE_META[musicSource].short}用户 ${auth.userid}`) : "未登录"}</span>
 					{#if auth}
 						{#if adminConfigured}<button class="music-quiet music-quiet--tiny" type="button" aria-label="保存当前登录凭据" title="保存当前登录，供管理员口令快速登录" on:click={() => { loginMode = "admin"; showLogin = true; }}>保存登录</button>{/if}
 					{:else}
@@ -2512,7 +2512,6 @@ import {
 										{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="eager" decoding="async" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 										<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 									</button>
-						<button class="music-search-download" type="button" disabled={Boolean(downloadRecordFor(song.hash))} aria-label={`下载 ${song.name}`} title="下载到本地" on:click={() => void downloadSong(song)}><Icon icon={downloadRecordFor(song.hash) ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} /></button>
 									<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（5 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（5 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，5 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 								<button class="music-search-download" type="button" disabled={Boolean(downloadRecordFor(song.hash))} aria-label={`下载 ${song.name}`} title="下载到本地" on:click={() => void downloadSong(song)}><Icon icon={downloadRecordFor(song.hash) ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} /></button>
 								</div>
@@ -2543,30 +2542,11 @@ import {
 							<button class="music-icon-button" type="button" aria-label="关闭歌曲库" on:click={closeLibrary}><Icon icon="material-symbols:close-rounded" /></button>
 						</div>
 					</header>
-						<div class="music-library-search">
-							<input bind:value={searchQuery} aria-label="搜索歌曲库" placeholder="搜索歌曲名或歌手" on:keydown={(event) => event.key === "Enter" && void searchLibrary()} on:focus={() => (searchHistoryOpen = true)} on:blur={() => setTimeout(() => (searchHistoryOpen = false), 120)} on:input={() => (searchHistoryOpen = true)} />
-							<MusicSelect
-								value={searchScope}
-								ariaLabel="搜索范围"
-								onChange={(v) => (searchScope = v)}
-								options={[
-									{ value: "playlist", label: "当前歌单" },
-									{ value: "all", label: "全网歌曲" },
-								]}
-							/>
-							<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
-						</div>
-						<!-- 历史面板必须在搜索行「外面」：搜索行是 3 列 grid，行内元素撑高会把右侧的
-						     搜索范围下拉和搜索按钮一起拉高，搜索框就被压成窄条（截图里的错位根源）。 -->
-						{#if searchHistoryOpen && searchHistory.length > 0 && !searchQuery.trim()}
-							<div class="music-search-history" role="listbox" aria-label="最近搜索">
-								<span class="music-search-history__label">最近搜索</span>
-								{#each searchHistory as item (item)}
-									<button class="music-search-history__item" type="button" role="option" tabindex="-1" on:mousedown|preventDefault={() => useSearchHistory(item)}>{item}</button>
-								{/each}
-								<button class="music-search-history__clear" type="button" tabindex="-1" on:mousedown|preventDefault={clearSearchHistory}>清空历史</button>
-							</div>
-						{/if}
+				<button class="music-search-launch" type="button" on:click={() => (searchOverlayOpen = true)}>
+					<Icon icon="material-symbols:search-rounded" class="music-search-launch__icon" />
+					<span class="music-search-launch__text">搜索歌曲、歌手，或全网曲库</span>
+					<span class="music-search-launch__hint">点击搜索</span>
+				</button>
 					<div class="music-library-toolbar">
 						<div class="music-library-toolbar__left">
 							<span class="music-muted">{searchQuery.trim() ? searchMessage : `${songs.length} 首歌曲`}</span>
@@ -2615,6 +2595,7 @@ import {
 									{#if song.img}<img class="music-song-cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-song-cover music-song-cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 									<span class="music-song-info"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span><Icon icon={currentSong?.hash === song.hash && isPlaying ? "material-symbols:graphic-eq-rounded" : "material-symbols:play-arrow-rounded"} />
 								</button>
+						<button class="music-search-download" type="button" disabled={Boolean(downloadRecordFor(song.hash))} aria-label={`下载 ${song.name}`} title="下载到本地" on:click={() => void downloadSong(song)}><Icon icon={downloadRecordFor(song.hash) ? "material-symbols:progress-activity" : "material-symbols:download-rounded"} /></button>
 								<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={effectiveFavorites.has(song.hash) ? `取消收藏 ${song.name}（5 秒后生效）` : `收藏 ${song.name} 到当前歌单`} title={effectiveFavorites.has(song.hash) ? "点击取消收藏（5 秒后生效）" : pendingRemovalHashes.has(song.hash) ? "已取消收藏，5 秒后生效；再点一次恢复" : "收藏到当前歌单"} on:click={() => toggleFavoriteState(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 							</div>
 						{/each}
@@ -2708,6 +2689,64 @@ import {
 				</span>
 				<strong>{toastText}</strong>
 			</div>
+		</div>
+	{/if}
+
+	{#if searchOverlayOpen}
+		<div class="music-cmd-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (searchOverlayOpen = false)}>
+			<section class="music-cmd" role="dialog" aria-modal="true" aria-label="搜索">
+				<div class="music-cmd__bar">
+					<Icon icon="material-symbols:search-rounded" class="music-cmd__icon" />
+					<input
+						class="music-cmd__input"
+						bind:value={searchQuery}
+						aria-label="搜索关键词"
+						placeholder="搜索歌曲、歌手…"
+						on:focus={() => (searchHistoryOpen = true)}
+					/>
+					<MusicSelect
+						value={searchScope}
+						ariaLabel="搜索范围"
+						align="right"
+						onChange={(v) => (searchScope = v)}
+						options={[
+							{ value: "playlist", label: "当前歌单" },
+							{ value: "all", label: "全网歌曲" },
+						]}
+					/>
+					<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
+					<button class="music-icon-button" type="button" aria-label="关闭搜索" on:click={() => (searchOverlayOpen = false)}><Icon icon="material-symbols:close-rounded" /></button>
+				</div>
+
+				{#if searchQuery.trim() && libraryPageSongs.length > 0}
+					<div class="music-cmd__results">
+						<p class="music-cmd__label">{searchMessage || `找到 ${libraryPageSongs.length} 首`}</p>
+						{#each libraryPageSongs as song (song.hash)}
+							<div class="music-cmd__row">
+								<button class="music-cmd__song" type="button" on:click={() => { searchOverlayOpen = false; void playSong(song); }}>
+									{#if song.img}<img class="music-cmd__cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-cmd__cover music-cmd__cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
+									<span class="music-cmd__meta"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span>
+								</button>
+								<button class="music-search-download" type="button" disabled={Boolean(downloadRecordFor(song.hash))} aria-label={`下载 ${song.name}`} title="下载到本地" on:click={() => downloadSong(song)}><Icon icon="material-symbols:download-rounded" /></button>
+							</div>
+						{/each}
+					</div>
+				{:else if searchQuery.trim()}
+					<p class="music-cmd__empty">{searchBusy ? "正在搜索…" : searchMessage || "输入关键词后点搜索"}</p>
+				{:else if searchHistory.length > 0}
+					<div class="music-cmd__history">
+						<p class="music-cmd__label">最近搜索</p>
+						<div class="music-cmd__chips">
+							{#each searchHistory as item (item)}
+								<button class="music-search-history__item" type="button" on:click={() => { searchQuery = item; void searchLibrary(); }}>{item}</button>
+							{/each}
+							<button class="music-search-history__clear" type="button" on:click={clearSearchHistory}>清空历史</button>
+						</div>
+					</div>
+				{:else}
+					<p class="music-cmd__empty">输入关键词，搜索当前歌单或全网曲库</p>
+				{/if}
+			</section>
 		</div>
 	{/if}
 	{#if showLogin && apiStatus === "ready"}
@@ -2894,7 +2933,7 @@ import {
 	   内容多时又直接裁掉（实测内容 597px / 容器 473px，溢出 124px 被切）。
 	   max-height 既保证不超出视口，又不会凭空制造空白。 */
 	/* 面板高度恒定：播放器/设置/空态切换时不改变外框尺寸，避免切换时视觉跳动 */
-	.music-panel { position: relative; width: 100%; flex: 0 0 auto; max-height: calc(100vh - 4rem); min-height: min(34rem, calc(100vh - 5rem)); margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
+	.music-panel { position: relative; width: 100%; flex: 0 0 auto; max-height: calc(100vh - 4rem); height: min(34rem, calc(100vh - 5rem)); overflow-y: auto; margin-bottom: 0.65rem; padding: 1.1rem; border-radius: 1.25rem; overflow-x: hidden; overflow-y: auto; animation: music-panel-in 280ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	/* 标题组与控件必须在同一行。为了永远放得下，变量有三处约束：
 	   按钮行可收缩但裁切（min-width:0 + overflow:hidden）、账号名限宽、
 	   间距收紧——这样「音乐空间 VIP OK」不会掉到第二行，也不会压到控件上。 */
@@ -2918,12 +2957,10 @@ import {
 	/* 空间不足时只允许「账号名」被压缩到省略号——图标按钮固定尺寸、绝不压缩，
 	   否则先被裁掉的会是关闭按钮，用户就点不到了。 */
 	.music-panel-actions > * { flex: 0 0 auto; }
-	.music-panel-actions > .music-header-account { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 	/* 登录态下这一行要塞进：标题+VIP(≈121) + 保存登录(49) + 6 个图标，
 	   35px 的图标会让总宽超过 475px 可用宽度、把关闭按钮裁掉。
 	   收成 32px 后可余出约 20px，关闭键始终完整可点。 */
 	.music-panel__header .music-panel-actions .music-icon-button { width: 2rem; height: 2rem; font-size: 1.05rem; }
-	.music-header-account { max-width: 3.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--md-tone-muted); font-size: 0.66rem; }
 	/* 「保存登录」在窄容器里被挤成两行（保存登 / 录）。禁止折行并允许不被压缩，
 	   同时用 inline-flex 保证文字在按钮内垂直居中。 */
 	.music-quiet--tiny { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-height: 1.8rem; padding: 0.2rem 0.55rem; font-size: 0.66rem; white-space: nowrap; word-break: keep-all; }
@@ -3258,7 +3295,7 @@ import {
 	.music-primary:hover:not(:disabled), .music-quiet:hover:not(:disabled) { transform: translateY(-1px); }
 	.music-primary:disabled, .music-quiet:disabled { cursor: not-allowed; opacity: 0.5; }
 	.music-primary--small { min-height: 2rem; }
-	.music-quiet { border: 1px solid color-mix(in oklch, var(--card-border, #dce5e5) 95%, transparent); color: var(--md-tone-body); background: transparent; }
+	.music-quiet { display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem; min-height: 2.05rem; padding: 0.2rem 0.72rem; border: 1px solid color-mix(in oklch, var(--primary) 30%, transparent); border-radius: 0.62rem; background: color-mix(in oklch, var(--primary) 7%, transparent); color: var(--primary); font: inherit; font-size: 0.7rem; font-weight: 500; cursor: pointer; transition: border-color 0.25s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)), background 0.25s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)), color 0.25s; }
 	.music-now-playing { display: flex; align-items: center; gap: 0.75rem; }
 	.music-cover { flex: 0 0 3.6rem; width: 3.6rem; height: 3.6rem; border-radius: 0.85rem; object-fit: cover; box-shadow: 0 8px 18px -12px rgb(15 23 42 / 0.7); }
 	.music-cover--empty { display: grid; place-items: center; color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); font-size: 1.5rem; }
@@ -3372,10 +3409,10 @@ import {
 	/* 每个平台两档色：--primary 深色（强调/文字/按钮），--music-fill 淡色（容器填充）。
 	   酷狗=深蓝+淡蓝，网易云=深橘+淡橘，两套结构一致。 */
 	.music-dock.music-theme--kugou {
-		/* 冷青双色：与博客冷青(hue 200)同族，观感统一。
-		   深青 #0e7a72 在白底实测 5.19:1，淡青作容器填充。 */
-		--primary: #0e7a72;
-		--music-fill: oklch(0.938 0.03 196);
+		/* 冷青双色：色相直接跟博客一致（200），只是明度降一档做强调色，
+		   这样面板与页面的青是"同一个青"，不会像之前 176° 那样偏绿、跨度大。 */
+		--primary: oklch(0.58 0.105 200);
+		--music-fill: oklch(0.94 0.035 200);
 	}
 	.music-dock.music-theme--netease {
 		--primary: #c2410c;
@@ -3383,8 +3420,8 @@ import {
 	}
 	/* 深色底品牌色必须提亮（实测未提亮时只有 2.4:1） */
 	:global(html.dark) .music-dock.music-theme--kugou {
-		--primary: oklch(0.80 0.09 195);
-		--music-fill: oklch(0.36 0.038 196);
+		--primary: oklch(0.82 0.095 200);
+		--music-fill: oklch(0.36 0.04 200);
 	}
 	:global(html.dark) .music-dock.music-theme--netease {
 		--primary: #ff9f45;
@@ -3395,18 +3432,18 @@ import {
 	   博客有冷青/暖橘两套 mood，若继承，蓝面板会配上暖底发闷、红面板会配上薄荷底发绿
 	   （用户截图里「扫码/验证码」那条就是后者）。所以两个主题都显式定义表面色。 */
 	.music-dock.music-theme--kugou {
-		--page-bg: oklch(0.962 0.014 196);
-		--btn-regular-bg: oklch(0.955 0.022 196);
-		--btn-regular-bg-hover: oklch(0.925 0.032 196);
-		--btn-plain-bg-hover: oklch(0.955 0.022 196);
-		--btn-plain-bg-active: oklch(0.97 0.014 196);
+		--page-bg: oklch(0.962 0.014 200);
+		--btn-regular-bg: oklch(0.955 0.022 200);
+		--btn-regular-bg-hover: oklch(0.925 0.032 200);
+		--btn-plain-bg-hover: oklch(0.955 0.022 200);
+		--btn-plain-bg-active: oklch(0.97 0.014 200);
 	}
 	:global(html.dark) .music-dock.music-theme--kugou {
-		--page-bg: oklch(0.305 0.022 196);
-		--btn-regular-bg: oklch(0.34 0.026 196);
-		--btn-regular-bg-hover: oklch(0.38 0.03 196);
-		--btn-plain-bg-hover: oklch(0.34 0.026 196);
-		--btn-plain-bg-active: oklch(0.29 0.02 196);
+		--page-bg: oklch(0.305 0.022 200);
+		--btn-regular-bg: oklch(0.34 0.026 200);
+		--btn-regular-bg-hover: oklch(0.38 0.03 200);
+		--btn-plain-bg-hover: oklch(0.34 0.026 200);
+		--btn-plain-bg-active: oklch(0.29 0.02 200);
 	}
 
 	.music-dock.music-theme--netease {
@@ -3602,4 +3639,32 @@ import {
 		.music-fullscreen__close { top: 0.7rem; right: 0.7rem; width: 2.2rem; height: 2.2rem; font-size: 1.1rem; }
 	}
 	@media (prefers-reduced-motion: reduce) { .music-panel, .music-login-card { animation: none; } .music-trigger-pulse, .music-trigger-cover { animation: none; } .music-eq i { animation: none; } .music-dock-trigger, .music-play-button, .music-song, .music-icon-button, .music-primary, .music-quiet, .music-favorite { transition: none; } }
+
+	/* ---------- 搜索启动条（歌曲库内） ---------- */
+	.music-search-launch { display: flex; align-items: center; gap: 0.55rem; width: 100%; margin-top: 0.95rem; padding: 0.7rem 0.85rem; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 0.85rem; background: color-mix(in oklch, var(--primary) 5%, var(--card-bg, #fff)); color: var(--md-tone-muted); font: inherit; font-size: 0.76rem; cursor: pointer; transition: border-color 0.25s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)), background 0.25s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)), color 0.25s; }
+	.music-search-launch:hover { border-color: color-mix(in oklch, var(--primary) 50%, transparent); background: color-mix(in oklch, var(--primary) 10%, var(--card-bg, #fff)); color: var(--primary); }
+	.music-search-launch__icon { font-size: 1.05rem; color: var(--primary); }
+	.music-search-launch__text { flex: 1; text-align: left; }
+	.music-search-launch__hint { flex: 0 0 auto; padding: 0.12rem 0.42rem; border: 1px solid color-mix(in oklch, var(--primary) 26%, transparent); border-radius: 999px; color: var(--primary); font-size: 0.64rem; }
+
+	/* ---------- Spotlight 式搜索浮层 ---------- */
+	.music-cmd-backdrop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: start center; padding: 11vh 1rem 1rem; background: color-mix(in oklch, #0f172a 42%, transparent); backdrop-filter: blur(3px); }
+	.music-cmd { display: flex; flex-direction: column; gap: 0.65rem; width: min(38rem, 100%); max-height: 70vh; padding: 0.9rem; border: 1px solid color-mix(in oklch, var(--primary) 26%, var(--card-border, #dce5e5)); border-radius: 1.15rem; background: var(--card-bg, #fff); box-shadow: 0 40px 90px -50px rgb(15 23 42 / 0.8); animation: music-cmd-in 0.22s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)); }
+	@keyframes music-cmd-in { from { opacity: 0; transform: translateY(-0.6rem) scale(0.99); } to { opacity: 1; transform: none; } }
+	.music-cmd__bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.45rem; padding: 0.28rem 0.35rem 0.28rem 0.6rem; border: 1px solid color-mix(in oklch, var(--primary) 22%, var(--card-border, #dce5e5)); border-radius: 0.9rem; background: color-mix(in oklch, var(--primary) 4%, transparent); }
+	.music-cmd__icon { font-size: 1.15rem; color: var(--primary); }
+	.music-cmd__input { min-height: 2.7rem; border: 0; background: transparent; color: var(--md-tone-body); font: inherit; font-size: 0.92rem; }
+	.music-cmd__input:focus { outline: none; }
+	.music-cmd__results { display: grid; gap: 0.12rem; overflow: auto; }
+	.music-cmd__row { display: flex; align-items: center; gap: 0.28rem; padding-right: 0.2rem; border-radius: 0.7rem; }
+	.music-cmd__row:hover { background: color-mix(in oklch, var(--primary) 8%, transparent); }
+	.music-cmd__song { display: flex; flex: 1; align-items: center; gap: 0.6rem; min-width: 0; padding: 0.42rem 0.5rem; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+	.music-cmd__cover { flex: 0 0 auto; width: 2.2rem; height: 2.2rem; border-radius: 0.55rem; object-fit: cover; }
+	.music-cmd__cover--empty { display: grid; place-items: center; background: color-mix(in oklch, var(--primary) 12%, transparent); color: var(--primary); }
+	.music-cmd__meta { display: grid; min-width: 0; gap: 0.05rem; }
+	.music-cmd__meta strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.8rem; }
+	.music-cmd__meta small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--md-tone-muted); font-size: 0.68rem; }
+	.music-cmd__label { margin: 0 0 0.15rem 0.25rem; color: var(--md-tone-muted); font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase; }
+	.music-cmd__chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+	.music-cmd__empty { margin: 1.4rem 0; color: var(--md-tone-muted); font-size: 0.76rem; text-align: center; }
 </style>

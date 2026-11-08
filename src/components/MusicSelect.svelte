@@ -140,21 +140,25 @@
 
 	.msel__panel {
 		position: absolute;
-		top: calc(100% + 0.3rem);
+		top: calc(100% + 0.18rem);
 		left: 0;
 		z-index: 40;
 		display: grid;
 		gap: 0.1rem;
 		min-width: 100%;
+		width: max-content;
+		max-width: 17rem;
 		max-height: 15rem;
 		padding: 0.3rem;
 		overflow: auto;
 		border: 1px solid color-mix(in oklch, var(--primary) 22%, var(--card-border, #dce5e5));
-		border-radius: 0.75rem;
+		border-radius: 0.7rem;
 		background: color-mix(in oklch, var(--card-bg, #fff) 96%, transparent);
 		box-shadow:
 			0 18px 40px -26px rgb(15 23 42 / 0.55),
 			0 2px 8px -6px rgb(15 23 42 / 0.3);
+		transform-origin: top center;
+		animation: msel-drop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 	}
 
 	.msel__panel--right {
@@ -198,6 +202,11 @@
 		flex: 0 0 auto;
 		font-size: 1rem;
 		color: var(--primary);
+	}
+
+	@keyframes msel-drop {
+		from { opacity: 0; transform: translateY(-0.25rem) scale(0.985); }
+		to { opacity: 1; transform: translateY(0) scale(1); }
 	}
 
 	@media (prefers-reduced-motion: reduce) {
