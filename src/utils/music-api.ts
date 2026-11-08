@@ -368,7 +368,9 @@ export const normalizeSongs = (payload: unknown): MusicSong[] => {
 						item.pic ??
 						item.image ??
 						item.img ??
-						(item.hash || item.FileHash
+						// 只有酷狗的 32 位 hash 能这样拼封面；网易云 hash 是纯数字 id，
+						// 拼 imge.kugou.com 只会 404 变成破图，数字 id 一律留空走平台默认封面。
+						((item.hash || item.FileHash) && !/^\d+$/.test(String(item.hash ?? item.FileHash))
 							? `https://imge.kugou.com/stdmusic/480/${String(item.hash ?? item.FileHash).toLowerCase()}.jpg`
 							: ""),
 				).replace("{size}", "480"),

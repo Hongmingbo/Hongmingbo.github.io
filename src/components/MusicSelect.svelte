@@ -150,7 +150,9 @@
 		min-width: 0;
 		max-height: 15rem;
 		padding: 0.3rem;
-		overflow: auto;
+		/* 只纵向滚动：横向滚动条会让弹层看起来像被裁坏的表格 */
+		overflow-y: auto;
+		overflow-x: hidden;
 		border: 1px solid color-mix(in oklch, var(--primary) 22%, var(--card-border, #dce5e5));
 		border-radius: 0.7rem;
 		background: color-mix(in oklch, var(--card-bg, #fff) 96%, transparent);

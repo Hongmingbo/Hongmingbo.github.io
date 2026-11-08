@@ -684,6 +684,8 @@ import {
 const searchCache = new Map<string, MusicSong[]>();
 let autoSearchTimer: ReturnType<typeof setTimeout> | null = null;
 let lastAutoKey = "";
+// 搜索请求代际，用于丢弃过期结果
+let searchGeneration = 0;
 
 const clearSearch = () => {
 	searchQuery = "";
@@ -693,6 +695,12 @@ const clearSearch = () => {
 	if (autoSearchTimer) { clearTimeout(autoSearchTimer); autoSearchTimer = null; }
 };
 
+// 显式提交：搜索按钮 / 回车 / 点历史项（只有这些会写历史）
+const submitSearch = () => {
+	lastAutoKey = "";
+	void searchMusic({ remember: true });
+};
+
 const scheduleAutoSearch = (rawQuery: string, scope: string) => {
 	if (!searchOverlayOpen) return;
 	const kw = rawQuery.trim();
@@ -700,17 +708,19 @@ const scheduleAutoSearch = (rawQuery: string, scope: string) => {
 	const key = `${scope}:${kw.toLocaleLowerCase()}`;
 	if (key === lastAutoKey) return;
 	if (autoSearchTimer) clearTimeout(autoSearchTimer);
-	autoSearchTimer = setTimeout(() => { lastAutoKey = key; void searchMusic(); }, 320);
+	autoSearchTimer = setTimeout(() => { lastAutoKey = key; void searchMusic({ remember: false }); }, 320);
 };
 
-const searchMusic = async () => {
-		const keyword = searchQuery.trim();
-		if (keyword) rememberSearch(keyword);
-		if (!keyword) {
-			searchResults = [];
-			searchMessage = "请输入歌曲名、歌手或关键词";
-			return;
-		}
+const searchMusic = async (options: { remember?: boolean } = {}) => {
+	const keyword = searchQuery.trim();
+	// 只有「显式提交」（搜索按钮 / 回车 / 历史项）才写搜索历史。
+	// 打字过程中的防抖搜索不写，否则历史里会积满 "h'y'w" 这种半成品。
+	if (options.remember === true && keyword) rememberSearch(keyword);
+	if (!keyword) {
+		searchResults = [];
+		searchMessage = "请输入歌曲名、歌手或关键词";
+		return;
+	}
 	const cacheKey = `${searchScope}:${keyword.toLocaleLowerCase()}`;
 	const cached = searchCache.get(cacheKey);
 	if (cached) {
@@ -718,26 +728,32 @@ const searchMusic = async () => {
 		searchMessage = cached.length ? `找到 ${cached.length} 首歌曲` : "没有找到匹配歌曲";
 		return;
 	}
-		searchBusy = true;
-		// 全网搜索前确保收藏索引就绪，否则已收藏的歌会显示空心。
-		if (searchScope === "all") await buildAllFavoritesIndex();
-		searchMessage = searchScope === "all" ? "正在搜索全网歌曲…" : "正在筛选当前歌单…";
-		try {
-			if (searchScope === "playlist") {
-				const lower = keyword.toLocaleLowerCase();
-				searchResults = songs.filter((song) => `${song.name} ${song.author}`.toLocaleLowerCase().includes(lower));
-			} else if (client) {
-				searchResults = await client.searchSongs({ keyword, page: 1, pagesize: 100 });
-			}
-			searchMessage = searchResults.length ? `找到 ${searchResults.length} 首歌曲` : "没有找到匹配歌曲";
-		if (searchResults.length) searchCache.set(cacheKey, searchResults);
-		} catch (error) {
-			searchResults = [];
-			searchMessage = handleMusicError(error, "歌曲搜索失败");
-		} finally {
-			searchBusy = false;
+	// 请求代际：异步返回时若已有更新的搜索就丢弃这次结果，
+	// 否则慢请求会覆盖新结果，并把它写进新关键词的缓存（串词）。
+	const generation = ++searchGeneration;
+	searchBusy = true;
+	if (searchScope === "all") await buildAllFavoritesIndex();
+	searchMessage = searchScope === "all" ? "正在搜索全网歌曲…" : "正在筛选当前歌单…";
+	try {
+		let results: MusicSong[] = [];
+		if (searchScope === "playlist") {
+			const lower = keyword.toLocaleLowerCase();
+			results = songs.filter((song) => `${song.name} ${song.author}`.toLocaleLowerCase().includes(lower));
+		} else if (client) {
+			results = await client.searchSongs({ keyword, page: 1, pagesize: 100 });
 		}
-	};
+		if (generation !== searchGeneration) return;
+		searchResults = results;
+		searchMessage = results.length ? `找到 ${results.length} 首歌曲` : "没有找到匹配歌曲";
+		if (results.length) searchCache.set(cacheKey, results);
+	} catch (error) {
+		if (generation !== searchGeneration) return;
+		searchResults = [];
+		searchMessage = handleMusicError(error, "歌曲搜索失败");
+	} finally {
+		if (generation === searchGeneration) searchBusy = false;
+	}
+};
 
 	const openLibrary = () => {
 		setModal("library");
@@ -2750,7 +2766,12 @@ const searchMusic = async () => {
 						class="music-cmd__input"
 						bind:value={searchQuery}
 						aria-label="搜索关键词"
-						placeholder="搜索歌曲、歌手…"
+						placeholder="搜索歌曲、歌手…（回车直接搜索）"
+						on:keydown={(event) => {
+							if (event.key !== "Enter") return;
+							event.preventDefault();
+							submitSearch();
+						}}
 						on:focus={() => (searchHistoryOpen = true)}
 					/>
 					{#if searchQuery}
@@ -2766,7 +2787,7 @@ const searchMusic = async () => {
 							{ value: "all", label: "全网歌曲" },
 						]}
 					/>
-					<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
+					<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={submitSearch}>{searchBusy ? "搜索中…" : "搜索"}</button>
 					<button class="music-icon-button" type="button" aria-label="关闭搜索" on:click={() => (searchOverlayOpen = false)}><Icon icon="material-symbols:close-rounded" /></button>
 				</div>
 
@@ -2779,6 +2800,7 @@ const searchMusic = async () => {
 									{#if song.img}<img class="music-cmd__cover" src={song.img} alt="" loading="lazy" />{:else}<span class="music-cmd__cover music-cmd__cover--empty"><Icon icon="material-symbols:music-note-rounded" /></span>{/if}
 									<span class="music-cmd__meta"><strong>{song.name}</strong><small>{song.author}{song.album ? ` · ${song.album}` : ""}</small></span>
 								</button>
+								<button class:music-search-favorite--active={effectiveFavorites.has(song.hash)} class="music-search-favorite" type="button" aria-label={`收藏 ${song.name}`} title="收藏到当前歌单" on:click={() => toggleFavoriteSong(song)}><Icon icon={effectiveFavorites.has(song.hash) ? "material-symbols:favorite-rounded" : "material-symbols:favorite-outline-rounded"} /></button>
 								<button class="music-search-download" type="button" disabled={Boolean(downloadRecordFor(song.hash))} aria-label={`下载 ${song.name}`} title="下载到本地" on:click={() => downloadSong(song)}><Icon icon="material-symbols:download-rounded" /></button>
 							</div>
 						{/each}
@@ -2790,7 +2812,7 @@ const searchMusic = async () => {
 						<p class="music-cmd__label">最近搜索</p>
 						<div class="music-cmd__chips">
 							{#each searchHistory as item (item)}
-								<button class="music-search-history__item" type="button" on:click={() => { searchQuery = item; void searchLibrary(); }}>{item}</button>
+								<button class="music-search-history__item" type="button" on:click={() => { searchQuery = item; submitSearch(); }}>{item}</button>
 							{/each}
 							<button class="music-search-history__clear" type="button" on:click={clearSearchHistory}>清空历史</button>
 						</div>
@@ -3250,7 +3272,7 @@ const searchMusic = async () => {
 	.music-fullscreen__copy span { color: rgb(203 213 225); font-size: 0.85rem; }
 	.music-fullscreen__left .music-progress-row { width: 100%; max-width: 22rem; position: relative; z-index: 2; }
 	.music-fullscreen__left .music-controls { margin-top: 0.9rem; position: relative; z-index: 3; }
-	.music-fullscreen__left .music-icon-button { width: 2.6rem; height: 2.6rem; color: #fff; background: rgb(255 255 255 / 0.08); font-size: 1.25rem; backdrop-filter: blur(8px); }
+	.music-fullscreen__left .music-icon-button { width: 2.6rem; height: 2.6rem; color: #fff; border: 1px solid color-mix(in oklch, var(--primary) 55%, transparent); background: color-mix(in oklch, var(--primary) 18%, rgb(255 255 255 / 0.06)); font-size: 1.25rem; backdrop-filter: blur(8px); }
 	.music-fullscreen__left .music-icon-button:hover { color: var(--primary); background: color-mix(in oklch, var(--primary) 22%, transparent); }
 	/* .music-favorite 自带 margin-left:auto（为歌曲行右侧对齐设计），
 	   在全屏控制行里会把爱心推向一侧导致图标不居中，这里抵消掉。 */
@@ -3433,7 +3455,9 @@ const searchMusic = async () => {
 	.music-add-song-card strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.76rem; }
 	.music-song--active::before { position: absolute; left: -1px; top: 24%; bottom: 24%; width: 3px; border-radius: 3px; background: var(--primary); content: ""; }
 	.music-song--active .music-song-index { color: var(--primary); }
-	.music-song-cover { flex: 0 0 2.1rem; width: 2.1rem; height: 2.1rem; border-radius: 0.45rem; object-fit: cover; background: color-mix(in oklch, var(--primary) 10%, transparent); }
+	.music-song-cover { flex: 0 0 2.1rem; width: 2.1rem; height: 2.1rem; border-radius: 0.45rem; object-fit: cover; background: var(--music-fill, color-mix(in oklch, var(--primary) 10%, transparent)); }
+	/* 无封面占位：用当前平台的淡色 + 主色柔光，网易云下就是暖橘，不再是违和的灰/青 */
+	.music-song-cover--empty { background: radial-gradient(circle at 32% 26%, color-mix(in oklch, var(--primary) 30%, transparent), transparent 72%), var(--music-fill, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 24%, transparent); }
 	.music-song-cover--empty { display: grid; place-items: center; color: var(--primary); font-size: 1rem; }
 	.music-song-index { width: 1.6rem; color: var(--md-tone-faint); font-family: var(--font-mono, monospace); font-size: 0.62rem; }
 	.music-song-info { min-width: 0; display: grid; flex: 1; gap: 0.08rem; }
