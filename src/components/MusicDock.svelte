@@ -2,6 +2,7 @@
 	import { onMount } from "svelte";
 	import Icon from "@iconify/svelte";
 	import MusicRiskVerify from "./MusicRiskVerify.svelte";
+	import MusicSelect from "./MusicSelect.svelte";
 	import {
 		centeredLyricScrollTop,
 		getShanghaiDateKey,
@@ -726,6 +727,9 @@ import {
 		libraryPageJump = "";
 		if (dailySongs.length === 0 && !dailyLoading) void loadDailyRecommendations();
 	};
+
+	/** MusicSelect 只回调字符串值；以下是原本读 event 的 setter 的桥接。 */
+	const valueAsEvent = (value: string) => ({ currentTarget: { value } }) as unknown as Event;
 
 	const setLibraryPageSize = (event: Event) => {
 		libraryPageSize = Number((event.currentTarget as HTMLSelectElement).value) as PageSizeOption;
@@ -2180,11 +2184,16 @@ import {
 						</label>
 						<label class="music-setting-row">
 							<span>音质<small>128 / 320 / 无损；无损需账号有权限</small></span>
-							<select value={audioQuality} aria-label="音质" on:change={(event) => void applyAudioQuality((event.currentTarget as HTMLSelectElement).value)}>
-								<option value="128">128 kbps</option>
-								<option value="320">320 kbps</option>
-								<option value="flac">无损 FLAC</option>
-							</select>
+							<MusicSelect
+								value={audioQuality}
+								ariaLabel="音质"
+								onChange={(v) => void applyAudioQuality(v)}
+								options={[
+									{ value: "128", label: "128 kbps" },
+									{ value: "320", label: "320 kbps" },
+									{ value: "flac", label: "无损 FLAC" },
+								]}
+							/>
 						</label>
 						<label class="music-setting-row">
 							<span>歌词偏移<small>正值提前高亮；当前 {lyricOffsetMs > 0 ? "+" : ""}{lyricOffsetMs} ms</small></span>
@@ -2192,7 +2201,16 @@ import {
 						</label>
 						<label class="music-setting-row">
 							<span>弹窗列表每页数量<small>歌曲库与每日推荐共用</small></span>
-							<select value={libraryPageSize} aria-label="默认每页数量" on:change={setLibraryPageSize}><option value={20}>20 首</option><option value={50}>50 首</option><option value={100}>100 首</option></select>
+							<MusicSelect
+								value={String(libraryPageSize)}
+								ariaLabel="默认每页数量"
+								onChange={(v) => setLibraryPageSize(valueAsEvent(v))}
+								options={[
+									{ value: "20", label: "20 首" },
+									{ value: "50", label: "50 首" },
+									{ value: "100", label: "100 首" },
+								]}
+							/>
 						</label>
 						<div class="music-setting-row">
 							<span>歌词缓存<small>当前缓存 {lyricsCache.size} 首</small></span>
@@ -2268,11 +2286,16 @@ import {
 						<div><span class="music-section-label">LIBRARY</span><strong>我的歌单</strong><small class="music-muted">{songsLoading ? "正在读取…" : auth ? `${songs.length} 首歌曲` : "登录后读取你的歌单"}</small></div>
 						{#if auth}
 							<div class="music-entry-card__body">
-								<select bind:value={selectedPlaylistId} on:change={onPlaylistChange} aria-label="选择当前歌单">
-									{#each playlists as playlist}
-										<option value={String(playlist.listid)}>{playlist.name}</option>
-									{/each}
-								</select>
+								<MusicSelect
+									value={String(selectedPlaylistId)}
+									ariaLabel="选择当前歌单"
+									align="right"
+									onChange={(v) => {
+										selectedPlaylistId = v;
+										onPlaylistChange(valueAsEvent(v));
+									}}
+									options={playlists.map((playlist) => ({ value: String(playlist.listid), label: playlist.name }))}
+								/>
 								<button class="music-primary music-primary--small" type="button" on:click={openLibrary}>歌曲库</button>
 							</div>
 						{:else}
@@ -2389,12 +2412,17 @@ import {
 					<div class="music-library-toolbar__left">
 						<label class="music-concurrency">
 							<span>同时下载</span>
-							<select value={String(downloadConcurrency)} aria-label="同时下载数量" on:change={(event) => setDownloadConcurrency((event.currentTarget as HTMLSelectElement).value)}>
-								<option value="1">1 个</option>
-								<option value="2">2 个</option>
-								<option value="3">3 个</option>
-								<option value="4">4 个</option>
-							</select>
+							<MusicSelect
+								value={String(downloadConcurrency)}
+								ariaLabel="同时下载数量"
+								onChange={(v) => setDownloadConcurrency(v)}
+								options={[
+									{ value: "1", label: "1 个" },
+									{ value: "2", label: "2 个" },
+									{ value: "3", label: "3 个" },
+									{ value: "4", label: "4 个" },
+								]}
+							/>
 						</label>
 					</div>
 					<div class="music-library-toolbar__controls">
@@ -2449,8 +2477,28 @@ import {
 						</div>
 						<div class="music-library-toolbar__controls">
 							<button class="music-quiet" type="button" disabled={songsLoading || dailyLoading} on:click={() => void refreshLibrary()}>重新加载</button>
-							<select value={librarySort} aria-label="推荐排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
-							<select value={libraryPageSize} aria-label="每页显示数量" on:change={setLibraryPageSize}><option value={20}>20 首/页</option><option value={50}>50 首/页</option><option value={100}>100 首/页</option></select>
+							<MusicSelect
+								value={librarySort}
+								ariaLabel="推荐排序"
+								align="right"
+								onChange={(v) => setLibrarySort(valueAsEvent(v))}
+								options={[
+									{ value: "default", label: "默认顺序" },
+									{ value: "title", label: "按歌名" },
+									{ value: "artist", label: "按歌手" },
+								]}
+							/>
+							<MusicSelect
+								value={String(libraryPageSize)}
+								ariaLabel="每页显示数量"
+								align="right"
+								onChange={(v) => setLibraryPageSize(valueAsEvent(v))}
+								options={[
+									{ value: "20", label: "20 首/页" },
+									{ value: "50", label: "50 首/页" },
+									{ value: "100", label: "100 首/页" },
+								]}
+							/>
 						</div>
 					</div>
 					<div class="music-library-list" aria-label="每日推荐列表">
@@ -2497,7 +2545,15 @@ import {
 					</header>
 						<div class="music-library-search">
 							<input bind:value={searchQuery} aria-label="搜索歌曲库" placeholder="搜索歌曲名或歌手" on:keydown={(event) => event.key === "Enter" && void searchLibrary()} on:focus={() => (searchHistoryOpen = true)} on:blur={() => setTimeout(() => (searchHistoryOpen = false), 120)} on:input={() => (searchHistoryOpen = true)} />
-							<select bind:value={searchScope} aria-label="搜索范围"><option value="playlist">当前歌单</option><option value="all">全网歌曲</option></select>
+							<MusicSelect
+								value={searchScope}
+								ariaLabel="搜索范围"
+								onChange={(v) => (searchScope = v)}
+								options={[
+									{ value: "playlist", label: "当前歌单" },
+									{ value: "all", label: "全网歌曲" },
+								]}
+							/>
 							<button class="music-primary music-primary--small" type="button" disabled={searchBusy} on:click={() => void searchLibrary()}>{searchBusy ? "搜索中…" : "搜索"}</button>
 						</div>
 						<!-- 历史面板必须在搜索行「外面」：搜索行是 3 列 grid，行内元素撑高会把右侧的
@@ -2521,8 +2577,28 @@ import {
 							<button class="music-quiet" type="button" disabled={songsLoading || dailyLoading} on:click={() => void refreshLibrary()}>重新加载</button>
 							{#if batchMode}<button class:music-quiet--danger={batchSelected.size > 0} class="music-quiet" type="button" disabled={batchBusy || batchSelected.size === 0} on:click={() => void deleteBatchSelected()}>移除所选 ({batchSelected.size})</button>{/if}
 							<button class="music-quiet" type="button" on:click={toggleBatchMode}>{batchMode ? "退出批量" : "批量管理"}</button>
-							<select value={librarySort} aria-label="歌曲排序" on:change={setLibrarySort}><option value="default">默认顺序</option><option value="title">按歌名</option><option value="artist">按歌手</option></select>
-							<select value={libraryPageSize} aria-label="每页显示数量" on:change={setLibraryPageSize}><option value={20}>20 首/页</option><option value={50}>50 首/页</option><option value={100}>100 首/页</option></select>
+							<MusicSelect
+								value={librarySort}
+								ariaLabel="歌曲排序"
+								align="right"
+								onChange={(v) => setLibrarySort(valueAsEvent(v))}
+								options={[
+									{ value: "default", label: "默认顺序" },
+									{ value: "title", label: "按歌名" },
+									{ value: "artist", label: "按歌手" },
+								]}
+							/>
+							<MusicSelect
+								value={String(libraryPageSize)}
+								ariaLabel="每页显示数量"
+								align="right"
+								onChange={(v) => setLibraryPageSize(valueAsEvent(v))}
+								options={[
+									{ value: "20", label: "20 首/页" },
+									{ value: "50", label: "50 首/页" },
+									{ value: "100", label: "100 首/页" },
+								]}
+							/>
 						</div>
 					</div>
 						<div class="music-library-list" aria-label="歌曲库列表">
@@ -2558,7 +2634,13 @@ import {
 						</div>
 					</div>
 					{#if addTargetSong}
-						<div class="music-add-song-card"><div><span class="music-section-label">ADD TO PLAYLIST</span><strong>{addTargetSong.name}</strong></div><select bind:value={addTargetPlaylistId} aria-label="选择目标歌单">{#each playlists as playlist}<option value={String(playlist.listid)}>{playlist.name}</option>{/each}</select><div class="music-actions"><button class="music-quiet" type="button" on:click={() => (addTargetSong = null)}>取消</button><button class="music-primary music-primary--small" type="button" disabled={addBusy} on:click={() => void addSongToPlaylist()}>{addBusy ? "添加中…" : "确认添加"}</button></div></div>
+						<div class="music-add-song-card"><div><span class="music-section-label">ADD TO PLAYLIST</span><strong>{addTargetSong.name}</strong></div><MusicSelect
+								value={String(addTargetPlaylistId)}
+								ariaLabel="选择目标歌单"
+								align="right"
+								onChange={(v) => (addTargetPlaylistId = v)}
+								options={playlists.map((playlist) => ({ value: String(playlist.listid), label: playlist.name }))}
+							/><div class="music-actions"><button class="music-quiet" type="button" on:click={() => (addTargetSong = null)}>取消</button><button class="music-primary music-primary--small" type="button" disabled={addBusy} on:click={() => void addSongToPlaylist()}>{addBusy ? "添加中…" : "确认添加"}</button></div></div>
 					{/if}
 				{/if}
 			</section>
@@ -2870,13 +2952,57 @@ import {
 	.music-library-modal { display: flex; flex-direction: column; width: min(42rem, 100%); height: min(42rem, calc(100vh - 2rem)); max-height: calc(100vh - 2rem); padding: 1.1rem; overflow: hidden; border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--card-border, #dce5e5)); border-radius: 1.2rem; color: inherit; background: var(--card-bg, #fff); box-shadow: 0 28px 80px -30px rgb(15 23 42 / 0.62); animation: music-modal-in 220ms var(--ds-ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both; }
 	.music-library-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 	.music-library-header h2 { margin: 0.15rem 0 0.1rem; font-size: 1.15rem; }
-	.music-library-search { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.4rem; margin-top: 0.9rem; }
+	/* 搜索区改成「命令面板」观感：一块悬浮的主输入条，聚焦时抬起并发光。
+	   交互仍只有鼠标（点击输入/点击按钮），不接管任何键盘快捷键。 */
+	.music-library-search {
+		position: relative;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto auto;
+		align-items: center;
+		gap: 0.45rem;
+		margin-top: 0.95rem;
+		padding: 0.4rem 0.45rem 0.4rem 0.7rem;
+		border: 1px solid color-mix(in oklch, var(--primary) 20%, var(--card-border, #dce5e5));
+		border-radius: 0.95rem;
+		background: color-mix(in oklch, var(--card-bg, #fff) 94%, transparent);
+		box-shadow:
+			0 20px 44px -38px rgb(15 23 42 / 0.7),
+			inset 0 1px 0 rgb(255 255 255 / 0.45);
+		transition:
+			border-color 0.3s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
+			box-shadow 0.3s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1)),
+			background 0.3s var(--ease-tech, cubic-bezier(0.16, 1, 0.3, 1));
+	}
+	.music-library-search:focus-within {
+		border-color: color-mix(in oklch, var(--primary) 55%, transparent);
+		background: color-mix(in oklch, var(--card-bg, #fff) 99%, transparent);
+		box-shadow:
+			0 0 0 3px color-mix(in oklch, var(--primary) 14%, transparent),
+			0 26px 52px -38px rgb(15 23 42 / 0.6);
+	}
+	/* 输入框本体去掉边框，由外层卡片承担轮廓 */
+	.music-library-search > input {
+		min-height: 2.35rem;
+		padding: 0.3rem 0.55rem;
+		border: 0;
+		border-radius: 0.6rem;
+		background: transparent;
+		font-size: 0.82rem;
+		letter-spacing: 0.01em;
+	}
+	.music-library-search > input:focus {
+		outline: none;
+		box-shadow: none;
+	}
+	.music-library-search > input::placeholder {
+		color: color-mix(in oklch, var(--md-tone-muted, #64748b) 82%, transparent);
+	}
 	/* 搜索历史下拉：浮在结果区之上，不撑开弹窗高度 */
 	/* 面板必须留在文档流里（position: relative）——绝对定位会浮在下方工具栏之上，
 	   把排序/每页数遮住。流内展开时自然把工具栏推下去，结构上不可能遮盖。 */
 	/* 独立成行、去掉卡片底色：只留一条虚线上边线，表明「这是搜索框的附属建议」，
 	   又不会在白色弹窗里像一块补丁。 */
-	.music-search-history { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed color-mix(in oklch, var(--card-border, #dce5e5) 90%, transparent); }
+	.music-search-history { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.45rem; padding: 0.5rem 0.55rem 0.35rem; border: 1px solid color-mix(in oklch, var(--primary) 12%, var(--card-border, #dce5e5)); border-radius: 0.85rem; background: color-mix(in oklch, var(--primary) 4%, transparent); border-top: 1px dashed color-mix(in oklch, var(--card-border, #dce5e5) 90%, transparent); }
 	.music-search-history__label { flex: 0 0 100%; margin-bottom: 0.2rem; color: var(--md-tone-muted); font-size: 0.62rem; font-weight: 500; letter-spacing: 0.08em; }
 	/* 胶囊改为左对齐整块占一行，长关键词不再把卡片撑宽。 */
 	/* flex: 0 1 auto 让胶囊按文字宽度排；绝不用 grid 1fr，否则单条关键词会被
